@@ -143,23 +143,26 @@ const BASE_OPTS = (
     legend     = :topright,
     background_color_legend = RGBA(1, 1, 1, 0.85),
     foreground_color_legend = :black,
-    size       = (875, 380),
+    size       = (1094, 380),
     dpi        = 220,
-    margin     = 5Plots.mm,
+    bottom_margin = 12Plots.mm,
+    left_margin   = 16Plots.mm,
+    top_margin    = 5Plots.mm,
+    right_margin  = 5Plots.mm,
     framestyle = :box,
     grid       = false,
-    guidefontsize  = 14,
-    tickfontsize   = 12,
-    legendfontsize = 12,
+    guidefontsize  = 21,
+    tickfontsize   = 18,
+    legendfontsize = 17,
     fontfamily = "Computer Modern",
 )
 
-function make_panel(sw, xlabel_str, sp_x, sp_T, sp_S;
+function make_panel(sw, xlabel_str, sp_x, sp_T, sp_S, norm;
                     log_x = false, xticks = :auto)
-    yt         = sw.thrust .* 1e3
-    yS         = sw.Sxx    .* 1e3
-    ylabel_str = L"$F_T/d\;(\mathrm{mN\,m^{-1}})$"
-    sp_y       = sp_T * 1e3
+    yt         = sw.thrust .* norm .* 1e6
+    yS         = sw.Sxx    .* norm .* 1e6
+    ylabel_str = L"$F_T\,/\,(\rho_R L^2 \omega^2)$"
+    sp_y       = sp_T * norm * 1e6
 
     p = plot(sw.x, yt;
              label      = "Numerics",
@@ -182,6 +185,11 @@ function make_panel(sw, xlabel_str, sp_x, sp_T, sp_S;
              markerstrokecolor = :black, markerstrokewidth = 1,
              label            = "Surferbot")
 
+    # ×10⁻⁶ offset label at top of y-axis, mimicking matplotlib's exponent convention
+    xl = xlims(p); yl = ylims(p)
+    annotate!(p, xl[1], yl[2],
+        text(L"$\times\!10^{-6}$", :left, :bottom, 13, "Computer Modern"))
+
     return p
 end
 
@@ -190,18 +198,24 @@ function main()
     bp = Surferbot.Analysis.default_coupled_motor_position_EI_sweep().base_params
     sw1, sw2, sw3, sp = load_or_compute(bp)
 
+    d     = Float64(bp.d)
+    rho_R = Float64(bp.rho_raft)
+    L     = Float64(bp.L_raft)
+    omega = Float64(bp.omega)
+    norm  = d / (rho_R * L^2 * omega^2)   # F_T = sw.thrust * d  →  F_T/(ρ_R L² ω²)
+
     p1 = make_panel(sw1,
         L"$x_M / L$",
-        sp.xM_norm, sp.thrust, sp.Sxx)
+        sp.xM_norm, sp.thrust, sp.Sxx, norm)
 
     p2 = make_panel(sw2,
         L"$\kappa$",
-        sp.kappa, sp.thrust, sp.Sxx;
+        sp.kappa, sp.thrust, sp.Sxx, norm;
         log_x = true, xticks = 10.0 .^ collect(-4:1))
 
     p3 = make_panel(sw3,
         L"$Re$",
-        sp.Re, sp.thrust, sp.Sxx;
+        sp.Re, sp.thrust, sp.Sxx, norm;
         log_x = true, xticks = 10.0 .^ collect(4:8))
 
     mkpath(FIG_DIR)

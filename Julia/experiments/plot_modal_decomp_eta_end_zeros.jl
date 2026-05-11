@@ -192,6 +192,25 @@ function main()
     savefig(p, out_png)
     println("Saved $out_pdf")
     println("Saved $out_png")
+
+    # ── Videos for 3 representative points (first, middle, last) ─────────────
+    n_pts = length(xM_sel)
+    video_indices = [1, n_pts ÷ 2, n_pts]
+    base_params = coerce_flexible_params(artifact.base_params)
+
+    for idx in video_indices
+        xM  = xM_sel[idx]
+        EI  = EI_sel[idx]
+        motor_pos = xM * base_params.L_raft   # xM_over_L * L_raft
+        run_params = Surferbot.Sweep.apply_parameter_overrides(
+            base_params, (motor_position = motor_pos, EI = EI))
+        @info @sprintf("Rendering video: xM/L=%.4f  EI=%.3e", xM, EI)
+        res = Surferbot.flexible_solver(run_params)
+        bname = @sprintf("eta_end_zero_xM%.4f_EI%.2e", xM, EI)
+        render_surferbot_run(res; outdir=fig_dir, basename=bname,
+                             fps=30, duration_periods=8)
+        println("Video saved: $bname.mp4")
+    end
 end
 
 main()
