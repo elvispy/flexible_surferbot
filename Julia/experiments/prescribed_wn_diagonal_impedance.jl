@@ -60,8 +60,10 @@ end
 Bumped from 1 → 2 when the postprocess Bernoulli sign convention was corrected
 (p_dyn = -iωρφ + 2ρν φ_xx, real hydrostatic). Old v1 cache entries are
 automatically bypassed because their SHA-1 key no longer matches.
+Bumped from 2 → 3 to add domain-end radiation amplitudes `a_vec` (η at x=+ℓ
+per prescribed mode, Ψ-basis) to the slim payload. Needed for LH asymmetry.
 """
-const PRESSURE_CONVENTION_VERSION = 2
+const PRESSURE_CONVENTION_VERSION = 3
 
 function operator_signature(params::Surferbot.FlexibleParams; num_modes_basis::Int=DEFAULT_NUM_MODES_BASIS)
     derived = derive_params(params)
@@ -320,6 +322,8 @@ function prescribed_column_payload(params::Surferbot.FlexibleParams, assembled, 
         offdiag_ratio = Float64(offdiag_ratio),
         eta_contact_relerr = Float64(eta_contact_relerr),
         system_diagnostics = reduced.diagnostics,
+        a_n       = ComplexF64(fields.eta[end]),
+        a_n_left  = ComplexF64(fields.eta[1]),
     )
 end
 
@@ -382,6 +386,8 @@ function empirical_modal_pressure_map(
     Z = hcat([payload.p_modal[indices] for payload in column_payloads]...)
     Z_diag = ComplexF64[payload.p_diag for payload in column_payloads]
     offdiag_ratio = Float64[payload.offdiag_ratio for payload in column_payloads]
+    a_vec_raw      = ComplexF64[payload.a_n      for payload in column_payloads]
+    a_vec_left_raw = ComplexF64[payload.a_n_left for payload in column_payloads]
 
     result = (
         params = params_snapshot(params),
@@ -404,6 +410,8 @@ function empirical_modal_pressure_map(
         Z = Matrix{ComplexF64}(Z),
         Z_diag = collect(ComplexF64.(Z_diag)),
         offdiag_ratio = offdiag_ratio,
+        a_vec_raw      = collect(ComplexF64.(a_vec_raw)),
+        a_vec_left_raw = collect(ComplexF64.(a_vec_left_raw)),
         columns = keep_columns ? column_payloads : NamedTuple[],
     )
 
@@ -420,6 +428,11 @@ function slim_modal_pressure_map(result; cache_version::Int=1)
     Z_raw = Matrix{ComplexF64}(result.Z)
     Z_psi = ComplexF64.(transforms.psi_from_raw * Z_raw * transforms.raw_from_psi)
     selected_beta = Float64[result.raw_basis.beta[idx] for idx in result.mode_indices]
+    # a_vec: η(+ℓ) per mode in Ψ basis.  Transformation: a^Ψ = (T_{Φ←Ψ})ᵀ a^Φ
+    # because η(+ℓ) = (a^Φ)ᵀ q^Φ = (a^Φ)ᵀ (raw_from_psi q^Ψ) = ((raw_from_psi)ᵀ a^Φ)ᵀ q^Ψ
+    T = transforms.raw_from_psi                                   # real N×N
+    a_vec      = ComplexF64.(transpose(T) * result.a_vec_raw)
+    a_vec_left = ComplexF64.(transpose(T) * result.a_vec_left_raw)
     return (
         cache_version = cache_version,
         params = result.params,
@@ -446,6 +459,8 @@ function slim_modal_pressure_map(result; cache_version::Int=1)
         Z_raw = Z_raw,
         Z_psi = Matrix{ComplexF64}(Z_psi),
         offdiag_ratio_raw = collect(Float64.(result.offdiag_ratio)),
+        a_vec      = collect(ComplexF64.(a_vec)),
+        a_vec_left = collect(ComplexF64.(a_vec_left)),
     )
 end
 
@@ -473,6 +488,8 @@ function zero_modal_pressure_map(params::Surferbot.FlexibleParams; num_modes_bas
         ),
         Z = zeros(ComplexF64, length(indices), length(indices)),
         offdiag_ratio = zeros(Float64, length(indices)),
+        a_vec_raw      = zeros(ComplexF64, length(indices)),
+        a_vec_left_raw = zeros(ComplexF64, length(indices)),
     )
     return slim_modal_pressure_map(raw_result)
 end

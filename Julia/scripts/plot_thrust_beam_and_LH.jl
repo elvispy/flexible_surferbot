@@ -21,6 +21,7 @@ Source CSVs: output/csv/sweeper_{coupled,uncoupled}_full_grid.csv
 
 using CSV
 using DataFrames
+using JLD2
 using Plots
 using LaTeXStrings
 using Printf
@@ -178,7 +179,8 @@ end
 # ─── Render one panel ─────────────────────────────────────────────────────────
 
 function render_panel(log10_kappa, xM_axis, delta_grid, fig_title, out_base, bp, shift;
-                      mode=:signed_log)
+                      mode=:signed_log,
+                      snapshot_logK=Float64[], snapshot_xM=0.0, snapshot_labels=String[])
     max_logK = maximum(log10_kappa)
     XLIMS    = (-4.0, max_logK)
     YLIMS    = (0.0, 0.5)
@@ -200,7 +202,7 @@ function render_panel(log10_kappa, xM_axis, delta_grid, fig_title, out_base, bp,
         cp       = cbrt_grid(delta_grid)
         clim_val = cbrt(clim_raw)
         kp, xp   = log10_kappa, xM_axis
-        cbtitle  = L"\Delta S_{xx}\,/\,(\rho_R L \omega^2)"
+        cbtitle  = L"F_T\,/\,F_T^\ast"
 
         # Colorbar ticks: decade-spaced raw values, positioned in cbrt space.
         # The uneven spacing on the colorbar axis communicates the nonlinear scale.
@@ -244,10 +246,19 @@ function render_panel(log10_kappa, xM_axis, delta_grid, fig_title, out_base, bp,
 
     p = heatmap(kp, xp, cp; plt_opts...)
 
+    GOLD = RGB(0.95, 0.75, 0.05)
+
     lk_star, xm_star = operating_point(bp, shift)
     scatter!(p, [lk_star], [xm_star];
-             marker=:star5, markersize=12, color=:white,
+             marker=:star5, markersize=14, color=GOLD,
              markerstrokecolor=:black, markerstrokewidth=1, label="SurferBot")
+
+    snap_markers = [:circle, :rect, :utriangle]
+    for (i, (lk, lab)) in enumerate(zip(snapshot_logK, snapshot_labels))
+        scatter!(p, [lk], [snapshot_xM];
+                 marker=snap_markers[i], markersize=9, color=GOLD,
+                 markerstrokecolor=:black, markerstrokewidth=1, label=lab)
+    end
 
     savefig(p, out_base * ".pdf")
     println("Saved $(out_base).pdf")
@@ -278,6 +289,18 @@ function main()
     log10_kappa = grids.log10_EI .- shift
     Lambda_val = @sprintf("%.2f", Float64(bp.d) / Float64(bp.L_raft))
 
+    # Load F_T^* and nondimensionalize domain_grid.
+    # domain_grid = (|η_R|²-|η_L|²)/(ρ_R·L·ω²) = -ΔS_xx/(ρ_R·L·ω²).
+    # Thrust convention: F_T = d·ΔS_xx = d·(|η_L|²-|η_R|²)·ρ_R·L·ω²/... (same sign as
+    # thrust_sweeps.jl). To convert: F_T/F_T* = -d·ρ_R·L·ω²·domain_grid / F_T*.
+    # Negation corrects the (η_R-η_L) vs (η_L-η_R) sign mismatch.
+    cache_path = joinpath(output_dir, "jld2", "thrust_sweeps.jld2")
+    F_T_star = Float64(JLD2.load(cache_path, "F_T_star"))
+    d        = Float64(bp.d)
+    ft_scale = d * grids.rho_raft * grids.L * grids.omega^2 / abs(F_T_star)
+    @printf "F_T^* = %.4e N  →  domain_grid scale factor = %.4e\n" F_T_star ft_scale
+    domain_grid_norm = grids.domain_grid .* ft_scale
+
     # Beam — signed-log only (unchanged)
     render_panel(log10_kappa, grids.xM, grids.beam_grid,
         LaTeXString("Coupled, \$\\Lambda=$Lambda_val\$ — beam \$\\Delta|\\eta|^2/L^2\$"),
@@ -285,9 +308,14 @@ function main()
 
     # LH — cube-root transform with real-unit colorbar ticks
     lh_title = LaTeXString("Coupled, \$\\Lambda=$Lambda_val\$ — LH \$\\Delta|\\eta|^2/L^2\$")
+    snap_kappas = [1.82e-3, 5.43e-3, 1.94e-2]
+    snap_logK   = log10.(snap_kappas)
+    snap_xM     = abs(Float64(bp.motor_position)) / Float64(bp.L_raft)
+    snap_labels = ["Fig 5 (a)", "Fig 5 (b)", "Fig 6 (c)"]
     println("Rendering LH cbrt...")
-    render_panel(log10_kappa, grids.xM, grids.domain_grid, lh_title,
-        joinpath(fig_dir, "plot_thrust_LH_coupled_cbrt"), bp, shift; mode=:cbrt)
+    render_panel(log10_kappa, grids.xM, domain_grid_norm, lh_title,
+        joinpath(fig_dir, "plot_thrust_LH_coupled_cbrt"), bp, shift; mode=:cbrt,
+        snapshot_logK=snap_logK, snapshot_xM=snap_xM, snapshot_labels=snap_labels)
 end
 
 if abspath(PROGRAM_FILE) == @__FILE__

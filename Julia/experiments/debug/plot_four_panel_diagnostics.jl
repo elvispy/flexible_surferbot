@@ -326,7 +326,7 @@ end
 # --- Main Logic ---
 
 function main()
-    output_dir = joinpath(@__DIR__, "..", "output")
+    output_dir = joinpath(@__DIR__, "../..", "output")
     configs = [
         (name="unc_theo", coupled=false, source=:theoretical),
         (name="unc_int",  coupled=false, source=:integral),

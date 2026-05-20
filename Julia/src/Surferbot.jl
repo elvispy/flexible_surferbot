@@ -124,12 +124,12 @@ Physical, geometric, and numerical parameters for the flexible Surferbot solver.
 Base.@kwdef struct FlexibleParams{T<:Real}
     sigma::T = 72.2e-3
     rho::T = 1000.0
-    omega::T = 2 * pi * 10.0
+    omega::T = 2 * pi * 80.0
     nu::T = 1e-6
     g::T = 9.81
     L_raft::T = 0.05
-    motor_position::T = 0.6 / 2.5 * 0.05
-    d::Union{Nothing, T} = 0.05
+    motor_position::T = 0.6 / 5 * 0.05
+    d::Union{Nothing, T} = 0.03
     EI::Union{T, AbstractVector{T}} = 3.0e9 * 3e-2 * 9e-4^3 / 12
     rho_raft::Union{T, AbstractVector{T}} = 0.052
     L_domain::Union{Nothing, T} = nothing

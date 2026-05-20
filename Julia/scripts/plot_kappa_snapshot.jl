@@ -20,13 +20,11 @@ using Printf
 # ─── Parameters ──────────────────────────────────────────────────────────────
 
 function build_params(; EI=nothing)
-    defaults = Surferbot.FlexibleParams{Float64}()
-    return Surferbot.FlexibleParams{Float64}(;
-        (k => getproperty(defaults, k) for k in fieldnames(Surferbot.FlexibleParams))...,
-        motor_position = -0.003,                         # Benham 2024 §3.2
-        L_domain       = 0.10,                           # 2L total → x ∈ [−L, L] = [−5, 5] cm
-        EI             = something(EI, defaults.EI),
-    )
+    bp       = Surferbot.Analysis.default_coupled_motor_position_EI_sweep().base_params
+    overrides = isnothing(EI) ?
+        (L_domain = 0.10,) :
+        (L_domain = 0.10, EI = EI)
+    return Surferbot.Sweep.apply_parameter_overrides(bp, overrides)
 end
 
 # ─── Figure ──────────────────────────────────────────────────────────────────
@@ -40,9 +38,17 @@ const STYLE = (
 
 function make_figure(result, modal, kappa_val, fig_dir)
     x_cm    = result.x .* 1e2
-    eta_um  = real.(result.eta) .* 1e6
     contact = Bool.(result.metadata.args.x_contact)
     nm      = length(modal.q_w)
+
+    # Choose t so that the larger beam endpoint is at its positive maximum:
+    #   Re(η(beam_end) · exp(iθ)) = |η(beam_end)|  with θ = -∠η(beam_end).
+    # This pins the phase to the raft edge that dominates (relevant for |α|≈1).
+    contact_idx = findall(contact)
+    beam_ends   = [contact_idx[1], contact_idx[end]]
+    dom_end     = beam_ends[argmax(abs.(result.eta[beam_ends]))]
+    theta       = -angle(result.eta[dom_end])
+    eta_um      = real.(result.eta .* exp(im * theta)) .* 1e6
 
     # ── Panel (a): wave profile ───────────────────────────────────────────────
     p1 = plot(x_cm, eta_um;
@@ -52,8 +58,8 @@ function make_figure(result, modal, kappa_val, fig_dir)
         xlabel    = L"x\;(\mathrm{cm})",
         ylabel    = L"h\;(\mu\mathrm{m})",
         xlims     = (-5, 5),
-        ylims     = (-1000, 1000),
-        yticks    = -1000:500:1000,
+        ylims     = (-1500, 1500),
+        yticks    = -1500:500:1500,
         grid      = true,
         bottom_margin = 10Plots.mm,
         left_margin   = 14Plots.mm,
@@ -114,8 +120,8 @@ function main()
     mkpath(fig_dir)
 
     if !isnothing(kappa) && isnothing(EI)
-        defaults = Surferbot.FlexibleParams{Float64}()
-        EI = kappa * Float64(defaults.rho_raft) * Float64(defaults.L_raft)^4 * Float64(defaults.omega)^2
+        bp = Surferbot.Analysis.default_coupled_motor_position_EI_sweep().base_params
+        EI = kappa * bp.rho_raft * bp.L_raft^4 * bp.omega^2
     end
 
     params  = build_params(; EI)

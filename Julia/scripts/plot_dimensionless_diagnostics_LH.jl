@@ -28,13 +28,16 @@ Scatter: theoretical prediction via the a-priori modal law.
 Output: output/figures/plot_dimensionless_diagnostics_cpl_theo_LH.pdf
 """
 
-using Surferbot, JLD2, Plots, LaTeXStrings, Printf, LinearAlgebra, CSV, DataFrames
+using Surferbot, JLD2, Plots, LaTeXStrings, Printf, LinearAlgebra, CSV, DataFrames, Statistics
 
-include(joinpath(@__DIR__, "prescribed_wn_diagonal_impedance.jl"))
+include(joinpath(@__DIR__, "..", "experiments", "prescribed_wn_diagonal_impedance.jl"))
 const ModalPressureMap = Main.PrescribedWnDiagonalImpedance
 
 const NUM_MODES   = 8
 const RATIO_CUTOFF = 0.5
+
+const RESONANCE_ALPHA_CUTOFF  = 0.04  # 10th-percentile of |α_LH| across xM < this → resonance column
+const RESONANCE_N_PTS         = 20   # number of evenly-spaced xM points to emit per resonance column
 
 const CURVE_NAMES  = ["S", "A", "eta_1", "eta_end"]
 const CURVE_LABELS = [L"|S| = 0", L"|A| = 0",
@@ -192,6 +195,25 @@ function get_roots_theoretical_LH(artifact, condition_name; output_dir::Abstract
         for r in roots
             push!(pts_logEI, logEI_axis[iei])
             push!(pts_xM,    r)
+        end
+
+        # Resonance pass: α_LH ≈ 0 for ALL xM → whole column is a resonance.
+        # Check directly via the domain-end amplitudes (already computed above).
+        # At a resonance, only even OR odd modes are driven, so S ≈ 0 (odd resonance)
+        # or A ≈ 0 (even resonance). Emit the full vertical stripe on the correct series.
+        if condition_name in ("S", "A")
+            alpha_col = @. -(abs_eta_1^2 - abs_eta_end^2) /
+                            (abs_eta_1^2 + abs_eta_end^2 + eps())
+            if quantile(abs.(alpha_col), 0.1) < RESONANCE_ALPHA_CUTOFF
+                # Determine parity: odd resonance → S ≈ 0; even resonance → A ≈ 0
+                is_odd_resonance = mean(absS) < mean(absA)
+                if (condition_name == "S" && is_odd_resonance) ||
+                   (condition_name == "A" && !is_odd_resonance)
+                    res_xM = collect(range(xM_grid[1], xM_grid[end]; length=RESONANCE_N_PTS))
+                    append!(pts_logEI, fill(logEI_axis[iei], RESONANCE_N_PTS))
+                    append!(pts_xM,    res_xM)
+                end
+            end
         end
     end
     return (; logEI=pts_logEI, xM_norm=pts_xM)

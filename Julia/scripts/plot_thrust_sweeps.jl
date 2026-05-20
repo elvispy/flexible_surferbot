@@ -9,6 +9,8 @@ a star marking the surferbot operating point:
 
 Output: output/figures/thrust_sweep_{xM,kappa,Re}.{pdf,png}
 Cache:  output/jld2/thrust_sweeps.jld2
+Scale:  F_T^* is cached from the inviscid rigid Surferbot reference case
+        (ν = 0, EI = Inf; all other parameters at the Surferbot point).
 
 Usage:
   julia --project=. scripts/plot_thrust_sweeps.jl
@@ -24,6 +26,7 @@ const CACHE_PATH = joinpath(@__DIR__, "..", "output", "jld2", "thrust_sweeps.jld
 const FIG_DIR    = joinpath(@__DIR__, "..", "output", "figures")
 const N_SWEEP    = 50
 const NU_WATER   = 1e-6
+const RIGID_INVISCID_OVERRIDES = (nu = 0.0, EI = Inf)
 
 # ─── Per-solve extraction ─────────────────────────────────────────────────────
 function compute_Sxx(result)
@@ -40,6 +43,15 @@ function solve_one(bp_overrides, bp)
     res = Surferbot.flexible_solver(p)
     d   = Float64(res.metadata.args.d)
     return res.thrust / d, compute_Sxx(res)
+end
+
+function compute_F_T_star(bp)
+    p   = Surferbot.Sweep.apply_parameter_overrides(bp, RIGID_INVISCID_OVERRIDES)
+    res = Surferbot.flexible_solver(p)
+    F_T_star = Float64(res.thrust)
+    isfinite(F_T_star) || error("Rigid-inviscid reference thrust F_T^* is not finite")
+    F_T_star != 0.0 || error("Rigid-inviscid reference thrust F_T^* is zero")
+    return F_T_star
 end
 
 # ─── Three sweeps ─────────────────────────────────────────────────────────────
@@ -110,6 +122,17 @@ function surferbot_point(bp)
 end
 
 # ─── Cache ────────────────────────────────────────────────────────────────────
+function save_cache(sw1, sw2, sw3, sp, F_T_star)
+    mkpath(dirname(CACHE_PATH))
+    JLD2.save(CACHE_PATH,
+        "xM_x",  sw1.x,  "xM_T",  sw1.thrust, "xM_Sxx",  sw1.Sxx,
+        "kap_x", sw2.x,  "kap_T", sw2.thrust, "kap_Sxx", sw2.Sxx,
+        "re_x",  sw3.x,  "re_T",  sw3.thrust, "re_Sxx",  sw3.Sxx,
+        "sp_xM", sp.xM_norm, "sp_kap", sp.kappa, "sp_Re", sp.Re,
+        "sp_T",  sp.thrust,  "sp_Sxx", sp.Sxx,
+        "F_T_star", F_T_star)
+end
+
 function load_or_compute(bp)
     if isfile(CACHE_PATH)
         println("Loading cache from $CACHE_PATH …")
@@ -119,23 +142,26 @@ function load_or_compute(bp)
         sw3 = (; x = d["re_x"],  thrust = d["re_T"],  Sxx = d["re_Sxx"])
         sp  = (; xM_norm = d["sp_xM"], kappa = d["sp_kap"], Re = d["sp_Re"],
                 thrust = d["sp_T"], Sxx = d["sp_Sxx"])
-        return sw1, sw2, sw3, sp
+        F_T_star = if haskey(d, "F_T_star")
+            Float64(d["F_T_star"])
+        else
+            println("Cache is missing F_T^*; computing rigid-inviscid reference …")
+            ref = compute_F_T_star(bp)
+            save_cache(sw1, sw2, sw3, sp, ref)
+            ref
+        end
+        return sw1, sw2, sw3, sp, F_T_star
     end
 
     sw1 = run_sweep_xM(bp)
     sw2 = run_sweep_kappa(bp)
     sw3 = run_sweep_Re(bp)
     sp  = surferbot_point(bp)
+    F_T_star = compute_F_T_star(bp)
 
-    mkpath(dirname(CACHE_PATH))
-    JLD2.save(CACHE_PATH,
-        "xM_x",  sw1.x,  "xM_T",  sw1.thrust, "xM_Sxx",  sw1.Sxx,
-        "kap_x", sw2.x,  "kap_T", sw2.thrust, "kap_Sxx", sw2.Sxx,
-        "re_x",  sw3.x,  "re_T",  sw3.thrust, "re_Sxx",  sw3.Sxx,
-        "sp_xM", sp.xM_norm, "sp_kap", sp.kappa, "sp_Re", sp.Re,
-        "sp_T",  sp.thrust,  "sp_Sxx", sp.Sxx)
+    save_cache(sw1, sw2, sw3, sp, F_T_star)
     println("Saved cache → $CACHE_PATH")
-    return sw1, sw2, sw3, sp
+    return sw1, sw2, sw3, sp, F_T_star
 end
 
 # ─── Plot style ───────────────────────────────────────────────────────────────
@@ -146,7 +172,7 @@ const BASE_OPTS = (
     size       = (1094, 380),
     dpi        = 220,
     bottom_margin = 12Plots.mm,
-    left_margin   = 16Plots.mm,
+    left_margin   = 10Plots.mm,
     top_margin    = 5Plots.mm,
     right_margin  = 5Plots.mm,
     framestyle = :box,
@@ -157,12 +183,12 @@ const BASE_OPTS = (
     fontfamily = "Computer Modern",
 )
 
-function make_panel(sw, xlabel_str, sp_x, sp_T, sp_S, norm;
-                    log_x = false, xticks = :auto)
-    yt         = sw.thrust .* norm .* 1e6
-    yS         = sw.Sxx    .* norm .* 1e6
-    ylabel_str = L"$F_T\,/\,(\rho_R L^2 \omega^2)$"
-    sp_y       = sp_T * norm * 1e6
+function make_panel(sw, xlabel_str, sp_x, sp_T, sp_S, d, F_T_star;
+                    log_x = false, xticks = :auto, plot_Sxx = true)
+    yt         = sw.thrust .* d ./ F_T_star
+    yS         = sw.Sxx    .* d ./ F_T_star
+    ylabel_str = L"$F_T/F_T^\ast$"
+    sp_y       = sp_T * d / F_T_star
 
     p = plot(sw.x, yt;
              label      = "Numerics",
@@ -173,9 +199,11 @@ function make_panel(sw, xlabel_str, sp_x, sp_T, sp_S, norm;
              xticks     = xticks,
              BASE_OPTS...)
 
-    plot!(p, sw.x, yS;
-          label     = "Longuet-Higgins",
-          color     = :crimson, linewidth = 2.5, linestyle = :dash)
+    if plot_Sxx
+        plot!(p, sw.x, yS;
+              label     = "Longuet-Higgins",
+              color     = :crimson, linewidth = 2.5, linestyle = :dash)
+    end
 
     hline!(p, [0.0]; color = :black, linewidth = 0.8, linestyle = :dot, label = false)
 
@@ -185,38 +213,31 @@ function make_panel(sw, xlabel_str, sp_x, sp_T, sp_S, norm;
              markerstrokecolor = :black, markerstrokewidth = 1,
              label            = "Surferbot")
 
-    # ×10⁻⁶ offset label at top of y-axis, mimicking matplotlib's exponent convention
-    xl = xlims(p); yl = ylims(p)
-    annotate!(p, xl[1], yl[2],
-        text(L"$\times\!10^{-6}$", :left, :bottom, 13, "Computer Modern"))
-
     return p
 end
 
 # ─── Main ─────────────────────────────────────────────────────────────────────
 function main()
     bp = Surferbot.Analysis.default_coupled_motor_position_EI_sweep().base_params
-    sw1, sw2, sw3, sp = load_or_compute(bp)
+    sw1, sw2, sw3, sp, F_T_star = load_or_compute(bp)
 
     d     = Float64(bp.d)
-    rho_R = Float64(bp.rho_raft)
-    L     = Float64(bp.L_raft)
-    omega = Float64(bp.omega)
-    norm  = d / (rho_R * L^2 * omega^2)   # F_T = sw.thrust * d  →  F_T/(ρ_R L² ω²)
+    @printf "Using F_T^* = %+.6e N from rigid-inviscid Surferbot reference\n" F_T_star
 
     p1 = make_panel(sw1,
         L"$x_M / L$",
-        sp.xM_norm, sp.thrust, sp.Sxx, norm)
+        sp.xM_norm, sp.thrust, sp.Sxx, d, F_T_star)
 
     p2 = make_panel(sw2,
         L"$\kappa$",
-        sp.kappa, sp.thrust, sp.Sxx, norm;
+        sp.kappa, sp.thrust, sp.Sxx, d, F_T_star;
         log_x = true, xticks = 10.0 .^ collect(-4:1))
 
     p3 = make_panel(sw3,
         L"$Re$",
-        sp.Re, sp.thrust, sp.Sxx, norm;
-        log_x = true, xticks = 10.0 .^ collect(4:8))
+        sp.Re, sp.thrust, sp.Sxx, d, F_T_star;
+        # Omit the Longuet-Higgins/Sxx comparison from the viscous sweep.
+        log_x = true, xticks = 10.0 .^ collect(4:8), plot_Sxx = false)
 
     mkpath(FIG_DIR)
     for (fig, name) in [(p1, "thrust_sweep_xM"), (p2, "thrust_sweep_kappa"), (p3, "thrust_sweep_Re")]

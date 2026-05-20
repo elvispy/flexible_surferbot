@@ -33,7 +33,7 @@ The fields mirror the MATLAB helper `decompose_raft_freefree_modes`.
 - `F`: generalized load coefficients in Psi basis
 - `F_w`: generalized load coefficients in W basis
 - `balance_residual`: per-mode beam-balance mismatch
-- `energy_frac`: normalized `|q_n|^2`
+- `energy_frac`: normalized `|q_n|^2` using Psi-basis (orthonormal) coefficients — NOT `|q_w_n|^2`; see implementation note in `decompose_raft_freefree_modes`
 - `eta_recon`: reconstructed raft displacement
 - `recon_rel_err`: weighted relative reconstruction error
 - `x_raft`: raft-node coordinates
@@ -461,7 +461,20 @@ function decompose_raft_freefree_modes(
     recon_den = sqrt(max(real(dot(eta_raft, eta_raft .* w)), 0.0))
     recon_rel_err = recon_den > 0 ? recon_num / recon_den : NaN
 
-    q_energy = abs2.(q_w)
+    # !! IMPORTANT: energy_frac is computed from the Psi-basis (orthonormal) coefficients q,
+    # NOT from the raw W-basis coefficients q_w.
+    #
+    # The W-basis rigid rotation shape is φ₁(x) = x, which has L2-norm² = L³/12 ≈ 1e-5 m³,
+    # roughly 5000× smaller than the elastic mode norms² ≈ L ≈ 0.05 m. Solving G q_w = rhs
+    # inflates the rotation coefficient by that factor, making |q_w_rotation|² dominate
+    # energy_frac even when the raft is visibly bending. This is a units artifact: the rotation
+    # coefficient is dimensionless (rad) while elastic coefficients are in metres.
+    #
+    # The Psi basis is w-orthonormal by construction (weighted_mgs), so |q_n|² is the true
+    # fraction of weighted-L2 raft deflection energy in mode n. Use q, not q_w, here.
+    @debug "energy_frac computed from Psi-basis |q|² (orthonormal), not W-basis |q_w|²" *
+           " — see comment above for why q_w would give spuriously large rigid-rotation fraction"
+    q_energy = abs2.(q)
     q_energy_sum = sum(q_energy)
     energy_frac = q_energy_sum > 0 ? q_energy ./ q_energy_sum : zeros(Float64, length(q_w))
 

@@ -94,13 +94,13 @@ end
 # ─── Plot ─────────────────────────────────────────────────────────────────────
 
 const BASE_OPTS = (
-    legend     = :topright,
+    legend     = :bottomright,
     background_color_legend = RGBA(1, 1, 1, 0.85),
     foreground_color_legend = :black,
     size       = (1094, 380),
     dpi        = 220,
     bottom_margin = 12Plots.mm,
-    left_margin   = 16Plots.mm,
+    left_margin   = 10Plots.mm,
     top_margin    =  5Plots.mm,
     right_margin  =  5Plots.mm,
     framestyle = :box,
@@ -112,6 +112,9 @@ const BASE_OPTS = (
 )
 
 function make_plot(sw, sp)
+    pad  = 0.10 * (maximum(sw.alpha) - minimum(sw.alpha))
+    ylim = (minimum(sw.alpha) - pad, maximum(sw.alpha) + pad)
+
     p = plot(sw.kappa, sw.alpha;
         label     = L"\alpha",
         color     = :royalblue,
@@ -120,6 +123,8 @@ function make_plot(sw, sp)
         ylabel    = L"$\alpha$",
         xscale    = :log10,
         xticks    = 10.0 .^ collect(-4:1),
+        xlims     = (10.0^-4, 10.0^1),
+        ylims     = ylim,
         BASE_OPTS...,
     )
 

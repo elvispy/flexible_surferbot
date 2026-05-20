@@ -3,8 +3,9 @@ plot_modal_decomp_eta_end_zeros.jl
 
 Uses the full-solver sweep CSV (sweeper_coupled_full_grid.csv) — no a-priori law.
 
-  - Selects rows with alpha > 0.99 (genuine |η_end|≈0, correct branch)
-  - Filters to log₁₀(κ) > −2.8 and xM/L < 0.25, sorts by xM/L
+  - Selects rows with alpha < -0.99 (genuine |η_end|≈0, correct branch)
+  - Filters to log₁₀(κ) > −2.8 and xM/L < 0.25
+  - Picks the single most-negative-alpha row per unique xM/L (closest to exact zero)
   - Scatter-plots |q_n| vs xM/L for modes 0..4
   - Renders videos for 3 representative points (first, middle, last)
 """
@@ -15,6 +16,7 @@ const N_PLOT      = 5      # modes 0..4 to show in scatter
 const ALPHA_MAX   = -0.99  # alpha < this to count as a genuine zero (α → −1 branch)
 
 # ── Read CSV and select rows on the |η_end|=0 branch ─────────────────────────
+# Returns one row per unique xM/L: the row with the most negative alpha.
 function select_alpha_branch(csv_path; shift::Float64, logK_min, xM_max)
     df = CSV.read(csv_path, DataFrame)
 
@@ -24,11 +26,15 @@ function select_alpha_branch(csv_path; shift::Float64, logK_min, xM_max)
 
     sub = df[mask, :]
 
-    pts_logEI = Float64.(sub.log10_EI)
-    pts_xM    = Float64.(sub.xM_over_L)
-    pts_Q     = [[abs(complex(sub[i, Symbol("q_w$(n)_re")],
-                              sub[i, Symbol("q_w$(n)_im")])) for n in 0:(N_PLOT-1)]
-                 for i in 1:nrow(sub)]
+    # Keep one row per xM/L: the one with minimum alpha (most negative = closest to -1)
+    best = combine(groupby(sub, :xM_over_L),
+                   sdf -> sdf[argmin(sdf.alpha), :])
+
+    pts_logEI = Float64.(best.log10_EI)
+    pts_xM    = Float64.(best.xM_over_L)
+    pts_Q     = [[abs(complex(best[i, Symbol("q_w$(n)_re")],
+                              best[i, Symbol("q_w$(n)_im")])) for n in 0:(N_PLOT-1)]
+                 for i in 1:nrow(best)]
 
     return (; logEI=pts_logEI, xM_norm=pts_xM, Q=pts_Q)
 end
