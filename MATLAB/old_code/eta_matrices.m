@@ -24,10 +24,10 @@
 function [etaMatrix, rhsVector] = eta_matrices(viscosityCoeff, oscillationFreq, secondDerivMatrix, gridSize, verticalVelocity, waveNumber, horizontalStep, raftDisplacement, raftAngle, xGridPoints, raftLeftIdx, raftRightIdx)
 
 % Build operator matrix for wave elevation
-etaMatrix = (viscosityCoeff / oscillationFreq^2) * secondDerivMatrix - speye(gridSize);
+etaMatrix = (viscosityCoeff / oscillationFreq^2) * secondDerivMatrix - 1i * speye(gridSize);
 
 % Construct right-hand side vector
-rhsVector = 1i * verticalVelocity;
+rhsVector = verticalVelocity;
 
 % Apply left boundary condition (Equation 2.19b from paper)
 leftBCIdx = find(etaMatrix(1, :));
