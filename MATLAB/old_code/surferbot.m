@@ -28,7 +28,7 @@ angularFreq = 2 * pi * oscillationFreq; % Angular frequency (rad/s)
 surfaceTension = 0*0.073; % Surface tension of water (N/m)
 kinematicViscosity = 0*1e-6; % Kinematic viscosity (m^2/s)
 raftMass = 0.009;      % Mass of SurferBot (kg)
-motorPosition = -0.3*raftLength/3; % Position of motor relative to raft center (m)
+motorPosition = 0; % Position of motor relative to raft center (m)
 oscillationAmp = 100*0.13e-3 * 2.5e-3;% Amplitude of oscillations (m)
 
 

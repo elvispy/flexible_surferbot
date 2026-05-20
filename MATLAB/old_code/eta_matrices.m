@@ -27,7 +27,7 @@ function [etaMatrix, rhsVector] = eta_matrices(viscosityCoeff, oscillationFreq, 
 etaMatrix = (viscosityCoeff / oscillationFreq^2) * secondDerivMatrix - speye(gridSize);
 
 % Construct right-hand side vector
-rhsVector = verticalVelocity;
+rhsVector = 1i * verticalVelocity;
 
 % Apply left boundary condition (Equation 2.19b from paper)
 leftBCIdx = find(etaMatrix(1, :));

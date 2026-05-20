@@ -79,7 +79,7 @@ waveElevation = etaMatrix \ rhsEta;
 waveElevation(abs(horizontalPositions) <= 1/2) = (horizontalPositions(abs(horizontalPositions) <= 1/2) * raftAngle + raftDisplacement);
 
 % Compute pressure on raft (eqn 2.20)
-pressure = waveElevation + oscillationFreq^2 * 1i * phi0 + 2 * viscosityCoeff * phizz0;
+pressure = waveElevation - oscillationFreq^2 * 1i * phi0 + 2 * viscosityCoeff * phizz0;
 pressure(abs(horizontalPositions') > 1/2) = 0;
 
 % Compute lift and torque due to pressure
