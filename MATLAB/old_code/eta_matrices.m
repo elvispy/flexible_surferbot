@@ -24,7 +24,7 @@
 function [etaMatrix, rhsVector] = eta_matrices(viscosityCoeff, oscillationFreq, secondDerivMatrix, gridSize, verticalVelocity, waveNumber, horizontalStep, raftDisplacement, raftAngle, xGridPoints, raftLeftIdx, raftRightIdx)
 
 % Build operator matrix for wave elevation
-etaMatrix = (viscosityCoeff / oscillationFreq^2) * secondDerivMatrix - 1i * speye(gridSize);
+etaMatrix = 1i * speye(gridSize) - (viscosityCoeff / oscillationFreq^2) * secondDerivMatrix;
 
 % Construct right-hand side vector
 rhsVector = verticalVelocity;
