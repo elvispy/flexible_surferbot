@@ -370,7 +370,7 @@ function assemble_flexible_system(params::FlexibleParams{T}) where {T<:Real}
     DxRaft = getNonCompactFDmatrix(nb_contact, T(1.0), 1, derived.params.ooa)
     Dx2Raft = getNonCompactFDmatrix(nb_contact, T(1.0), 2, derived.params.ooa)
 
-    inertia_diag = Diagonal(Complex{T}.(1im .* derived.inertia_vec .- 1im * Gamma * Lambda / Fr^2))
+    inertia_diag = Diagonal(Complex{T}.(1im .* derived.inertia_vec .+ 1im * Gamma * Lambda / Fr^2))
     S11[CC, CC] = (Complex{T}(1im) * Lambda * Gamma * derived.dx^2) .* I_NP[CC, CC] .- (T(2) * Gamma * Lambda / Re) .* Dx2Raft
     S12[CC, CC] = derived.dx^2 .* inertia_diag
     S13[CC, :] = Dx2Raft
