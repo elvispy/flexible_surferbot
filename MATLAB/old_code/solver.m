@@ -88,7 +88,7 @@ torqueMoment = trapz(horizontalPositions', pressure .* horizontalPositions'); % 
 
 % Solving for F_{A, z} and x_A from Eqn 2.11b and 2.11c respectively
 computedForceZ = (+raftMass * oscillationFreq^2 * raftDisplacement - liftForce);
-x_A = 1 / computedForceZ * (-1/12 * raftMass * oscillationFreq^2 * raftAngle - torqueMoment);
+x_A = 1 / computedForceZ * (+1/12 * raftMass * oscillationFreq^2 * raftAngle - torqueMoment);
 
 % Compute propulsion thrust
 thrustForce = 1/2 * trapz(horizontalPositions', (real(pressure) .* real(raftAngle) + imag(pressure) .* imag(raftAngle)));
