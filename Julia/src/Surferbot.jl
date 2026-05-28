@@ -118,7 +118,7 @@ Physical, geometric, and numerical parameters for the flexible Surferbot solver.
 - `ooa`: Order of accuracy for finite differences.
 - `motor_inertia`: Inertia of the actuator motor.
 - `motor_force`: Specified forcing amplitude.
-- `forcing_width`: Width of the Gaussian forcing profile.
+- `forcing_width`: Physical width (meters) of the Gaussian forcing profile; divided by L_raft internally to get nondim sigma.
 - `bc`: Boundary condition symbol (`:radiative` or `:neumann`).
 """
 Base.@kwdef struct FlexibleParams{T<:Real}
@@ -139,7 +139,7 @@ Base.@kwdef struct FlexibleParams{T<:Real}
     ooa::Int = 4
     motor_inertia::T = 0.13e-3 * 2.5e-3
     motor_force::Union{Nothing, T} = nothing
-    forcing_width::T = 0.05
+    forcing_width::T = 0.01
     bc::Symbol = :radiative
 end
 
@@ -250,7 +250,7 @@ function derive_params(params::FlexibleParams{T}) where {T<:Real}
     x_free[1] = false
     x_free[end] = false
 
-    loads = motor_force / F_c * gaussian_load(motor_position / L_c, params.forcing_width, x[x_contact])
+    loads = motor_force / F_c * gaussian_load(motor_position / L_c, params.forcing_width / L_c, x[x_contact])
 
     nb_contact = count(x_contact)
     if params.EI isa AbstractVector
