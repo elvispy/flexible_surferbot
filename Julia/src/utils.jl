@@ -5,7 +5,7 @@ using SpecialFunctions
 using SparseArrays
 using ForwardDiff
 
-export solve_tensor_system, gaussian_load, dispersion_k
+export solve_tensor_system, gaussian_load, two_point_load, dispersion_k
 
 """
     erf_libm(x::Float64)
@@ -155,6 +155,25 @@ function gaussian_load(x0::T, sigma::T, x::AbstractVector{T}) where {T<:Real}
     phi = exp.(-T(0.5) .* ((xcol .- x0) ./ sigma).^2)
     Z = sigma * sqrt(T(pi) / 2) * (erf((b - x0) / (sqrt(T(2)) * sigma)) - erf((a - x0) / (sqrt(T(2)) * sigma)))
     return reshape((1 / Z) .* phi, length(xcol))
+end
+
+"""
+    two_point_load(x0::T, x::AbstractVector{T}) where {T<:Real}
+
+Represent a unit point load at `x0` using linear interpolation onto the two
+nearest grid points. Satisfies ∑ loads·dx = 1 and ∑ loads·x·dx = x0 exactly,
+making it the correct discrete analog of a Dirac delta.
+"""
+function two_point_load(x0::T, x::AbstractVector{T}) where {T<:Real}
+    dx = x[2] - x[1]
+    i2 = clamp(searchsortedfirst(x, x0), 2, length(x))
+    i1 = i2 - 1
+    w2 = (x0 - x[i1]) / (x[i2] - x[i1])
+    w1 = one(T) - w2
+    loads = zeros(T, length(x))
+    loads[i1] = w1 / dx
+    loads[i2] = w2 / dx
+    return loads
 end
 
 """
