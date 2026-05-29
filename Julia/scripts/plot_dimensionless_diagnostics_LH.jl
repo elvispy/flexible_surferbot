@@ -33,7 +33,7 @@ using Surferbot, JLD2, Plots, LaTeXStrings, Printf, LinearAlgebra, CSV, DataFram
 include(joinpath(@__DIR__, "..", "experiments", "prescribed_wn_diagonal_impedance.jl"))
 const ModalPressureMap = Main.PrescribedWnDiagonalImpedance
 
-const NUM_MODES   = 8
+const NUM_MODES   = 6
 const RATIO_CUTOFF = 0.5
 
 const RESONANCE_ALPHA_CUTOFF  = 0.04  # 10th-percentile of |α_LH| across xM < this → resonance column
