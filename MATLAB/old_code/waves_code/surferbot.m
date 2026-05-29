@@ -11,7 +11,7 @@ omega=2*pi*freq;    % angular frequency
 gamma=0.073;        % surface tension
 nu=1e-6;            % kinematic viscosity
 mass=2.6*1e-3;      % mass of surferbot
-xF=-0.00398;          % position of motor (measured from center)
+xF=-0.003;            % position of motor (measured from center)
 Amp=-170.5*1e-6;       % amplitude of oscillations
 
 % Dimensionless parameters
