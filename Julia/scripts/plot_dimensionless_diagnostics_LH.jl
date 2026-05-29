@@ -167,9 +167,10 @@ end
 
 # ─── Root extraction (LH version) ────────────────────────────────────────────
 
-function get_roots_theoretical_LH(artifact, condition_name; output_dir::AbstractString)
+function get_roots_theoretical_LH(artifact, condition_name; output_dir::AbstractString,
+                                   EI_list::Union{Nothing,AbstractVector{Float64}}=nothing)
     params     = artifact.base_params
-    EI_list    = collect(Float64.(artifact.parameter_axes.EI))
+    EI_list    = EI_list === nothing ? collect(Float64.(artifact.parameter_axes.EI)) : EI_list
     logEI_axis = log10.(EI_list)
     xM_grid    = collect(range(0.0, 0.49; length=401))
     theory_ctx = theoretical_modal_context_LH(params; output_dir=output_dir)
@@ -234,23 +235,27 @@ function print_symmetry_check(theory_ctx)
     println()
 end
 
-# ─── Main ─────────────────────────────────────────────────────────────────────
+# ─── Shared plot builder ──────────────────────────────────────────────────────
+#
+# scatter_EI_list: explicit EI values for the theoretical scatter.
+#   Pass nothing  → use artifact.parameter_axes.EI (original coupled behaviour).
+#   Pass a vector → use that instead (needed for uncoupled where the artifact
+#                   EI range is narrower than the desired x axis).
 
-function main()
-    output_dir = joinpath(@__DIR__, "..", "output")
+function build_LH_plot(artifact, csv_path, output_dir;
+                       xlim_min::Float64, fig_title::LaTeXString,
+                       scatter_EI_list=nothing)
+    params = artifact.base_params
+    shift  = log10(Float64(params.rho_raft) * Float64(params.L_raft)^4 *
+                   Float64(params.omega)^2)
 
-    jld2_path = joinpath(output_dir, "jld2",
-                         "sweep_motor_position_EI_coupled_from_matlab.jld2")
-    artifact  = load_sweep(jld2_path)
-    params    = artifact.base_params
-    shift     = log10(Float64(params.rho_raft) * Float64(params.L_raft)^4 *
-                      Float64(params.omega)^2)
-
-    # ── Heatmap: α_LH from CSV domain-end columns ────────────────────────────
-    csv_path  = joinpath(output_dir, "csv", "sweeper_coupled_full_grid.csv")
-    df_heat   = CSV.read(csv_path, DataFrame)
-    logEI_axis = sort(unique(df_heat.log10_EI))
-    xM_axis    = sort(unique(df_heat.xM_over_L))
+    # Heatmap from CSV — keep only columns whose logκ falls within [xlim_min, ∞)
+    # so that no data sits outside the left xlim (Plots.jl misrenders otherwise).
+    df_heat       = CSV.read(csv_path, DataFrame)
+    all_logEI     = sort(unique(df_heat.log10_EI))
+    logEI_axis    = all_logEI[all_logEI .- shift .>= xlim_min]
+    xM_axis       = sort(unique(df_heat.xM_over_L))
+    max_logK_data = maximum(logEI_axis) - shift
 
     alpha_LH = zeros(Float64, length(xM_axis), length(logEI_axis))
     let lookup = Dict{Tuple{Float64,Float64}, Float64}(
@@ -264,33 +269,31 @@ function main()
         end
     end
 
-    # ── Build LH context and print symmetry check ────────────────────────────
-    theory_ctx_LH = theoretical_modal_context_LH(params; output_dir=output_dir)
-    print_symmetry_check(theory_ctx_LH)
-
-    # ── Theoretical scatter overlays ─────────────────────────────────────────
-    max_logK_data = maximum(logEI_axis) - shift
-    XLIMS = (-4.0, max_logK_data)
+    XLIMS = (xlim_min, max_logK_data)
     YLIMS = (0.0, 0.5)
+
+    # Theoretical scatter EI grid
+    EI_scatter = scatter_EI_list === nothing ?
+                     collect(Float64.(artifact.parameter_axes.EI)) :
+                     scatter_EI_list
 
     results = Dict{String, NamedTuple}()
     for cname in CURVE_NAMES
         @info "Computing LH roots: $cname"
-        res = get_roots_theoretical_LH(artifact, cname; output_dir=output_dir)
+        res = get_roots_theoretical_LH(artifact, cname;
+                                        output_dir=output_dir,
+                                        EI_list=EI_scatter)
         results[cname] = (logK = res.logEI .- shift, xM_norm = res.xM_norm)
     end
 
-    # ── Plot ─────────────────────────────────────────────────────────────────
+    # Build plot
     okabe_ito    = ["#E69F00", "#56B4E9", "#009E73", "#F0E442",
                     "#0072B2", "#D55E00", "#CC79A7", "#000000"]
     curve_colors = [okabe_ito[8], okabe_ito[1], okabe_ito[3], okabe_ito[7]]
     markers      = [:circle, :rect, :diamond, :utriangle]
 
-    Lambda_val = @sprintf("%.2f", Float64(params.d) / Float64(params.L_raft))
-    fig_title  = LaTeXString(
-        "Coupled raft, \$\\Lambda = $Lambda_val\$ — LH domain-end prediction")
-
     plt_opts = (
+        title   = fig_title,
         xlabel  = L"\log_{10}\,\kappa",
         ylabel  = L"x_M / L",
         colormap = :balance,
@@ -335,11 +338,59 @@ function main()
                  markeralpha       = 0.95)
     end
 
-    fig_dir = joinpath(output_dir, "figures")
+    return p
+end
+
+# ─── Main ─────────────────────────────────────────────────────────────────────
+
+function main()
+    output_dir = joinpath(@__DIR__, "..", "output")
+    fig_dir    = joinpath(output_dir, "figures")
     mkpath(fig_dir)
-    out_pdf = joinpath(fig_dir, "plot_dimensionless_diagnostics_cpl_theo_LH.pdf")
-    savefig(p, out_pdf)
-    println("Saved $out_pdf")
+
+    # ── Coupled figure (unchanged behaviour) ─────────────────────────────────
+    art_cpl = load_sweep(joinpath(output_dir, "jld2",
+                                  "sweep_motor_position_EI_coupled_from_matlab.jld2"))
+    theory_ctx_cpl = theoretical_modal_context_LH(art_cpl.base_params; output_dir=output_dir)
+    print_symmetry_check(theory_ctx_cpl)
+
+    Lambda_val = @sprintf("%.2f", Float64(art_cpl.base_params.d) /
+                                  Float64(art_cpl.base_params.L_raft))
+    title_cpl  = LaTeXString("Coupled raft, \$\\Lambda = $Lambda_val\$ — LH domain-end prediction")
+
+    p_cpl = build_LH_plot(art_cpl,
+                           joinpath(output_dir, "csv", "sweeper_coupled_full_grid.csv"),
+                           output_dir;
+                           xlim_min = -4.0,
+                           fig_title = title_cpl)
+
+    out_cpl = joinpath(fig_dir, "plot_dimensionless_diagnostics_cpl_theo_LH.pdf")
+    savefig(p_cpl, out_cpl)
+    println("Saved $out_cpl")
+
+    # ── Uncoupled figure (x axis to −5, scatter covers full range) ───────────
+    art_ucpl = load_sweep(joinpath(output_dir, "jld2",
+                                   "sweep_motor_position_EI_uncoupled_from_matlab.jld2"))
+    title_ucpl = LaTeXString("Uncoupled raft (\$\\Lambda = 0\$) — LH domain-end prediction")
+
+    # Derive EI scatter list from CSV so theory scatter covers the full x axis [-5, max_logK]
+    df_ucpl = CSV.read(joinpath(output_dir, "csv", "sweeper_uncoupled_full_grid.csv"), DataFrame)
+    ucpl_shift      = log10(Float64(art_ucpl.base_params.rho_raft) *
+                            Float64(art_ucpl.base_params.L_raft)^4 *
+                            Float64(art_ucpl.base_params.omega)^2)
+    ucpl_all_logEI  = sort(unique(df_ucpl.log10_EI))
+    ucpl_EI_scatter = 10 .^ ucpl_all_logEI[ucpl_all_logEI .- ucpl_shift .>= -5.0]
+
+    p_ucpl = build_LH_plot(art_ucpl,
+                            joinpath(output_dir, "csv", "sweeper_uncoupled_full_grid.csv"),
+                            output_dir;
+                            xlim_min        = -5.0,
+                            fig_title       = title_ucpl,
+                            scatter_EI_list = ucpl_EI_scatter)
+
+    out_ucpl = joinpath(fig_dir, "plot_dimensionless_diagnostics_uncpl_theo_LH.pdf")
+    savefig(p_ucpl, out_ucpl)
+    println("Saved $out_ucpl")
 end
 
 if abspath(PROGRAM_FILE) == @__FILE__
