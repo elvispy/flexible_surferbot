@@ -109,8 +109,8 @@ function run_sweep_Re(bp)
 end
 
 # ─── Surferbot operating point ────────────────────────────────────────────────
-function surferbot_point(bp)
-    T, Sxx  = solve_one((nu = NU_WATER,), bp)
+function surferbot_point(bp; nu = 0.0)
+    T, Sxx  = solve_one((nu = nu,), bp)
     rho_R   = Float64(bp.rho_raft)
     L       = Float64(bp.L_raft)
     omega   = Float64(bp.omega)
@@ -122,7 +122,7 @@ function surferbot_point(bp)
 end
 
 # ─── Cache ────────────────────────────────────────────────────────────────────
-function save_cache(sw1, sw2, sw3, sp, F_T_star)
+function save_cache(sw1, sw2, sw3, sp, F_T_star, sp_re)
     mkpath(dirname(CACHE_PATH))
     JLD2.save(CACHE_PATH,
         "xM_x",  sw1.x,  "xM_T",  sw1.thrust, "xM_Sxx",  sw1.Sxx,
@@ -130,7 +130,8 @@ function save_cache(sw1, sw2, sw3, sp, F_T_star)
         "re_x",  sw3.x,  "re_T",  sw3.thrust, "re_Sxx",  sw3.Sxx,
         "sp_xM", sp.xM_norm, "sp_kap", sp.kappa, "sp_Re", sp.Re,
         "sp_T",  sp.thrust,  "sp_Sxx", sp.Sxx,
-        "F_T_star", F_T_star)
+        "F_T_star", F_T_star,
+        "sp_re_T", sp_re.thrust, "sp_re_Sxx", sp_re.Sxx)
 end
 
 function load_or_compute(bp)
@@ -146,22 +147,28 @@ function load_or_compute(bp)
             Float64(d["F_T_star"])
         else
             println("Cache is missing F_T^*; computing rigid-inviscid reference …")
-            ref = compute_F_T_star(bp)
-            save_cache(sw1, sw2, sw3, sp, ref)
-            ref
+            compute_F_T_star(bp)
         end
-        return sw1, sw2, sw3, sp, F_T_star
+        sp_re = if haskey(d, "sp_re_T")
+            (; sp.Re, thrust = Float64(d["sp_re_T"]), Sxx = Float64(d["sp_re_Sxx"]))
+        else
+            println("Cache is missing viscous surferbot point; computing …")
+            surferbot_point(bp; nu = NU_WATER)
+        end
+        save_cache(sw1, sw2, sw3, sp, F_T_star, sp_re)
+        return sw1, sw2, sw3, sp, F_T_star, sp_re
     end
 
     sw1 = run_sweep_xM(bp)
     sw2 = run_sweep_kappa(bp)
     sw3 = run_sweep_Re(bp)
-    sp  = surferbot_point(bp)
+    sp       = surferbot_point(bp; nu = 0.0)
+    sp_re    = surferbot_point(bp; nu = NU_WATER)
     F_T_star = compute_F_T_star(bp)
 
-    save_cache(sw1, sw2, sw3, sp, F_T_star)
+    save_cache(sw1, sw2, sw3, sp, F_T_star, sp_re)
     println("Saved cache → $CACHE_PATH")
-    return sw1, sw2, sw3, sp, F_T_star
+    return sw1, sw2, sw3, sp, F_T_star, sp_re
 end
 
 # ─── Plot style ───────────────────────────────────────────────────────────────
@@ -219,7 +226,7 @@ end
 # ─── Main ─────────────────────────────────────────────────────────────────────
 function main()
     bp = Surferbot.Analysis.default_coupled_motor_position_EI_sweep().base_params
-    sw1, sw2, sw3, sp, F_T_star = load_or_compute(bp)
+    sw1, sw2, sw3, sp, F_T_star, sp_re = load_or_compute(bp)
 
     d     = Float64(bp.d)
     @printf "Using F_T^* = %+.6e N from rigid-inviscid Surferbot reference\n" F_T_star
@@ -235,7 +242,7 @@ function main()
 
     p3 = make_panel(sw3,
         L"$Re$",
-        sp.Re, sp.thrust, sp.Sxx, d, F_T_star;
+        sp_re.Re, sp_re.thrust, sp_re.Sxx, d, F_T_star;
         # Omit the Longuet-Higgins/Sxx comparison from the viscous sweep.
         log_x = true, xticks = 10.0 .^ collect(4:8), plot_Sxx = false)
 
