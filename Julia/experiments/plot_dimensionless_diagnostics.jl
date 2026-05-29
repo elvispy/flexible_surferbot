@@ -177,7 +177,7 @@ end
 
 # ─── Root extraction ─────────────────────────────────────────────────────────
 
-const NUM_MODES = 8
+const NUM_MODES = 6
 
 # Ratio cutoff for the filtered-minimum root-finder (see roots_for_condition).
 # A local minimum of |S| at xM only counts as a root if |S|/|A| < RATIO_CUTOFF,
