@@ -26,3 +26,9 @@ MILESTONES is located at /Users/harrislab/.claude/projects/-Users-harrislab-Docu
 8) We are interested in full MATLAB/Julia parity. That means that all inputs that are present on both models should be the same, and the vector \eta(x_i) should be the same in the whole free-surface/raft domain. We are not interested in scalar diagnostic matchs (they can be used as diagnostics, but cannot be claimed to match a success criterion)
 For example, we are not interested in asymptotic parity (a la 'as n -> Inf, as m -> Inf', this scalar quantity like thrust matches)
 THe L2 norm of \eta_Julia and \eta_MATLAB is the ONLY success criterion for this parity task.
+
+---
+
+These other set of rules are to be followed for figure visualization
+
+
