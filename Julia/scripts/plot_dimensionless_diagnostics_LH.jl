@@ -33,7 +33,7 @@ using Surferbot, JLD2, Plots, LaTeXStrings, Printf, LinearAlgebra, CSV, DataFram
 include(joinpath(@__DIR__, "..", "experiments", "prescribed_wn_diagonal_impedance.jl"))
 const ModalPressureMap = Main.PrescribedWnDiagonalImpedance
 
-const NUM_MODES   = 6
+const NUM_MODES   = 8
 const RATIO_CUTOFF = 0.5
 
 const RESONANCE_ALPHA_CUTOFF  = 0.04  # 10th-percentile of |α_LH| across xM < this → resonance column
@@ -205,7 +205,7 @@ function get_roots_theoretical_LH(artifact, condition_name; output_dir::Abstract
         if condition_name in ("S", "A")
             alpha_col = @. -(abs_eta_1^2 - abs_eta_end^2) /
                             (abs_eta_1^2 + abs_eta_end^2 + eps())
-            if quantile(abs.(alpha_col), 0.1) < RESONANCE_ALPHA_CUTOFF
+            if quantile(abs.(alpha_col), 0.15) < RESONANCE_ALPHA_CUTOFF
                 # Determine parity: odd resonance → S ≈ 0; even resonance → A ≈ 0
                 is_odd_resonance = mean(absS) < mean(absA)
                 if (condition_name == "S" && is_odd_resonance) ||
@@ -242,9 +242,7 @@ end
 #   Pass a vector → use that instead (needed for uncoupled where the artifact
 #                   EI range is narrower than the desired x axis).
 
-function build_LH_plot(artifact, csv_path, output_dir;
-                       xlim_min::Float64, fig_title::LaTeXString,
-                       scatter_EI_list=nothing)
+function build_LH_plot(artifact, csv_path, output_dir; xlim_min::Float64)
     params = artifact.base_params
     shift  = log10(Float64(params.rho_raft) * Float64(params.L_raft)^4 *
                    Float64(params.omega)^2)
@@ -272,10 +270,10 @@ function build_LH_plot(artifact, csv_path, output_dir;
     XLIMS = (xlim_min, max_logK_data)
     YLIMS = (0.0, 0.5)
 
-    # Theoretical scatter EI grid
-    EI_scatter = scatter_EI_list === nothing ?
-                     collect(Float64.(artifact.parameter_axes.EI)) :
-                     scatter_EI_list
+    # 57 evenly-spaced logK values, extended 0.1 units left of xlim_min so resonances
+    # near the left edge are not missed.
+    scatter_logK = collect(range(xlim_min - 0.1, max_logK_data; length=57))
+    EI_scatter   = 10 .^ (scatter_logK .+ shift)
 
     results = Dict{String, NamedTuple}()
     for cname in CURVE_NAMES
@@ -286,6 +284,35 @@ function build_LH_plot(artifact, csv_path, output_dir;
         results[cname] = (logK = res.logEI .- shift, xM_norm = res.xM_norm)
     end
 
+    # Resonance-stripe sync: beam-end is more sensitive to certain resonances (e.g.
+    # logκ≈−1.76/−1.67 for the coupled case) that the LH far-field quantile misses.
+    # Detect resonances from the beam-end model and inject any missing stripes into
+    # the LH "S" or "A" series so both plots mark the same system resonances.
+    beam_sync_ctx = theoretical_modal_context(params; output_dir=output_dir)
+    xM_sync = collect(range(0.0, 0.49; length=401))
+    for (iei, EI) in enumerate(EI_scatter)
+        logK_val = scatter_logK[iei]
+        logK_val < xlim_min && continue
+        absS=Float64[]; absA=Float64[]; abs1=Float64[]; abse=Float64[]
+        for xM in xM_sync
+            q = solve_theoretical_modal_response(EI, xM, beam_sync_ctx)
+            d = theoretical_endpoint_diagnostics_beam(q, beam_sync_ctx)
+            push!(absS, abs(d.S)); push!(absA, abs(d.A))
+            push!(abs1, abs(d.eta_beam_1)); push!(abse, abs(d.eta_beam_end))
+        end
+        alpha_col = @. -(abs1^2 - abse^2) / (abs1^2 + abse^2 + eps())
+        is_odd    = mean(absS) < mean(absA)
+        resonance_q = is_odd ? 0.20 : 0.15
+        quantile(abs.(alpha_col), resonance_q) < RESONANCE_ALPHA_CUTOFF || continue
+        cond = is_odd ? "S" : "A"
+        already_present = any(abs.(results[cond].logK .- logK_val) .< 0.01)
+        already_present && continue
+        res_xM = collect(range(xM_sync[1], xM_sync[end]; length=RESONANCE_N_PTS))
+        prev = results[cond]
+        results[cond] = (logK    = vcat(prev.logK,    fill(logK_val, RESONANCE_N_PTS)),
+                         xM_norm = vcat(prev.xM_norm, res_xM))
+    end
+
     # Build plot
     okabe_ito    = ["#E69F00", "#56B4E9", "#009E73", "#F0E442",
                     "#0072B2", "#D55E00", "#CC79A7", "#000000"]
@@ -293,7 +320,6 @@ function build_LH_plot(artifact, csv_path, output_dir;
     markers      = [:circle, :rect, :diamond, :utriangle]
 
     plt_opts = (
-        title   = fig_title,
         xlabel  = L"\log_{10}\,\kappa",
         ylabel  = L"x_M / L",
         colormap = :balance,
@@ -341,6 +367,222 @@ function build_LH_plot(artifact, csv_path, output_dir;
     return p
 end
 
+# ─── Beam-end theoretical diagnostics ────────────────────────────────────────
+#
+# Mirrors theoretical_endpoint_diagnostics_LH but evaluates at the beam ends
+# (x = ±L/2) using w_end/w_start from the Ψ basis rather than a_vec/a_vec_left.
+# Works for d=0 (uncoupled) because zero_modal_pressure_map still computes Ψ.
+
+function theoretical_endpoint_diagnostics_beam(q, theory_ctx)
+    S = zero(ComplexF64)
+    A = zero(ComplexF64)
+    for j in eachindex(theory_ctx.mode_numbers)
+        if iseven(theory_ctx.mode_numbers[j])
+            S += q[j] * theory_ctx.w_end[j]
+        else
+            A += q[j] * theory_ctx.w_end[j]
+        end
+    end
+    eta_beam_end = sum(q[j] * theory_ctx.w_end[j]   for j in eachindex(q))
+    eta_beam_1   = sum(q[j] * theory_ctx.w_start[j] for j in eachindex(q))
+    return (; S, A, eta_beam_1, eta_beam_end)
+end
+
+function get_roots_theoretical_beam(EI_list::AbstractVector{Float64}, condition_name,
+                                     theory_ctx)
+    logEI_axis = log10.(EI_list)
+    xM_grid    = collect(range(0.0, 0.49; length=401))
+
+    pts_logEI = Float64[]
+    pts_xM    = Float64[]
+    res_logEI = Float64[]   # resonance stripe logEI values only (not zero-crossing pts)
+
+    for (iei, EI) in enumerate(EI_list)
+        absS = Float64[]; absA = Float64[]
+        abs_eta_1 = Float64[]; abs_eta_end = Float64[]
+
+        for xM_norm in xM_grid
+            q    = solve_theoretical_modal_response(EI, xM_norm, theory_ctx)
+            diag = theoretical_endpoint_diagnostics_beam(q, theory_ctx)
+            push!(absS,       abs(diag.S))
+            push!(absA,       abs(diag.A))
+            push!(abs_eta_1,  abs(diag.eta_beam_1))
+            push!(abs_eta_end, abs(diag.eta_beam_end))
+        end
+
+        roots = roots_for_condition(condition_name, xM_grid,
+                                    absS, absA, abs_eta_1, abs_eta_end)
+        for r in roots
+            push!(pts_logEI, logEI_axis[iei])
+            push!(pts_xM,    r)
+        end
+
+        # Resonance pass: S-type resonances (odd, A-dominates) use q=0.20;
+        # A-type resonances (even, S-dominates) use q=0.15.  This two-level
+        # threshold is calibrated against the coupled CSV ground truth: q15 alone
+        # fires false positives near logκ≈-0.17 (S-type, high-EI numerical noise),
+        # while q20 alone misses the true A-type resonance at logκ≈-3.43.
+        if condition_name in ("S", "A")
+            alpha_col = @. -(abs_eta_1^2 - abs_eta_end^2) /
+                            (abs_eta_1^2 + abs_eta_end^2 + eps())
+            is_odd_resonance = mean(absS) < mean(absA)
+            is_coupled       = Float64(theory_ctx.params.d) > 0.0
+            resonance_q = is_odd_resonance ? 0.20 : (is_coupled ? 0.15 : 0.10)
+            if quantile(abs.(alpha_col), resonance_q) < RESONANCE_ALPHA_CUTOFF
+                if (condition_name == "S" && is_odd_resonance) ||
+                   (condition_name == "A" && !is_odd_resonance)
+                    res_xM = collect(range(xM_grid[1], xM_grid[end]; length=RESONANCE_N_PTS))
+                    append!(pts_logEI, fill(logEI_axis[iei], RESONANCE_N_PTS))
+                    append!(pts_xM,    res_xM)
+                    push!(res_logEI, logEI_axis[iei])
+                end
+            end
+        end
+    end
+    return (; logEI=pts_logEI, xM_norm=pts_xM, resonance_logEI=res_logEI)
+end
+
+const BEAM_CURVE_LABELS = [L"|S| = 0", L"|A| = 0",
+                            L"|\hat{\eta}(-L/2)| = 0",
+                            L"|\hat{\eta}(+L/2)| = 0"]
+
+function build_beam_end_plot(artifact, csv_path, output_dir; xlim_min::Float64)
+    params = artifact.base_params
+    shift  = log10(Float64(params.rho_raft) * Float64(params.L_raft)^4 *
+                   Float64(params.omega)^2)
+
+    df_heat       = CSV.read(csv_path, DataFrame)
+    all_logEI     = sort(unique(df_heat.log10_EI))
+    logEI_axis    = all_logEI[all_logEI .- shift .>= xlim_min]
+    xM_axis       = sort(unique(df_heat.xM_over_L))
+    max_logK_data = maximum(logEI_axis) - shift
+
+    alpha_beam = zeros(Float64, length(xM_axis), length(logEI_axis))
+    let lookup = Dict{Tuple{Float64,Float64}, Float64}(
+            (row.log10_EI, row.xM_over_L) =>
+                Surferbot.Analysis.beam_asymmetry(
+                    complex(row.eta_1_beam_re,  row.eta_1_beam_im),
+                    complex(row.eta_end_beam_re, row.eta_end_beam_im))
+            for row in eachrow(df_heat))
+        for (j, le) in enumerate(logEI_axis), (i, xm) in enumerate(xM_axis)
+            alpha_beam[i, j] = lookup[(le, xm)]
+        end
+    end
+
+    XLIMS = (xlim_min, max_logK_data)
+    YLIMS = (0.0, 0.5)
+
+    # 57 evenly-spaced logK values across the full visible range — extend 0.1 units
+    # left of xlim_min so resonances sitting just inside the left edge are not missed.
+    scatter_logK = collect(range(xlim_min - 0.1, max_logK_data; length=57))
+    EI_scatter   = 10 .^ (scatter_logK .+ shift)
+
+    theory_ctx = theoretical_modal_context(params; output_dir=output_dir)
+
+    results       = Dict{String, NamedTuple}()
+    resonance_logK = Dict{String, Vector{Float64}}()
+    for cname in CURVE_NAMES
+        @info "Computing beam-end roots: $cname"
+        res = get_roots_theoretical_beam(EI_scatter, cname, theory_ctx)
+        results[cname]        = (logK = res.logEI .- shift, xM_norm = res.xM_norm)
+        resonance_logK[cname] = res.resonance_logEI .- shift
+    end
+
+    # CSV-based resonance seeding: for uncoupled (d=0) only.  Uncoupled resonances
+    # have half-width ~0.025 logK (no radiation damping); the scatter grid can miss
+    # the sharpest ones.  For coupled, the scatter grid already catches all resonances
+    # (wider peaks), so seeding is skipped to avoid borderline stripes inconsistent
+    # with the LH plot.
+    if Float64(theory_ctx.params.d) == 0.0
+        firing_logK = Float64[]
+        for (j, le) in enumerate(logEI_axis)
+            quantile(abs.(alpha_beam[:, j]), 0.10) < RESONANCE_ALPHA_CUTOFF || continue
+            push!(firing_logK, le - shift)
+        end
+        if !isempty(firing_logK)
+            clusters = Vector{Vector{Float64}}()
+            for lk in sort(firing_logK)
+                if isempty(clusters) || lk - clusters[end][end] > 0.05
+                    push!(clusters, [lk])
+                else
+                    push!(clusters[end], lk)
+                end
+            end
+            xM_mid = Float64(xM_axis[max(1, length(xM_axis) ÷ 2)])
+            for cluster in clusters
+                logK_val = sum(cluster) / length(cluster)
+                j_near = argmin(abs.(logEI_axis .- (logK_val + shift)))
+                alpha_col = abs.(alpha_beam[:, j_near])
+                q_chk = solve_theoretical_modal_response(10^(logK_val + shift), xM_mid, theory_ctx)
+                d_chk = theoretical_endpoint_diagnostics_beam(q_chk, theory_ctx)
+                is_odd_csv = abs(d_chk.S) < abs(d_chk.A)
+                cond = is_odd_csv ? "S" : "A"
+                resonance_q_csv = is_odd_csv ? 0.20 : 0.10
+                quantile(alpha_col, resonance_q_csv) < RESONANCE_ALPHA_CUTOFF || continue
+                any(abs.(resonance_logK[cond] .- logK_val) .< 0.05) && continue
+                res_xM = collect(range(Float64(xM_axis[1]), Float64(xM_axis[end]); length=RESONANCE_N_PTS))
+                prev = results[cond]
+                results[cond]        = (logK    = vcat(prev.logK,    fill(logK_val, RESONANCE_N_PTS)),
+                                        xM_norm = vcat(prev.xM_norm, res_xM))
+                push!(resonance_logK[cond], logK_val)
+                @info "CSV-seeded resonance stripe: $cond at logK=$(round(logK_val; digits=3))"
+            end
+        end
+    end
+
+    okabe_ito    = ["#E69F00", "#56B4E9", "#009E73", "#F0E442",
+                    "#0072B2", "#D55E00", "#CC79A7", "#000000"]
+    curve_colors = [okabe_ito[8], okabe_ito[1], okabe_ito[3], okabe_ito[7]]
+    markers      = [:circle, :rect, :diamond, :utriangle]
+
+    plt_opts = (
+        xlabel  = L"\log_{10}\,\kappa",
+        ylabel  = L"x_M / L",
+        colormap = :balance,
+        clims   = (-1, 1),
+        levels  = 51,
+        interpolate = true,
+        xlims   = XLIMS,
+        ylims   = YLIMS,
+        legend  = :bottomright,
+        background_color_legend = RGBA(1, 1, 1, 0.85),
+        foreground_color_legend = :black,
+        legend_font_halign = :left,
+        size    = (820, 640),
+        margin  = 6Plots.mm,
+        dpi     = 220,
+        titlefontsize     = 14,
+        guidefontsize     = 14,
+        tickfontsize      = 12,
+        legendfontsize    = 11,
+        fontfamily        = "Computer Modern",
+        framestyle        = :box,
+        grid              = false,
+        colorbar_title    = L"\alpha_{\mathrm{beam}}",
+        colorbar_titlefontsize = 14,
+        colorbar_tickfontsize  = 11,
+    )
+
+    p = heatmap(logEI_axis .- shift, xM_axis, alpha_beam; plt_opts...)
+
+    for (i, cname) in enumerate(CURVE_NAMES)
+        res  = results[cname]
+        mask = (XLIMS[1] .<= res.logK .<= XLIMS[2]) .&
+               (YLIMS[1] .<= res.xM_norm .<= YLIMS[2])
+        isempty(res.logK[mask]) && continue
+        scatter!(p, res.logK[mask], res.xM_norm[mask];
+                 label             = BEAM_CURVE_LABELS[i],
+                 color             = curve_colors[i],
+                 marker            = markers[i],
+                 markersize        = 5,
+                 markerstrokewidth = 0.6,
+                 markerstrokecolor = :white,
+                 markeralpha       = 0.95)
+    end
+
+    return p
+end
+
 # ─── Main ─────────────────────────────────────────────────────────────────────
 
 function main()
@@ -348,49 +590,37 @@ function main()
     fig_dir    = joinpath(output_dir, "figures")
     mkpath(fig_dir)
 
-    # ── Coupled figure (unchanged behaviour) ─────────────────────────────────
+    # ── 1. LH (domain-end) coupled plot ──────────────────────────────────────
     art_cpl = load_sweep(joinpath(output_dir, "jld2",
                                   "sweep_motor_position_EI_coupled_from_matlab.jld2"))
     theory_ctx_cpl = theoretical_modal_context_LH(art_cpl.base_params; output_dir=output_dir)
     print_symmetry_check(theory_ctx_cpl)
 
-    Lambda_val = @sprintf("%.2f", Float64(art_cpl.base_params.d) /
-                                  Float64(art_cpl.base_params.L_raft))
-    title_cpl  = LaTeXString("Coupled raft, \$\\Lambda = $Lambda_val\$ — LH domain-end prediction")
+    p_cpl_LH = build_LH_plot(art_cpl,
+                               joinpath(output_dir, "csv", "sweeper_coupled_full_grid.csv"),
+                               output_dir; xlim_min=-4.0)
+    out_cpl_LH = joinpath(fig_dir, "plot_dimensionless_diagnostics_cpl_theo_LH.pdf")
+    savefig(p_cpl_LH, out_cpl_LH)
+    println("Saved $out_cpl_LH")
 
-    p_cpl = build_LH_plot(art_cpl,
-                           joinpath(output_dir, "csv", "sweeper_coupled_full_grid.csv"),
-                           output_dir;
-                           xlim_min = -4.0,
-                           fig_title = title_cpl)
+    # ── 2. Beam-end coupled plot ──────────────────────────────────────────────
+    p_cpl_beam = build_beam_end_plot(art_cpl,
+                                      joinpath(output_dir, "csv", "sweeper_coupled_full_grid.csv"),
+                                      output_dir; xlim_min=-4.0)
+    out_cpl_beam = joinpath(fig_dir, "plot_dimensionless_diagnostics_cpl_beam.pdf")
+    savefig(p_cpl_beam, out_cpl_beam)
+    println("Saved $out_cpl_beam")
 
-    out_cpl = joinpath(fig_dir, "plot_dimensionless_diagnostics_cpl_theo_LH.pdf")
-    savefig(p_cpl, out_cpl)
-    println("Saved $out_cpl")
-
-    # ── Uncoupled figure (x axis to −5, scatter covers full range) ───────────
+    # ── 3. Beam-end uncoupled plot (x axis −5 to max) ────────────────────────
     art_ucpl = load_sweep(joinpath(output_dir, "jld2",
                                    "sweep_motor_position_EI_uncoupled_from_matlab.jld2"))
-    title_ucpl = LaTeXString("Uncoupled raft (\$\\Lambda = 0\$) — LH domain-end prediction")
 
-    # Derive EI scatter list from CSV so theory scatter covers the full x axis [-5, max_logK]
-    df_ucpl = CSV.read(joinpath(output_dir, "csv", "sweeper_uncoupled_full_grid.csv"), DataFrame)
-    ucpl_shift      = log10(Float64(art_ucpl.base_params.rho_raft) *
-                            Float64(art_ucpl.base_params.L_raft)^4 *
-                            Float64(art_ucpl.base_params.omega)^2)
-    ucpl_all_logEI  = sort(unique(df_ucpl.log10_EI))
-    ucpl_EI_scatter = 10 .^ ucpl_all_logEI[ucpl_all_logEI .- ucpl_shift .>= -5.0]
-
-    p_ucpl = build_LH_plot(art_ucpl,
-                            joinpath(output_dir, "csv", "sweeper_uncoupled_full_grid.csv"),
-                            output_dir;
-                            xlim_min        = -5.0,
-                            fig_title       = title_ucpl,
-                            scatter_EI_list = ucpl_EI_scatter)
-
-    out_ucpl = joinpath(fig_dir, "plot_dimensionless_diagnostics_uncpl_theo_LH.pdf")
-    savefig(p_ucpl, out_ucpl)
-    println("Saved $out_ucpl")
+    p_ucpl_beam = build_beam_end_plot(art_ucpl,
+                                       joinpath(output_dir, "csv", "sweeper_uncoupled_full_grid.csv"),
+                                       output_dir; xlim_min=-5.0)
+    out_ucpl_beam = joinpath(fig_dir, "plot_dimensionless_diagnostics_ucpl_beam.pdf")
+    savefig(p_ucpl_beam, out_ucpl_beam)
+    println("Saved $out_ucpl_beam")
 end
 
 if abspath(PROGRAM_FILE) == @__FILE__
