@@ -41,8 +41,8 @@ const RESONANCE_N_PTS         = 20   # number of evenly-spaced xM points to emit
 
 const CURVE_NAMES  = ["S", "A", "eta_1", "eta_end"]
 const CURVE_LABELS = [L"|S| = 0", L"|A| = 0",
-                      L"|\overline{\eta}(-\ell)| = 0",
-                      L"|\overline{\eta}(\ell)| = 0"]
+                      L"|\overline{\eta}(-\bar{\ell})| = 0",
+                      L"|\overline{\eta}(\bar{\ell})| = 0"]
 
 # ─── Helpers (parallel to plot_dimensionless_diagnostics.jl) ─────────────────
 
