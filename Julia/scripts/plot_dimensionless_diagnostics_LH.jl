@@ -284,15 +284,15 @@ function build_LH_plot(artifact, csv_path, output_dir; xlim_min::Float64)
         results[cname] = (logK = res.logEI .- shift, xM_norm = res.xM_norm)
     end
 
-    # Resonance-stripe sync: beam-end is more sensitive to certain resonances (e.g.
-    # logκ≈−1.76/−1.67 for the coupled case) that the LH far-field quantile misses.
-    # Detect resonances from the beam-end model and inject any missing stripes into
-    # the LH "S" or "A" series so both plots mark the same system resonances.
-    beam_sync_ctx = theoretical_modal_context(params; output_dir=output_dir)
-    xM_sync = collect(range(0.0, 0.49; length=401))
+    # Resonance-stripe sync: beam-end is more sensitive to certain resonances that the
+    # LH far-field quantile misses.  Collect beam-detected resonance candidates (index,
+    # q_val), group consecutive scatter-grid indices into runs, keep the minimum-q
+    # index per run, then inject any stripe not already present in the LH results.
+    beam_sync_ctx   = theoretical_modal_context(params; output_dir=output_dir)
+    xM_sync         = collect(range(0.0, 0.49; length=401))
+    sync_candidates = Dict{String, Vector{Tuple{Int,Float64}}}("S"=>[], "A"=>[])
     for (iei, EI) in enumerate(EI_scatter)
-        logK_val = scatter_logK[iei]
-        logK_val < xlim_min && continue
+        scatter_logK[iei] < xlim_min && continue
         absS=Float64[]; absA=Float64[]; abs1=Float64[]; abse=Float64[]
         for xM in xM_sync
             q = solve_theoretical_modal_response(EI, xM, beam_sync_ctx)
@@ -300,17 +300,36 @@ function build_LH_plot(artifact, csv_path, output_dir; xlim_min::Float64)
             push!(absS, abs(d.S)); push!(absA, abs(d.A))
             push!(abs1, abs(d.eta_beam_1)); push!(abse, abs(d.eta_beam_end))
         end
-        alpha_col = @. -(abs1^2 - abse^2) / (abs1^2 + abse^2 + eps())
-        is_odd    = mean(absS) < mean(absA)
+        alpha_col   = @. -(abs1^2 - abse^2) / (abs1^2 + abse^2 + eps())
+        is_odd      = mean(absS) < mean(absA)
         resonance_q = is_odd ? 0.20 : 0.15
-        quantile(abs.(alpha_col), resonance_q) < RESONANCE_ALPHA_CUTOFF || continue
+        q_val       = quantile(abs.(alpha_col), resonance_q)
+        q_val < RESONANCE_ALPHA_CUTOFF || continue
         cond = is_odd ? "S" : "A"
-        already_present = any(abs.(results[cond].logK .- logK_val) .< 0.01)
-        already_present && continue
-        res_xM = collect(range(xM_sync[1], xM_sync[end]; length=RESONANCE_N_PTS))
-        prev = results[cond]
-        results[cond] = (logK    = vcat(prev.logK,    fill(logK_val, RESONANCE_N_PTS)),
-                         xM_norm = vcat(prev.xM_norm, res_xM))
+        push!(sync_candidates[cond], (iei, q_val))
+    end
+    res_xM_sync = collect(range(xM_sync[1], xM_sync[end]; length=RESONANCE_N_PTS))
+    for cond in ("S", "A")
+        cands = sort(sync_candidates[cond]; by = x -> x[1])
+        isempty(cands) && continue
+        groups = Vector{Vector{Tuple{Int,Float64}}}()
+        for cand in cands
+            if isempty(groups) || cand[1] - groups[end][end][1] > 1
+                push!(groups, [cand])
+            else
+                push!(groups[end], cand)
+            end
+        end
+        for group in groups
+            _, best_pos = findmin(x -> x[2], group)
+            best_iei    = group[best_pos][1]
+            logK_val    = scatter_logK[best_iei]
+            already_present = any(abs.(results[cond].logK .- logK_val) .< 0.01)
+            already_present && continue
+            prev = results[cond]
+            results[cond] = (logK    = vcat(prev.logK,    fill(logK_val, RESONANCE_N_PTS)),
+                             xM_norm = vcat(prev.xM_norm, res_xM_sync))
+        end
     end
 
     # Build plot
@@ -393,9 +412,10 @@ function get_roots_theoretical_beam(EI_list::AbstractVector{Float64}, condition_
     logEI_axis = log10.(EI_list)
     xM_grid    = collect(range(0.0, 0.49; length=401))
 
-    pts_logEI = Float64[]
-    pts_xM    = Float64[]
-    res_logEI = Float64[]   # resonance stripe logEI values only (not zero-crossing pts)
+    pts_logEI      = Float64[]
+    pts_xM         = Float64[]
+    res_logEI      = Float64[]  # resonance stripe logEI values (not zero-crossing pts)
+    res_candidates = Tuple{Int, Float64}[]  # (iei, q_val) for resonance stripe candidates
 
     for (iei, EI) in enumerate(EI_list)
         absS = Float64[]; absA = Float64[]
@@ -417,28 +437,50 @@ function get_roots_theoretical_beam(EI_list::AbstractVector{Float64}, condition_
             push!(pts_xM,    r)
         end
 
-        # Resonance pass: S-type resonances (odd, A-dominates) use q=0.20;
-        # A-type resonances (even, S-dominates) use q=0.15.  This two-level
-        # threshold is calibrated against the coupled CSV ground truth: q15 alone
-        # fires false positives near logκ≈-0.17 (S-type, high-EI numerical noise),
-        # while q20 alone misses the true A-type resonance at logκ≈-3.43.
+        # Resonance candidate collection (deduplication happens after the loop).
+        # S-type resonances (odd, A-dominates) use q=0.20; A-type use q=0.15 (coupled)
+        # or q=0.10 (uncoupled, where resonances are sharper with no radiation damping).
         if condition_name in ("S", "A")
             alpha_col = @. -(abs_eta_1^2 - abs_eta_end^2) /
                             (abs_eta_1^2 + abs_eta_end^2 + eps())
             is_odd_resonance = mean(absS) < mean(absA)
             is_coupled       = Float64(theory_ctx.params.d) > 0.0
             resonance_q = is_odd_resonance ? 0.20 : (is_coupled ? 0.15 : 0.10)
-            if quantile(abs.(alpha_col), resonance_q) < RESONANCE_ALPHA_CUTOFF
+            q_val = quantile(abs.(alpha_col), resonance_q)
+            if q_val < RESONANCE_ALPHA_CUTOFF
                 if (condition_name == "S" && is_odd_resonance) ||
                    (condition_name == "A" && !is_odd_resonance)
-                    res_xM = collect(range(xM_grid[1], xM_grid[end]; length=RESONANCE_N_PTS))
-                    append!(pts_logEI, fill(logEI_axis[iei], RESONANCE_N_PTS))
-                    append!(pts_xM,    res_xM)
-                    push!(res_logEI, logEI_axis[iei])
+                    push!(res_candidates, (iei, q_val))
                 end
             end
         end
     end
+
+    # Deduplicate resonance candidates: group runs of consecutive scatter-grid indices
+    # and emit exactly one stripe per run (at the minimum-quantile index in the run).
+    # This prevents adjacent scatter points that both pass the threshold for the same
+    # physical resonance from generating two stacked vertical stripes.
+    if !isempty(res_candidates)
+        sort!(res_candidates; by = x -> x[1])
+        groups = Vector{Vector{Tuple{Int,Float64}}}()
+        for cand in res_candidates
+            if isempty(groups) || cand[1] - groups[end][end][1] > 1
+                push!(groups, [cand])
+            else
+                push!(groups[end], cand)
+            end
+        end
+        res_xM_template = collect(range(xM_grid[1], xM_grid[end]; length=RESONANCE_N_PTS))
+        for group in groups
+            _, best_pos = findmin(x -> x[2], group)
+            best_iei = group[best_pos][1]
+            best_le  = logEI_axis[best_iei]
+            append!(pts_logEI, fill(best_le, RESONANCE_N_PTS))
+            append!(pts_xM,    res_xM_template)
+            push!(res_logEI, best_le)
+        end
+    end
+
     return (; logEI=pts_logEI, xM_norm=pts_xM, resonance_logEI=res_logEI)
 end
 
