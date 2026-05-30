@@ -172,7 +172,7 @@ function get_roots_theoretical_LH(artifact, condition_name; output_dir::Abstract
     params     = artifact.base_params
     EI_list    = EI_list === nothing ? collect(Float64.(artifact.parameter_axes.EI)) : EI_list
     logEI_axis = log10.(EI_list)
-    xM_grid    = collect(range(0.0, 0.50; length=401))
+    xM_grid    = collect(range(0.0, 0.49; length=401))
     theory_ctx = theoretical_modal_context_LH(params; output_dir=output_dir)
 
     pts_logEI = Float64[]
@@ -267,6 +267,12 @@ function build_LH_plot(artifact, csv_path, output_dir; xlim_min::Float64)
         end
     end
 
+    # Pad to xM/L = 0.5 by repeating the last row (CSV data ends at 0.48)
+    if maximum(xM_axis) < 0.5
+        xM_axis  = vcat(xM_axis, [0.5])
+        alpha_LH = vcat(alpha_LH, alpha_LH[end:end, :])
+    end
+
     XLIMS = (xlim_min, max_logK_data)
     YLIMS = (0.0, 0.5)
 
@@ -289,7 +295,7 @@ function build_LH_plot(artifact, csv_path, output_dir; xlim_min::Float64)
     # q_val), group consecutive scatter-grid indices into runs, keep the minimum-q
     # index per run, then inject any stripe not already present in the LH results.
     beam_sync_ctx   = theoretical_modal_context(params; output_dir=output_dir)
-    xM_sync         = collect(range(0.0, 0.50; length=401))
+    xM_sync         = collect(range(0.0, 0.49; length=401))
     sync_candidates = Dict{String, Vector{Tuple{Int,Float64}}}("S"=>[], "A"=>[])
     for (iei, EI) in enumerate(EI_scatter)
         scatter_logK[iei] < xlim_min && continue
@@ -411,7 +417,7 @@ end
 function get_roots_theoretical_beam(EI_list::AbstractVector{Float64}, condition_name,
                                      theory_ctx)
     logEI_axis = log10.(EI_list)
-    xM_grid    = collect(range(0.0, 0.50; length=401))
+    xM_grid    = collect(range(0.0, 0.49; length=401))
 
     pts_logEI      = Float64[]
     pts_xM         = Float64[]
@@ -510,6 +516,12 @@ function build_beam_end_plot(artifact, csv_path, output_dir; xlim_min::Float64)
         for (j, le) in enumerate(logEI_axis), (i, xm) in enumerate(xM_axis)
             alpha_beam[i, j] = lookup[(le, xm)]
         end
+    end
+
+    # Pad to xM/L = 0.5 by repeating the last row (CSV data ends at 0.48)
+    if maximum(xM_axis) < 0.5
+        xM_axis   = vcat(xM_axis, [0.5])
+        alpha_beam = vcat(alpha_beam, alpha_beam[end:end, :])
     end
 
     XLIMS = (xlim_min, max_logK_data)
