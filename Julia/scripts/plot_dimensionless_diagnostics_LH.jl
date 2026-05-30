@@ -41,8 +41,8 @@ const RESONANCE_N_PTS         = 20   # number of evenly-spaced xM points to emit
 
 const CURVE_NAMES  = ["S", "A", "eta_1", "eta_end"]
 const CURVE_LABELS = [L"|S| = 0", L"|A| = 0",
-                      L"|\hat{\eta}(-\ell)| = 0",
-                      L"|\hat{\eta}(\ell)| = 0"]
+                      L"|\overline{\eta}(-\ell)| = 0",
+                      L"|\overline{\eta}(\ell)| = 0"]
 
 # ─── Helpers (parallel to plot_dimensionless_diagnostics.jl) ─────────────────
 
@@ -172,7 +172,7 @@ function get_roots_theoretical_LH(artifact, condition_name; output_dir::Abstract
     params     = artifact.base_params
     EI_list    = EI_list === nothing ? collect(Float64.(artifact.parameter_axes.EI)) : EI_list
     logEI_axis = log10.(EI_list)
-    xM_grid    = collect(range(0.0, 0.49; length=401))
+    xM_grid    = collect(range(0.0, 0.50; length=401))
     theory_ctx = theoretical_modal_context_LH(params; output_dir=output_dir)
 
     pts_logEI = Float64[]
@@ -289,7 +289,7 @@ function build_LH_plot(artifact, csv_path, output_dir; xlim_min::Float64)
     # q_val), group consecutive scatter-grid indices into runs, keep the minimum-q
     # index per run, then inject any stripe not already present in the LH results.
     beam_sync_ctx   = theoretical_modal_context(params; output_dir=output_dir)
-    xM_sync         = collect(range(0.0, 0.49; length=401))
+    xM_sync         = collect(range(0.0, 0.50; length=401))
     sync_candidates = Dict{String, Vector{Tuple{Int,Float64}}}("S"=>[], "A"=>[])
     for (iei, EI) in enumerate(EI_scatter)
         scatter_logK[iei] < xlim_min && continue
@@ -361,7 +361,8 @@ function build_LH_plot(artifact, csv_path, output_dir; xlim_min::Float64)
         fontfamily        = "Computer Modern",
         framestyle        = :box,
         grid              = false,
-        colorbar_title    = L"\alpha_{\mathrm{LH}}",
+        tick_direction    = :out,
+        colorbar_title    = L"\alpha",
         colorbar_titlefontsize = 14,
         colorbar_tickfontsize  = 11,
     )
@@ -410,7 +411,7 @@ end
 function get_roots_theoretical_beam(EI_list::AbstractVector{Float64}, condition_name,
                                      theory_ctx)
     logEI_axis = log10.(EI_list)
-    xM_grid    = collect(range(0.0, 0.49; length=401))
+    xM_grid    = collect(range(0.0, 0.50; length=401))
 
     pts_logEI      = Float64[]
     pts_xM         = Float64[]
@@ -485,8 +486,8 @@ function get_roots_theoretical_beam(EI_list::AbstractVector{Float64}, condition_
 end
 
 const BEAM_CURVE_LABELS = [L"|S| = 0", L"|A| = 0",
-                            L"|\hat{\eta}(-L/2)| = 0",
-                            L"|\hat{\eta}(+L/2)| = 0"]
+                            L"|\overline{\eta}(-1/2)| = 0",
+                            L"|\overline{\eta}(+1/2)| = 0"]
 
 function build_beam_end_plot(artifact, csv_path, output_dir; xlim_min::Float64)
     params = artifact.base_params
@@ -600,7 +601,8 @@ function build_beam_end_plot(artifact, csv_path, output_dir; xlim_min::Float64)
         fontfamily        = "Computer Modern",
         framestyle        = :box,
         grid              = false,
-        colorbar_title    = L"\alpha_{\mathrm{beam}}",
+        tick_direction    = :out,
+        colorbar_title    = L"\alpha",
         colorbar_titlefontsize = 14,
         colorbar_tickfontsize  = 11,
     )
