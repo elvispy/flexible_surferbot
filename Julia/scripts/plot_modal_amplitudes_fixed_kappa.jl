@@ -94,12 +94,13 @@ function make_figure(xM_vec, Q_mat, actual_logK)
         dpi         = 300,
         guidefontsize  = 14,
         tickfontsize   = 12,
-        legendfontsize = 12,
+        legendfontsize = 9,
         fontfamily  = "Computer Modern",
         framestyle  = :box,
         grid        = true,
         gridalpha   = 0.20,
         yscale      = :log10,
+        yticks      = 10.0 .^ collect(-6:0),
     )
 
     for n in 0:(N_MODES-1)
