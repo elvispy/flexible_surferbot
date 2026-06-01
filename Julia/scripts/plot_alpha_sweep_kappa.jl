@@ -131,13 +131,11 @@ function make_plot(sw, sp)
 
     hline!(p, [0.0]; color = :black, linewidth = 0.8, linestyle = :dot, label = false)
 
-    scatter!(p, [sp.kappa], [sp.alpha];
-        marker            = :star5,
-        markersize        = 14,
-        color             = RGB(0.95, 0.75, 0.05),
-        markerstrokecolor = :black,
-        markerstrokewidth = 1,
-        label             = "SurferBot",
+    vline!(p, [sp.kappa];
+        color     = RGB(0.95, 0.75, 0.05),
+        linewidth = 2.0,
+        linestyle = :dash,
+        label     = "Surferbot",
     )
 
     return p

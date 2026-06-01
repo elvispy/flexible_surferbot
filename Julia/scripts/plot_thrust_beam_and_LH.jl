@@ -245,6 +245,12 @@ function render_panel(log10_kappa, xM_axis, delta_grid, fig_title, out_base, bp,
         grid               = false,
     )
 
+    # Pad heatmap to xM/L = 0.5 by repeating last row (data ends at 0.48)
+    if maximum(xp) < 0.5
+        cp = vcat(cp, cp[end:end, :])
+        xp = vcat(xp, [0.5])
+    end
+
     p = heatmap(kp, xp, cp; plt_opts...)
 
     GOLD = RGB(0.95, 0.75, 0.05)
@@ -253,7 +259,8 @@ function render_panel(log10_kappa, xM_axis, delta_grid, fig_title, out_base, bp,
 
     hline!(p, [xm_star]; color=GOLD, linewidth=2.0, linestyle=:dash, label="Surferbot")
     for lk in modal_logK
-        vline!(p, [lk]; color=:grey, linewidth=1.0, linestyle=:dash, label=false)
+        vline!(p, [lk]; color=:grey, linewidth=1.0, linestyle=:dash,
+               label=L"\log_{10}\kappa = %$(lk)")
     end
 
 
