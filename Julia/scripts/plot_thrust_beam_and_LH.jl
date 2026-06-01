@@ -256,9 +256,6 @@ function render_panel(log10_kappa, xM_axis, delta_grid, fig_title, out_base, bp,
         vline!(p, [lk]; color=:grey, linewidth=1.0, linestyle=:dash, label=false)
     end
 
-    scatter!(p, [lk_star], [xm_star];
-             marker=:star5, markersize=14, color=GOLD,
-             markerstrokecolor=:black, markerstrokewidth=1, label=false)
 
     snap_markers = [:circle, :rect, :utriangle]
     for (i, (lk, lab)) in enumerate(zip(snapshot_logK, snapshot_labels))
@@ -310,7 +307,7 @@ function main()
     @printf "F_T^* = %.4e N  →  domain_grid scale factor = %.4e\n" F_T_star ft_scale
     domain_grid_norm = grids.domain_grid .* ft_scale
 
-    modal_logK = [-2.7]
+    modal_logK = [-2.5]
 
     # Beam — signed-log only (unchanged)
     render_panel(log10_kappa, grids.xM, grids.beam_grid,

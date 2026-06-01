@@ -15,7 +15,7 @@ using Surferbot, JLD2, Plots, LaTeXStrings, Printf, CSV, DataFrames, Statistics
 
 # ── Configuration ─────────────────────────────────────────────────────────────
 const N_MODES       = 5           # modes 0 … N_MODES-1
-const LOG10_KAPPA   = -2.7        # target log₁₀(κ) slice
+const LOG10_KAPPA   = -2.5        # target log₁₀(κ) slice
 const KAPPA_TOL     = 0.06        # half-width of slice (grid step is ~0.1)
 const XM_MIN        = 0.01        # xM/L lower limit
 const XM_MAX        = 0.50        # xM/L upper limit
