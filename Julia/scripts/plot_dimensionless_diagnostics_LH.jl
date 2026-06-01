@@ -142,6 +142,13 @@ function find_filtered_minima(xgrid, values, ratio; ratio_cutoff::Float64)
             push!(roots, Float64(xgrid[i]))
         end
     end
+    # Boundary check: if the function is monotonically decreasing into the right
+    # boundary and the last point satisfies the ratio filter, report it as a root.
+    # This catches cases where the zero lies at or beyond xM_max.
+    n = length(xgrid)
+    if values[n] <= values[n-1] && ratio[n] < ratio_cutoff
+        push!(roots, Float64(xgrid[n]))
+    end
     return roots
 end
 
