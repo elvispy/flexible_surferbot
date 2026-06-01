@@ -22,7 +22,6 @@ Source CSVs: output/csv/sweeper_{coupled,uncoupled}_full_grid.csv
 
 using CSV
 using DataFrames
-using JLD2
 using Plots
 using LaTeXStrings
 using Printf
@@ -290,13 +289,15 @@ function main()
     log10_kappa = grids.log10_EI .- shift
     Lambda_val = @sprintf("%.2f", Float64(bp.d) / Float64(bp.L_raft))
 
-    # Load F_T^* and nondimensionalize domain_grid.
+    # Compute F_T^* (rigid-inviscid reference thrust) directly.
     # domain_grid = (|η_R|²-|η_L|²)/(ρ_R·L·ω²) = -ΔS_xx/(ρ_R·L·ω²).
     # Thrust convention: F_T = d·ΔS_xx = d·(|η_L|²-|η_R|²)·ρ_R·L·ω²/... (same sign as
     # thrust_sweeps.jl). To convert: F_T/F_T* = -d·ρ_R·L·ω²·domain_grid / F_T*.
     # Negation corrects the (η_R-η_L) vs (η_L-η_R) sign mismatch.
-    cache_path = joinpath(output_dir, "jld2", "thrust_sweeps.jld2")
-    F_T_star = Float64(JLD2.load(cache_path, "F_T_star"))
+    println("Computing F_T^* (rigid-inviscid reference)...")
+    p_star   = Surferbot.Sweep.apply_parameter_overrides(bp, (nu = 0.0, EI = Inf))
+    F_T_star = Float64(Surferbot.flexible_solver(p_star).thrust)
+    @printf "F_T^* = %.4e N\n" F_T_star
     d        = Float64(bp.d)
     ft_scale = d * grids.rho_raft * grids.L * grids.omega^2 / abs(F_T_star)
     @printf "F_T^* = %.4e N  →  domain_grid scale factor = %.4e\n" F_T_star ft_scale
@@ -312,7 +313,7 @@ function main()
     snap_kappas = [1.82e-3, 5.43e-3, 1.94e-2]
     snap_logK   = log10.(snap_kappas)
     snap_xM     = abs(Float64(bp.motor_position)) / Float64(bp.L_raft)
-    snap_labels = ["Fig 5 (a)", "Fig 5 (b)", "Fig 6 (c)"]
+    snap_labels = ["Fig 5 (a)", "Fig 5 (b)", "Fig 5 (c)"]
     println("Rendering LH cbrt...")
     render_panel(log10_kappa, grids.xM, domain_grid_norm, lh_title,
         joinpath(fig_dir, "plot_thrust_LH_coupled_cbrt"), bp, shift; mode=:cbrt,
