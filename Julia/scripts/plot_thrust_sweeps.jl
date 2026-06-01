@@ -191,7 +191,7 @@ const BASE_OPTS = (
 )
 
 function make_panel(sw, xlabel_str, sp_x, sp_T, sp_S, d, F_T_star;
-                    log_x = false, xticks = :auto, plot_Sxx = true, plot_hline = true)
+                    log_x = false, xticks = :auto, plot_Sxx = true, plot_hline = true, ylims = :auto)
     yt         = sw.thrust .* d ./ F_T_star
     yS         = sw.Sxx    .* d ./ F_T_star
     ylabel_str = L"$F_T/F_T^\ast$"
@@ -204,6 +204,7 @@ function make_panel(sw, xlabel_str, sp_x, sp_T, sp_S, d, F_T_star;
              ylabel     = ylabel_str,
              xscale     = log_x ? :log10 : :identity,
              xticks     = xticks,
+             ylims      = ylims,
              BASE_OPTS...)
 
     if plot_Sxx
@@ -235,16 +236,18 @@ function main()
         L"$x_M / L$",
         sp.xM_norm, sp.thrust, sp.Sxx, d, F_T_star)
 
+    kap_ylim = maximum(abs.(sw2.thrust .* d ./ F_T_star))
     p2 = make_panel(sw2,
         L"$\kappa$",
         sp.kappa, sp.thrust, sp.Sxx, d, F_T_star;
-        log_x = true, xticks = 10.0 .^ collect(-4:1))
+        log_x = true, xticks = 10.0 .^ collect(-4:1), ylims = (-kap_ylim, kap_ylim))
 
     p3 = make_panel(sw3,
         L"$Re$",
         sp_re.Re, sp_re.thrust, sp_re.Sxx, d, F_T_star;
         # Omit the Longuet-Higgins/Sxx comparison from the viscous sweep.
-        log_x = true, xticks = 10.0 .^ collect(4:8), plot_Sxx = false, plot_hline = false)
+        log_x = true, xticks = 10.0 .^ collect(4:8), plot_Sxx = false, plot_hline = false,
+        ylims = (0, Inf))
 
     mkpath(FIG_DIR)
     for (fig, name) in [(p1, "thrust_sweep_xM"), (p2, "thrust_sweep_kappa"), (p3, "thrust_sweep_Re")]
