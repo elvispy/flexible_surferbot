@@ -381,14 +381,11 @@ function build_LH_plot(artifact, csv_path, output_dir; xlim_min::Float64)
         mask = (XLIMS[1] .<= res.logK .<= XLIMS[2]) .&
                (YLIMS[1] .<= res.xM_norm .<= YLIMS[2])
         isempty(res.logK[mask]) && continue
-        scatter!(p, res.logK[mask], res.xM_norm[mask];
-                 label             = CURVE_LABELS[i],
-                 color             = curve_colors[i],
-                 marker            = markers[i],
-                 markersize        = 5,
-                 markerstrokewidth = 0.6,
-                 markerstrokecolor = :white,
-                 markeralpha       = 0.95)
+        plot!(p, res.logK[mask], res.xM_norm[mask];
+              label     = CURVE_LABELS[i],
+              color     = curve_colors[i],
+              linewidth = 1.5,
+              linestyle = :solid)
     end
 
     logκ_surferbot = log10(Float64(params.EI)) - shift
@@ -632,14 +629,11 @@ function build_beam_end_plot(artifact, csv_path, output_dir; xlim_min::Float64)
         mask = (XLIMS[1] .<= res.logK .<= XLIMS[2]) .&
                (YLIMS[1] .<= res.xM_norm .<= YLIMS[2])
         isempty(res.logK[mask]) && continue
-        scatter!(p, res.logK[mask], res.xM_norm[mask];
-                 label             = BEAM_CURVE_LABELS[i],
-                 color             = curve_colors[i],
-                 marker            = markers[i],
-                 markersize        = 5,
-                 markerstrokewidth = 0.6,
-                 markerstrokecolor = :white,
-                 markeralpha       = 0.95)
+        plot!(p, res.logK[mask], res.xM_norm[mask];
+              label     = BEAM_CURVE_LABELS[i],
+              color     = curve_colors[i],
+              linewidth = 1.5,
+              linestyle = :solid)
     end
 
     logκ_surferbot = log10(Float64(theory_ctx.params.EI)) - shift

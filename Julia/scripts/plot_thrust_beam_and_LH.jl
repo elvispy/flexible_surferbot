@@ -314,7 +314,7 @@ function main()
     @printf "F_T^* = %.4e N  →  domain_grid scale factor = %.4e\n" F_T_star ft_scale
     domain_grid_norm = grids.domain_grid .* ft_scale
 
-    modal_logK = [-2.5]
+    modal_logK = [log10(5.43e-3)]
 
     # Beam — signed-log only (unchanged)
     render_panel(log10_kappa, grids.xM, grids.beam_grid,

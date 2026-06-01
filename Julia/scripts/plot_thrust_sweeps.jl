@@ -60,8 +60,13 @@ function compute_F_T_star(bp)
 end
 
 # ─── Three sweeps ─────────────────────────────────────────────────────────────
+const XM_SWEEP_KAPPA = 5.43e-3   # κ value for the motor-position sweep (Fig 5b snapshot)
+
 function run_sweep_xM(bp)
-    L  = Float64(bp.L_raft)
+    L        = Float64(bp.L_raft)
+    rho_R    = Float64(bp.rho_raft)
+    omega    = Float64(bp.omega)
+    EI_xM    = XM_SWEEP_KAPPA * rho_R * L^4 * omega^2
     xs = collect(range(0.0, 0.48; length = N_SWEEP))
     T   = Vector{Float64}(undef, N_SWEEP)
     Sxx = Vector{Float64}(undef, N_SWEEP)
@@ -70,7 +75,7 @@ function run_sweep_xM(bp)
         xM_norm = xs[i]
         Base.acquire(SOLVE_SEM)
         try
-            T[i], Sxx[i] = solve_one((motor_position = xM_norm * L, nu = 0.0, EI = Inf), bp)
+            T[i], Sxx[i] = solve_one((motor_position = xM_norm * L, nu = 0.0, EI = EI_xM), bp)
         finally
             Base.release(SOLVE_SEM)
         end
@@ -220,7 +225,7 @@ const BASE_OPTS = (
 
 function make_panel(sw, xlabel_str, sp_x, sp_T, sp_S, d, F_T_star;
                     log_x = false, xticks = :auto, plot_Sxx = true, plot_hline = true,
-                    ylims = :auto, surferbot_as_hline = false)
+                    ylims = :auto, surferbot_as_hline = false, plot_surferbot = true)
     yt         = sw.thrust .* d ./ F_T_star
     yS         = sw.Sxx    .* d ./ F_T_star
     ylabel_str = L"$F_T/F_T^\ast$"
@@ -244,16 +249,18 @@ function make_panel(sw, xlabel_str, sp_x, sp_T, sp_S, d, F_T_star;
 
     plot_hline && hline!(p, [0.0]; color = :black, linewidth = 0.8, linestyle = :dot, label = false)
 
-    if surferbot_as_hline
-        hline!(p, [sp_y];
-               color     = RGB(0.95, 0.75, 0.05), linewidth = 2.0,
-               linestyle = :dash, label = "Surferbot")
-    else
-        scatter!(p, [sp_x], [sp_y];
-                 marker           = :star5, markersize = 14,
-                 color            = RGB(0.95, 0.75, 0.05),
-                 markerstrokecolor = :black, markerstrokewidth = 1,
-                 label            = "Surferbot")
+    if plot_surferbot
+        if surferbot_as_hline
+            hline!(p, [sp_y];
+                   color     = RGB(0.95, 0.75, 0.05), linewidth = 2.0,
+                   linestyle = :dash, label = "Surferbot")
+        else
+            scatter!(p, [sp_x], [sp_y];
+                     marker           = :star5, markersize = 14,
+                     color            = RGB(0.95, 0.75, 0.05),
+                     markerstrokecolor = :black, markerstrokewidth = 1,
+                     label            = "Surferbot")
+        end
     end
 
     return p
@@ -269,7 +276,8 @@ function main()
 
     p1 = make_panel(sw1,
         L"$x_M / L$",
-        sp.xM_norm, sp.thrust, sp.Sxx, d, F_T_star)
+        sp.xM_norm, sp.thrust, sp.Sxx, d, F_T_star;
+        plot_surferbot = false)
 
     kap_ylim = maximum(abs.(sw2.thrust .* d ./ F_T_star))
     p2 = make_panel(sw2,
