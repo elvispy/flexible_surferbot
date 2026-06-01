@@ -1,3 +1,4 @@
+# THIS SCRIPT GENERATES FIGURES FOR THE PAPER
 """
 plot_dimensionless_diagnostics_LH.jl
 
@@ -390,6 +391,11 @@ function build_LH_plot(artifact, csv_path, output_dir; xlim_min::Float64)
                  markeralpha       = 0.95)
     end
 
+    logκ_surferbot = log10(Float64(params.EI)) - shift
+    vline!(p, [logκ_surferbot];
+           color     = RGB(0.95, 0.75, 0.05), linewidth = 2.0,
+           linestyle = :dash, label = "Surferbot")
+
     return p
 end
 
@@ -635,6 +641,11 @@ function build_beam_end_plot(artifact, csv_path, output_dir; xlim_min::Float64)
                  markerstrokecolor = :white,
                  markeralpha       = 0.95)
     end
+
+    logκ_surferbot = log10(Float64(theory_ctx.params.EI)) - shift
+    vline!(p, [logκ_surferbot];
+           color     = RGB(0.95, 0.75, 0.05), linewidth = 2.0,
+           linestyle = :dash, label = "Surferbot")
 
     return p
 end

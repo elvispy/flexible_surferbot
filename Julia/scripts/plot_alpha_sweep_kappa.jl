@@ -1,3 +1,4 @@
+# THIS SCRIPT GENERATES FIGURES FOR THE PAPER
 """
 plot_alpha_sweep_kappa.jl
 

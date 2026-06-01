@@ -1,3 +1,4 @@
+# THIS SCRIPT GENERATES FIGURES FOR THE PAPER
 """
 plot_thrust_beam_and_LH.jl
 
