@@ -173,7 +173,7 @@ end
 
 # ─── Plot style ───────────────────────────────────────────────────────────────
 const BASE_OPTS = (
-    legend     = :topright,
+    legend     = :bottomright,
     background_color_legend = RGBA(1, 1, 1, 0.85),
     foreground_color_legend = :black,
     size       = (1094, 380),
