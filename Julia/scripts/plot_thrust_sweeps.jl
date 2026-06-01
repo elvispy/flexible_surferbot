@@ -186,12 +186,12 @@ const BASE_OPTS = (
     grid       = false,
     guidefontsize  = 21,
     tickfontsize   = 18,
-    legendfontsize = 17,
+    legendfontsize = 16,
     fontfamily = "Computer Modern",
 )
 
 function make_panel(sw, xlabel_str, sp_x, sp_T, sp_S, d, F_T_star;
-                    log_x = false, xticks = :auto, plot_Sxx = true)
+                    log_x = false, xticks = :auto, plot_Sxx = true, plot_hline = true)
     yt         = sw.thrust .* d ./ F_T_star
     yS         = sw.Sxx    .* d ./ F_T_star
     ylabel_str = L"$F_T/F_T^\ast$"
@@ -212,7 +212,7 @@ function make_panel(sw, xlabel_str, sp_x, sp_T, sp_S, d, F_T_star;
               color     = :crimson, linewidth = 2.5, linestyle = :dash)
     end
 
-    hline!(p, [0.0]; color = :black, linewidth = 0.8, linestyle = :dot, label = false)
+    plot_hline && hline!(p, [0.0]; color = :black, linewidth = 0.8, linestyle = :dot, label = false)
 
     scatter!(p, [sp_x], [sp_y];
              marker           = :star5, markersize = 14,
@@ -244,7 +244,7 @@ function main()
         L"$Re$",
         sp_re.Re, sp_re.thrust, sp_re.Sxx, d, F_T_star;
         # Omit the Longuet-Higgins/Sxx comparison from the viscous sweep.
-        log_x = true, xticks = 10.0 .^ collect(4:8), plot_Sxx = false)
+        log_x = true, xticks = 10.0 .^ collect(4:8), plot_Sxx = false, plot_hline = false)
 
     mkpath(FIG_DIR)
     for (fig, name) in [(p1, "thrust_sweep_xM"), (p2, "thrust_sweep_kappa"), (p3, "thrust_sweep_Re")]
