@@ -180,7 +180,8 @@ end
 
 function render_panel(log10_kappa, xM_axis, delta_grid, fig_title, out_base, bp, shift;
                       mode=:signed_log,
-                      snapshot_logK=Float64[], snapshot_xM=0.0, snapshot_labels=String[])
+                      snapshot_logK=Float64[], snapshot_xM=0.0, snapshot_labels=String[],
+                      modal_logK=Float64[])
     max_logK = maximum(log10_kappa)
     XLIMS    = (-4.0, max_logK)
     YLIMS    = (0.0, 0.5)
@@ -249,9 +250,15 @@ function render_panel(log10_kappa, xM_axis, delta_grid, fig_title, out_base, bp,
     GOLD = RGB(0.95, 0.75, 0.05)
 
     lk_star, xm_star = operating_point(bp, shift)
+
+    hline!(p, [xm_star]; color=GOLD, linewidth=2.0, linestyle=:dash, label="Surferbot")
+    for lk in modal_logK
+        vline!(p, [lk]; color=:grey, linewidth=1.0, linestyle=:dash, label=false)
+    end
+
     scatter!(p, [lk_star], [xm_star];
              marker=:star5, markersize=14, color=GOLD,
-             markerstrokecolor=:black, markerstrokewidth=1, label="SurferBot")
+             markerstrokecolor=:black, markerstrokewidth=1, label=false)
 
     snap_markers = [:circle, :rect, :utriangle]
     for (i, (lk, lab)) in enumerate(zip(snapshot_logK, snapshot_labels))
@@ -303,10 +310,13 @@ function main()
     @printf "F_T^* = %.4e N  →  domain_grid scale factor = %.4e\n" F_T_star ft_scale
     domain_grid_norm = grids.domain_grid .* ft_scale
 
+    modal_logK = [-2.7]
+
     # Beam — signed-log only (unchanged)
     render_panel(log10_kappa, grids.xM, grids.beam_grid,
         LaTeXString("Coupled, \$\\Lambda=$Lambda_val\$ — beam \$\\Delta|\\eta|^2/L^2\$"),
-        joinpath(fig_dir, "plot_thrust_beam_coupled"), bp, shift; mode=:signed_log)
+        joinpath(fig_dir, "plot_thrust_beam_coupled"), bp, shift; mode=:signed_log,
+        modal_logK)
 
     # LH — cube-root transform with real-unit colorbar ticks
     lh_title = LaTeXString("Coupled, \$\\Lambda=$Lambda_val\$ — LH \$\\Delta|\\eta|^2/L^2\$")
@@ -317,7 +327,8 @@ function main()
     println("Rendering LH cbrt...")
     render_panel(log10_kappa, grids.xM, domain_grid_norm, lh_title,
         joinpath(fig_dir, "plot_thrust_LH_coupled_cbrt"), bp, shift; mode=:cbrt,
-        snapshot_logK=snap_logK, snapshot_xM=snap_xM, snapshot_labels=snap_labels)
+        snapshot_logK=snap_logK, snapshot_xM=snap_xM, snapshot_labels=snap_labels,
+        modal_logK)
 end
 
 if abspath(PROGRAM_FILE) == @__FILE__
