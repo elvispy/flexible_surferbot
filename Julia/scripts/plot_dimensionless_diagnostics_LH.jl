@@ -41,6 +41,19 @@ const RESONANCE_ALPHA_CUTOFF  = 0.04  # 10th-percentile of |α_LH| across xM < t
 const RESONANCE_N_PTS         = 20   # number of evenly-spaced xM points to emit per resonance column
 
 const CURVE_NAMES  = ["S", "A", "eta_1", "eta_end"]
+
+# Split (logK, xM) point sets into zero-crossing path and resonance stripe logK values.
+# Resonance stripes are detected by having ≥ RESONANCE_N_PTS points at the same logK.
+function split_xing_resonance(logK, xM)
+    counts = Dict{Float64,Int}()
+    for lk in logK; counts[lk] = get(counts, lk, 0) + 1; end
+    res_lk = Set(lk for (lk, c) in counts if c >= RESONANCE_N_PTS)
+    xing   = [(lk, xm) for (lk, xm) in zip(logK, xM) if lk ∉ res_lk]
+    sort!(xing)
+    lk_line = isempty(xing) ? Float64[] : first.(xing)
+    xm_line = isempty(xing) ? Float64[] : last.(xing)
+    return lk_line, xm_line, sort(collect(res_lk))
+end
 const CURVE_LABELS = [L"|S| = 0", L"|A| = 0",
                       L"|\overline{\eta}(-\bar{\ell})| = 0",
                       L"|\overline{\eta}(\bar{\ell})| = 0"]
@@ -85,10 +98,10 @@ end
 
 # ─── Modal context (beam-end version kept for comparison / backwards compat) ──
 
-function theoretical_modal_context(params; output_dir::AbstractString)
+function theoretical_modal_context(params; output_dir::AbstractString, num_modes::Int=NUM_MODES)
     fparams = coerce_flexible_params(params)
     payload = ModalPressureMap.load_or_compute_modal_pressure_map(
-        fparams; output_dir=output_dir, num_modes_basis=NUM_MODES)
+        fparams; output_dir=output_dir, num_modes_basis=num_modes)
     derived = Surferbot.derive_params(fparams)
     Psi = payload.psi_basis.Psi
     return (
@@ -110,8 +123,8 @@ function theoretical_modal_context(params; output_dir::AbstractString)
 end
 
 # LH context: same as beam-end but adds a_vec (right) and a_vec_left (left)
-function theoretical_modal_context_LH(params; output_dir::AbstractString)
-    ctx = theoretical_modal_context(params; output_dir=output_dir)
+function theoretical_modal_context_LH(params; output_dir::AbstractString, num_modes::Int=NUM_MODES)
+    ctx = theoretical_modal_context(params; output_dir=output_dir, num_modes=num_modes)
     return merge(ctx, (
         a_vec      = ComplexF64.(ctx.payload.a_vec),
         a_vec_left = ComplexF64.(ctx.payload.a_vec_left),
@@ -381,11 +394,13 @@ function build_LH_plot(artifact, csv_path, output_dir; xlim_min::Float64)
         mask = (XLIMS[1] .<= res.logK .<= XLIMS[2]) .&
                (YLIMS[1] .<= res.xM_norm .<= YLIMS[2])
         isempty(res.logK[mask]) && continue
-        plot!(p, res.logK[mask], res.xM_norm[mask];
-              label     = CURVE_LABELS[i],
-              color     = curve_colors[i],
-              linewidth = 1.5,
-              linestyle = :solid)
+        lk_line, xm_line, res_lks = split_xing_resonance(res.logK[mask], res.xM_norm[mask])
+        isempty(lk_line) || plot!(p, lk_line, xm_line;
+              label=CURVE_LABELS[i], color=curve_colors[i], linewidth=1.5, linestyle=:solid)
+        for rlk in res_lks
+            (XLIMS[1] <= rlk <= XLIMS[2]) || continue
+            vline!(p, [rlk]; color=curve_colors[i], linewidth=1.5, linestyle=:solid, label=false)
+        end
     end
 
     logκ_surferbot = log10(Float64(params.EI)) - shift
@@ -629,11 +644,13 @@ function build_beam_end_plot(artifact, csv_path, output_dir; xlim_min::Float64)
         mask = (XLIMS[1] .<= res.logK .<= XLIMS[2]) .&
                (YLIMS[1] .<= res.xM_norm .<= YLIMS[2])
         isempty(res.logK[mask]) && continue
-        plot!(p, res.logK[mask], res.xM_norm[mask];
-              label     = BEAM_CURVE_LABELS[i],
-              color     = curve_colors[i],
-              linewidth = 1.5,
-              linestyle = :solid)
+        lk_line, xm_line, res_lks = split_xing_resonance(res.logK[mask], res.xM_norm[mask])
+        isempty(lk_line) || plot!(p, lk_line, xm_line;
+              label=BEAM_CURVE_LABELS[i], color=curve_colors[i], linewidth=1.5, linestyle=:solid)
+        for rlk in res_lks
+            (XLIMS[1] <= rlk <= XLIMS[2]) || continue
+            vline!(p, [rlk]; color=curve_colors[i], linewidth=1.5, linestyle=:solid, label=false)
+        end
     end
 
     logκ_surferbot = log10(Float64(theory_ctx.params.EI)) - shift
