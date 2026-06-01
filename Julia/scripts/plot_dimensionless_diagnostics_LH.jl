@@ -135,11 +135,20 @@ function coerce_flexible_params(params)
     return Surferbot.FlexibleParams(; pairs...)
 end
 
-function find_filtered_minima(xgrid, values, ratio; ratio_cutoff::Float64)
+function find_filtered_minima(xgrid, values, ratio; ratio_cutoff::Float64,
+                               check_boundary::Bool=false)
     roots = Float64[]
     for i in 2:(length(xgrid) - 1)
         if values[i] <= values[i-1] && values[i] <= values[i+1] && ratio[i] < ratio_cutoff
             push!(roots, Float64(xgrid[i]))
+        end
+    end
+    # Boundary check (only for eta conditions, not S/A which are trivially small
+    # near xM=0.5 due to motor antisymmetric placement).
+    if check_boundary
+        n = length(xgrid)
+        if values[n] <= values[n-1] && ratio[n] < ratio_cutoff
+            push!(roots, Float64(xgrid[n]))
         end
     end
     return roots
@@ -154,10 +163,10 @@ function roots_for_condition(condition_name, xgrid, absS, absA, abs_eta_1, abs_e
         return find_filtered_minima(xgrid, absA, ratio; ratio_cutoff=RATIO_CUTOFF)
     elseif condition_name == "eta_1"
         denom = abs_eta_1 .+ abs_eta_end .+ eps()
-        return find_filtered_minima(xgrid, abs_eta_1, abs_eta_1 ./ denom; ratio_cutoff=RATIO_CUTOFF)
+        return find_filtered_minima(xgrid, abs_eta_1, abs_eta_1 ./ denom; ratio_cutoff=RATIO_CUTOFF, check_boundary=true)
     elseif condition_name == "eta_end"
         denom = abs_eta_1 .+ abs_eta_end .+ eps()
-        return find_filtered_minima(xgrid, abs_eta_end, abs_eta_end ./ denom; ratio_cutoff=RATIO_CUTOFF)
+        return find_filtered_minima(xgrid, abs_eta_end, abs_eta_end ./ denom; ratio_cutoff=RATIO_CUTOFF, check_boundary=true)
     end
     return Float64[]
 end
@@ -252,7 +261,7 @@ function get_roots_theoretical_LH(artifact, condition_name; output_dir::Abstract
     params     = artifact.base_params
     EI_list    = EI_list === nothing ? collect(Float64.(artifact.parameter_axes.EI)) : EI_list
     logEI_axis = log10.(EI_list)
-    xM_grid    = collect(range(0.0, 0.495; length=601))
+    xM_grid    = collect(range(0.0, 0.499; length=601))
     theory_ctx = theoretical_modal_context_LH(params; output_dir=output_dir)
 
     pts_logEI = Float64[]
@@ -501,7 +510,7 @@ end
 function get_roots_theoretical_beam(EI_list::AbstractVector{Float64}, condition_name,
                                      theory_ctx)
     logEI_axis = log10.(EI_list)
-    xM_grid    = collect(range(0.0, 0.495; length=601))
+    xM_grid    = collect(range(0.0, 0.499; length=601))
 
     pts_logEI      = Float64[]
     pts_xM         = Float64[]
