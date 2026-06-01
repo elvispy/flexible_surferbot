@@ -23,8 +23,10 @@ using LaTeXStrings
 using Printf
 using Base.Threads: @threads, ReentrantLock
 
-const PRINT_LOCK = ReentrantLock()
-const CACHE_PATH = joinpath(@__DIR__, "..", "output", "jld2", "thrust_sweeps.jld2")
+const PRINT_LOCK   = ReentrantLock()
+const MAX_WORKERS  = min(Threads.nthreads(), 4)
+const SOLVE_SEM    = Base.Semaphore(MAX_WORKERS)
+const CACHE_PATH   = joinpath(@__DIR__, "..", "output", "jld2", "thrust_sweeps.jld2")
 const FIG_DIR    = joinpath(@__DIR__, "..", "output", "figures")
 const N_SWEEP    = 50
 const NU_WATER   = 1e-6
@@ -65,7 +67,12 @@ function run_sweep_xM(bp)
     println("Sweep 1/3: motor position ($N_SWEEP points) …")
     @threads for i in 1:N_SWEEP
         xM_norm = xs[i]
-        T[i], Sxx[i] = solve_one((motor_position = xM_norm * L, nu = 0.0, EI = Inf), bp)
+        Base.acquire(SOLVE_SEM)
+        try
+            T[i], Sxx[i] = solve_one((motor_position = xM_norm * L, nu = 0.0, EI = Inf), bp)
+        finally
+            Base.release(SOLVE_SEM)
+        end
         lock(PRINT_LOCK) do
             @printf "  [%2d/%d]  xM/L=%.3f   T/d=%+.3e   Sxx=%+.3e\n" i N_SWEEP xM_norm T[i] Sxx[i]
         end
@@ -88,7 +95,12 @@ function run_sweep_kappa(bp)
     @threads for i in 1:N_SWEEP
         lk   = log10_kappa[i]
         EI_i = 10.0^lk * EI_scale
-        T[i], Sxx[i] = solve_one((EI = EI_i, motor_position = xM, nu = 0.0), bp)
+        Base.acquire(SOLVE_SEM)
+        try
+            T[i], Sxx[i] = solve_one((EI = EI_i, motor_position = xM, nu = 0.0), bp)
+        finally
+            Base.release(SOLVE_SEM)
+        end
         lock(PRINT_LOCK) do
             @printf "  [%2d/%d]  log10(κ)=%.2f   T/d=%+.3e   Sxx=%+.3e\n" i N_SWEEP lk T[i] Sxx[i]
         end
@@ -110,7 +122,12 @@ function run_sweep_Re(bp)
     println("Sweep 3/3: Reynolds ($N_SWEEP points) …")
     @threads for i in 1:N_SWEEP
         nu_i = 10.0^log10_nu[i]
-        T[i], Sxx[i] = solve_one((EI = Inf, motor_position = xM, nu = nu_i), bp)
+        Base.acquire(SOLVE_SEM)
+        try
+            T[i], Sxx[i] = solve_one((EI = Inf, motor_position = xM, nu = nu_i), bp)
+        finally
+            Base.release(SOLVE_SEM)
+        end
         lock(PRINT_LOCK) do
             @printf "  [%2d/%d]  Re=%.2e   T/d=%+.3e   Sxx=%+.3e\n" i N_SWEEP Re_vals[i] T[i] Sxx[i]
         end
@@ -169,9 +186,9 @@ function load_or_compute(bp)
         return sw1, sw2, sw3, sp, F_T_star, sp_re
     end
 
-    sw1 = run_sweep_xM(bp)
-    sw2 = run_sweep_kappa(bp)
-    sw3 = run_sweep_Re(bp)
+    sw1 = run_sweep_xM(bp);     GC.gc()
+    sw2 = run_sweep_kappa(bp);  GC.gc()
+    sw3 = run_sweep_Re(bp);     GC.gc()
     sp       = surferbot_point(bp; nu = 0.0)
     sp_re    = surferbot_point(bp; nu = NU_WATER)
     F_T_star = compute_F_T_star(bp)
