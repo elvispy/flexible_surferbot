@@ -41,6 +41,85 @@ const RESONANCE_ALPHA_CUTOFF  = 0.04  # 10th-percentile of |α_LH| across xM < t
 const RESONANCE_N_PTS         = 20   # number of evenly-spaced xM points to emit per resonance column
 
 const CURVE_NAMES  = ["S", "A", "eta_1", "eta_end"]
+
+# ─── Branch clustering for line plots ────────────────────────────────────────
+#
+# Zero-crossing points at each logK column form non-intersecting branches in
+# (logK, xM) space.  This function:
+#   1. Detects resonance stripe logK values (≥ RESONANCE_N_PTS points at same logK)
+#      and returns them separately for vline! rendering.
+#   2. Groups the remaining zero-crossing points into connected branches via
+#      nearest-neighbour matching between consecutive logK columns.
+#   3. Returns each branch as a (lk, xm) pair of sorted vectors, NaN-separated
+#      into a single flat path for a single plot! call.
+function cluster_branches(logK_pts, xM_pts)
+    # ── 1. Separate resonance stripes ────────────────────────────────────────
+    counts = Dict{Float64,Int}()
+    for lk in logK_pts; counts[lk] = get(counts, lk, 0) + 1; end
+    res_lk_set = Set(lk for (lk,c) in counts if c >= RESONANCE_N_PTS)
+
+    # zero-crossing points only
+    xing_lk = Float64[]; xing_xm = Float64[]
+    for (lk, xm) in zip(logK_pts, xM_pts)
+        lk ∈ res_lk_set && continue
+        push!(xing_lk, lk); push!(xing_xm, xm)
+    end
+
+    resonance_lks = sort(collect(res_lk_set))
+    isempty(xing_lk) && return Float64[], Float64[], resonance_lks
+
+    # ── 2. Group by logK column ───────────────────────────────────────────────
+    cols = Dict{Float64, Vector{Float64}}()
+    for (lk, xm) in zip(xing_lk, xing_xm)
+        push!(get!(cols, lk, Float64[]), xm)
+    end
+    unique_lks = sort(collect(keys(cols)))
+    for lk in unique_lks; sort!(cols[lk]); end
+
+    # ── 3. Nearest-neighbour branch assignment ────────────────────────────────
+    # Each branch is a list of (logK, xM) pairs in logK order.
+    branches = [[(unique_lks[1], xm)] for xm in cols[unique_lks[1]]]
+
+    for i in 2:length(unique_lks)
+        lk       = unique_lks[i]
+        new_xms  = copy(cols[lk])
+        matched  = fill(false, length(new_xms))
+
+        for branch in branches
+            isempty(branch) && continue
+            last_xm = last(branch)[2]
+            isnan(last_xm) && continue
+            # find closest unmatched root in the new column
+            best_j, best_d = 0, Inf
+            for (j, xm) in enumerate(new_xms)
+                matched[j] && continue
+                d = abs(xm - last_xm)
+                if d < best_d; best_d = d; best_j = j; end
+            end
+            # connect only if close enough (< half the xM range)
+            if best_j > 0 && best_d < 0.25
+                push!(branch, (lk, new_xms[best_j]))
+                matched[best_j] = true
+            else
+                push!(branch, (NaN, NaN))   # branch gap
+            end
+        end
+        # start a new branch for any unmatched root
+        for (j, xm) in enumerate(new_xms)
+            matched[j] || push!(branches, [(lk, xm)])
+        end
+    end
+
+    # ── 4. Flatten branches with NaN separators ───────────────────────────────
+    lk_out = Float64[]; xm_out = Float64[]
+    for branch in branches
+        length(branch) < 2 && continue    # skip isolated single points
+        append!(lk_out, first.(branch))
+        append!(xm_out, last.(branch))
+        push!(lk_out, NaN); push!(xm_out, NaN)
+    end
+    return lk_out, xm_out, resonance_lks
+end
 const CURVE_LABELS = [L"|S| = 0", L"|A| = 0",
                       L"|\overline{\eta}(-\bar{\ell})| = 0",
                       L"|\overline{\eta}(\bar{\ell})| = 0"]
@@ -173,7 +252,7 @@ function get_roots_theoretical_LH(artifact, condition_name; output_dir::Abstract
     params     = artifact.base_params
     EI_list    = EI_list === nothing ? collect(Float64.(artifact.parameter_axes.EI)) : EI_list
     logEI_axis = log10.(EI_list)
-    xM_grid    = collect(range(0.0, 0.49; length=401))
+    xM_grid    = collect(range(0.0, 0.50; length=601))
     theory_ctx = theoretical_modal_context_LH(params; output_dir=output_dir)
 
     pts_logEI = Float64[]
@@ -381,19 +460,18 @@ function build_LH_plot(artifact, csv_path, output_dir; xlim_min::Float64)
         mask = (XLIMS[1] .<= res.logK .<= XLIMS[2]) .&
                (YLIMS[1] .<= res.xM_norm .<= YLIMS[2])
         isempty(res.logK[mask]) && continue
-        scatter!(p, res.logK[mask], res.xM_norm[mask];
-                 label             = CURVE_LABELS[i],
-                 color             = curve_colors[i],
-                 marker            = markers[i],
-                 markersize        = 5,
-                 markerstrokewidth = 0.6,
-                 markerstrokecolor = :white,
-                 markeralpha       = 0.95)
+        lk_path, xm_path, res_lks = cluster_branches(res.logK[mask], res.xM_norm[mask])
+        isempty(lk_path) || plot!(p, lk_path, xm_path;
+            label=CURVE_LABELS[i], color=curve_colors[i], linewidth=2.5)
+        for rlk in res_lks
+            (XLIMS[1] <= rlk <= XLIMS[2]) || continue
+            vline!(p, [rlk]; color=curve_colors[i], linewidth=2.5, label=false)
+        end
     end
 
-    logκ_surferbot = log10(Float64(params.EI)) - shift
-    vline!(p, [logκ_surferbot];
-           color     = RGB(0.95, 0.75, 0.05), linewidth = 2.0,
+    xM_surferbot = abs(Float64(params.motor_position)) / Float64(params.L_raft)
+    hline!(p, [xM_surferbot];
+           color     = RGB(0.95, 0.75, 0.05), linewidth = 1.5,
            linestyle = :dash, label = "Surferbot")
 
     return p
@@ -423,7 +501,7 @@ end
 function get_roots_theoretical_beam(EI_list::AbstractVector{Float64}, condition_name,
                                      theory_ctx)
     logEI_axis = log10.(EI_list)
-    xM_grid    = collect(range(0.0, 0.49; length=401))
+    xM_grid    = collect(range(0.0, 0.50; length=601))
 
     pts_logEI      = Float64[]
     pts_xM         = Float64[]
@@ -459,7 +537,9 @@ function get_roots_theoretical_beam(EI_list::AbstractVector{Float64}, condition_
             is_odd_resonance = mean(absS) < mean(absA)
             is_coupled       = Float64(theory_ctx.params.d) > 0.0
             resonance_q = is_odd_resonance ? 0.20 : (is_coupled ? 0.15 : 0.10)
-            q_val = quantile(abs.(alpha_col), resonance_q)
+            # Resonance detection uses only xM ≤ 0.49 to match original threshold behaviour
+            n_res = searchsortedlast(xM_grid, 0.49)
+            q_val = quantile(abs.(alpha_col[1:n_res]), resonance_q)
             if q_val < RESONANCE_ALPHA_CUTOFF
                 if (condition_name == "S" && is_odd_resonance) ||
                    (condition_name == "A" && !is_odd_resonance)
@@ -632,19 +712,18 @@ function build_beam_end_plot(artifact, csv_path, output_dir; xlim_min::Float64)
         mask = (XLIMS[1] .<= res.logK .<= XLIMS[2]) .&
                (YLIMS[1] .<= res.xM_norm .<= YLIMS[2])
         isempty(res.logK[mask]) && continue
-        scatter!(p, res.logK[mask], res.xM_norm[mask];
-                 label             = BEAM_CURVE_LABELS[i],
-                 color             = curve_colors[i],
-                 marker            = markers[i],
-                 markersize        = 5,
-                 markerstrokewidth = 0.6,
-                 markerstrokecolor = :white,
-                 markeralpha       = 0.95)
+        lk_path, xm_path, res_lks = cluster_branches(res.logK[mask], res.xM_norm[mask])
+        isempty(lk_path) || plot!(p, lk_path, xm_path;
+            label=BEAM_CURVE_LABELS[i], color=curve_colors[i], linewidth=2.5)
+        for rlk in res_lks
+            (XLIMS[1] <= rlk <= XLIMS[2]) || continue
+            vline!(p, [rlk]; color=curve_colors[i], linewidth=2.5, label=false)
+        end
     end
 
-    logκ_surferbot = log10(Float64(theory_ctx.params.EI)) - shift
-    vline!(p, [logκ_surferbot];
-           color     = RGB(0.95, 0.75, 0.05), linewidth = 2.0,
+    xM_surferbot = abs(Float64(theory_ctx.params.motor_position)) / Float64(theory_ctx.params.L_raft)
+    hline!(p, [xM_surferbot];
+           color     = RGB(0.95, 0.75, 0.05), linewidth = 1.5,
            linestyle = :dash, label = "Surferbot")
 
     return p
@@ -684,7 +763,7 @@ function main()
 
     p_ucpl_beam = build_beam_end_plot(art_ucpl,
                                        joinpath(output_dir, "csv", "sweeper_uncoupled_full_grid.csv"),
-                                       output_dir; xlim_min=-5.0)
+                                       output_dir; xlim_min=-4.0)
     out_ucpl_beam = joinpath(fig_dir, "plot_dimensionless_diagnostics_ucpl_beam.pdf")
     savefig(p_ucpl_beam, out_ucpl_beam)
     println("Saved $out_ucpl_beam")
