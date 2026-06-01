@@ -39,20 +39,74 @@ const RATIO_CUTOFF = 0.5
 
 const RESONANCE_ALPHA_CUTOFF  = 0.04  # 10th-percentile of |α_LH| across xM < this → resonance column
 const RESONANCE_N_PTS         = 20   # number of evenly-spaced xM points to emit per resonance column
+const N_CURVE_LOGK            = 150  # logK resolution for theoretical contour grid
+const N_CURVE_XM              = 150  # xM resolution for theoretical contour grid
 
 const CURVE_NAMES  = ["S", "A", "eta_1", "eta_end"]
 
-# Split (logK, xM) point sets into zero-crossing path and resonance stripe logK values.
-# Resonance stripes are detected by having ≥ RESONANCE_N_PTS points at the same logK.
+# Separate resonance stripe logK values (≥ RESONANCE_N_PTS points at same logK)
+# from zero-crossing points, then trace connected branches via nearest-neighbour
+# matching between consecutive logK columns.  Returns (lk_path, xm_path, res_lks)
+# where lk_path/xm_path contain NaN separators between branches.
 function split_xing_resonance(logK, xM)
+    # --- detect resonance columns ---
     counts = Dict{Float64,Int}()
     for lk in logK; counts[lk] = get(counts, lk, 0) + 1; end
-    res_lk = Set(lk for (lk, c) in counts if c >= RESONANCE_N_PTS)
-    xing   = [(lk, xm) for (lk, xm) in zip(logK, xM) if lk ∉ res_lk]
-    sort!(xing)
-    lk_line = isempty(xing) ? Float64[] : first.(xing)
-    xm_line = isempty(xing) ? Float64[] : last.(xing)
-    return lk_line, xm_line, sort(collect(res_lk))
+    res_lk_set = Set(lk for (lk, c) in counts if c >= RESONANCE_N_PTS)
+
+    # --- collect zero-crossing points grouped by logK ---
+    cols = Dict{Float64, Vector{Float64}}()
+    for (lk, xm) in zip(logK, xM)
+        lk ∈ res_lk_set && continue
+        push!(get!(cols, lk, Float64[]), xm)
+    end
+    unique_lks = sort(collect(keys(cols)))
+    for lk in unique_lks; sort!(cols[lk]); end
+
+    if isempty(unique_lks)
+        return Float64[], Float64[], sort(collect(res_lk_set))
+    end
+
+    # --- nearest-neighbour branch tracing ---
+    # Each branch is a Vector{Tuple{Float64,Float64}} of (logK, xM) pairs.
+    branches = [[(unique_lks[1], xm)] for xm in cols[unique_lks[1]]]
+
+    for i in 2:length(unique_lks)
+        lk      = unique_lks[i]
+        new_xms = copy(cols[lk])
+        matched = fill(false, length(new_xms))
+
+        for branch in branches
+            isempty(branch) && continue
+            last_xm = last(branch)[2]
+            isnan(last_xm) && continue        # branch already terminated
+            best_j, best_d = 0, Inf
+            for (j, xm) in enumerate(new_xms)
+                matched[j] && continue
+                d = abs(xm - last_xm)
+                if d < best_d; best_d = d; best_j = j; end
+            end
+            if best_j > 0 && best_d < 0.15   # connect if close enough
+                push!(branch, (lk, new_xms[best_j]))
+                matched[best_j] = true
+            else
+                push!(branch, (NaN, NaN))     # branch ends / gap
+            end
+        end
+        # start new branches for unmatched roots
+        for (j, xm) in enumerate(new_xms)
+            matched[j] || push!(branches, [(lk, xm)])
+        end
+    end
+
+    # --- flatten branches with NaN separators ---
+    lk_out, xm_out = Float64[], Float64[]
+    for branch in branches
+        append!(lk_out, first.(branch))
+        append!(xm_out, last.(branch))
+        push!(lk_out, NaN); push!(xm_out, NaN)
+    end
+    return lk_out, xm_out, sort(collect(res_lk_set))
 end
 const CURVE_LABELS = [L"|S| = 0", L"|A| = 0",
                       L"|\overline{\eta}(-\bar{\ell})| = 0",
@@ -256,6 +310,50 @@ end
 #   Pass a vector → use that instead (needed for uncoupled where the artifact
 #                   EI range is narrower than the desired x axis).
 
+# Compute |S|, |A|, |η₁|, |η_end| on a (N_CURVE_XM × N_CURVE_LOGK) grid.
+# eta1_field / etae_field: symbol for the η₁ and η_end fields in the diagnostics NamedTuple.
+function compute_diagnostic_grid(EI_grid, xM_grid, theory_ctx, endpoint_fn,
+                                  eta1_field::Symbol, etae_field::Symbol)
+    nEI = length(EI_grid);  nxM = length(xM_grid)
+    S_mat  = zeros(nxM, nEI);  A_mat  = zeros(nxM, nEI)
+    η1_mat = zeros(nxM, nEI);  ηe_mat = zeros(nxM, nEI)
+    Threads.@threads for j in 1:nEI
+        for i in 1:nxM
+            q = solve_theoretical_modal_response(EI_grid[j], xM_grid[i], theory_ctx)
+            d = endpoint_fn(q, theory_ctx)
+            S_mat[i,j]  = abs(d.S);  A_mat[i,j]  = abs(d.A)
+            η1_mat[i,j] = abs(getfield(d, eta1_field))
+            ηe_mat[i,j] = abs(getfield(d, etae_field))
+        end
+    end
+    return S_mat, A_mat, η1_mat, ηe_mat
+end
+
+# Contour level: matches RATIO_CUTOFF threshold used in find_filtered_minima.
+# f = |S|/(|S|+|A|+ε) ∈ [0,1]; |S|/|A|=RATIO_CUTOFF ↔ f = RATIO_CUTOFF/(1+RATIO_CUTOFF)
+const CONTOUR_LEVEL = RATIO_CUTOFF / (1.0 + RATIO_CUTOFF)
+
+function add_diagnostic_contours!(p, lk_grid, xM_grid, S_mat, A_mat, η1_mat, ηe_mat,
+                                   curve_labels, curve_colors, XLIMS, YLIMS)
+    ε = eps()
+    fS  = @. S_mat  / (S_mat  + A_mat  + ε)
+    fA  = @. A_mat  / (A_mat  + S_mat  + ε)
+    fη1 = @. η1_mat / (η1_mat + ηe_mat + ε)
+    fηe = @. ηe_mat / (ηe_mat + η1_mat + ε)
+    for (g, col) in zip([fS, fA, fη1, fηe], curve_colors)
+        contour!(p, lk_grid, xM_grid, g;
+                 levels   = [CONTOUR_LEVEL],
+                 linecolor = col,
+                 linewidth = 1.5,
+                 colorbar  = false,
+                 label     = false)
+    end
+    # Dummy series for legend (contour! label= is ignored by GR backend)
+    for (lbl, col) in zip(curve_labels, curve_colors)
+        plot!(p, [NaN], [NaN]; color=col, linewidth=1.5, label=lbl)
+    end
+end
+
 function build_LH_plot(artifact, csv_path, output_dir; xlim_min::Float64)
     params = artifact.base_params
     shift  = log10(Float64(params.rho_raft) * Float64(params.L_raft)^4 *
@@ -290,24 +388,12 @@ function build_LH_plot(artifact, csv_path, output_dir; xlim_min::Float64)
     XLIMS = (xlim_min, max_logK_data)
     YLIMS = (0.0, 0.5)
 
-    # 57 evenly-spaced logK values, extended 0.1 units left of xlim_min so resonances
-    # near the left edge are not missed.
+    # Coarse grid (57 pts): resonance detection only.
     scatter_logK = collect(range(xlim_min - 0.1, max_logK_data; length=57))
     EI_scatter   = 10 .^ (scatter_logK .+ shift)
 
-    results = Dict{String, NamedTuple}()
-    for cname in CURVE_NAMES
-        @info "Computing LH roots: $cname"
-        res = get_roots_theoretical_LH(artifact, cname;
-                                        output_dir=output_dir,
-                                        EI_list=EI_scatter)
-        results[cname] = (logK = res.logEI .- shift, xM_norm = res.xM_norm)
-    end
-
-    # Resonance-stripe sync: beam-end is more sensitive to certain resonances that the
-    # LH far-field quantile misses.  Collect beam-detected resonance candidates (index,
-    # q_val), group consecutive scatter-grid indices into runs, keep the minimum-q
-    # index per run, then inject any stripe not already present in the LH results.
+    # Resonance-stripe detection via beam-end quantile (same logic as before,
+    # now just collects logK values for vline! rather than injecting into results).
     beam_sync_ctx   = theoretical_modal_context(params; output_dir=output_dir)
     xM_sync         = collect(range(0.0, 0.49; length=401))
     sync_candidates = Dict{String, Vector{Tuple{Int,Float64}}}("S"=>[], "A"=>[])
@@ -328,7 +414,7 @@ function build_LH_plot(artifact, csv_path, output_dir; xlim_min::Float64)
         cond = is_odd ? "S" : "A"
         push!(sync_candidates[cond], (iei, q_val))
     end
-    res_xM_sync = collect(range(xM_sync[1], xM_sync[end]; length=RESONANCE_N_PTS))
+    resonance_lk_LH = Dict{String, Vector{Float64}}("S"=>[], "A"=>[])
     for cond in ("S", "A")
         cands = sort(sync_candidates[cond]; by = x -> x[1])
         isempty(cands) && continue
@@ -342,15 +428,19 @@ function build_LH_plot(artifact, csv_path, output_dir; xlim_min::Float64)
         end
         for group in groups
             _, best_pos = findmin(x -> x[2], group)
-            best_iei    = group[best_pos][1]
-            logK_val    = scatter_logK[best_iei]
-            already_present = any(abs.(results[cond].logK .- logK_val) .< 0.01)
-            already_present && continue
-            prev = results[cond]
-            results[cond] = (logK    = vcat(prev.logK,    fill(logK_val, RESONANCE_N_PTS)),
-                             xM_norm = vcat(prev.xM_norm, res_xM_sync))
+            push!(resonance_lk_LH[cond], scatter_logK[group[best_pos][1]])
         end
     end
+
+    # Contour grid for theoretical curves.
+    @info "Computing LH diagnostic contour grid ($(N_CURVE_LOGK)×$(N_CURVE_XM))…"
+    ctx_LH      = theoretical_modal_context_LH(params; output_dir=output_dir)
+    curve_logK  = collect(range(xlim_min, max_logK_data; length=N_CURVE_LOGK))
+    curve_xM    = collect(range(YLIMS[1], YLIMS[2]; length=N_CURVE_XM))
+    EI_curve    = 10 .^ (curve_logK .+ shift)
+    S_mat, A_mat, η1_mat, ηe_mat = compute_diagnostic_grid(
+        EI_curve, curve_xM, ctx_LH, theoretical_endpoint_diagnostics_LH,
+        :eta_LH_1, :eta_LH_end)
 
     # Build plot
     okabe_ito    = ["#E69F00", "#56B4E9", "#009E73", "#F0E442",
@@ -389,17 +479,15 @@ function build_LH_plot(artifact, csv_path, output_dir; xlim_min::Float64)
 
     p = heatmap(logEI_axis .- shift, xM_axis, alpha_LH; plt_opts...)
 
-    for (i, cname) in enumerate(CURVE_NAMES)
-        res  = results[cname]
-        mask = (XLIMS[1] .<= res.logK .<= XLIMS[2]) .&
-               (YLIMS[1] .<= res.xM_norm .<= YLIMS[2])
-        isempty(res.logK[mask]) && continue
-        lk_line, xm_line, res_lks = split_xing_resonance(res.logK[mask], res.xM_norm[mask])
-        isempty(lk_line) || plot!(p, lk_line, xm_line;
-              label=CURVE_LABELS[i], color=curve_colors[i], linewidth=1.5, linestyle=:solid)
-        for rlk in res_lks
+    add_diagnostic_contours!(p, curve_logK, curve_xM, S_mat, A_mat, η1_mat, ηe_mat,
+                              CURVE_LABELS, curve_colors, XLIMS, YLIMS)
+
+    # Resonance stripes from beam-end sync
+    for (ci, cname) in enumerate(("S", "A"))
+        col = curve_colors[ci]
+        for rlk in resonance_lk_LH[cname]
             (XLIMS[1] <= rlk <= XLIMS[2]) || continue
-            vline!(p, [rlk]; color=curve_colors[i], linewidth=1.5, linestyle=:solid, label=false)
+            vline!(p, [rlk]; color=col, linewidth=1.5, linestyle=:solid, label=false)
         end
     end
 
@@ -545,27 +633,20 @@ function build_beam_end_plot(artifact, csv_path, output_dir; xlim_min::Float64)
     XLIMS = (xlim_min, max_logK_data)
     YLIMS = (0.0, 0.5)
 
-    # 57 evenly-spaced logK values across the full visible range — extend 0.1 units
-    # left of xlim_min so resonances sitting just inside the left edge are not missed.
+    # Coarse grid (57 pts): resonance detection only.
     scatter_logK = collect(range(xlim_min - 0.1, max_logK_data; length=57))
     EI_scatter   = 10 .^ (scatter_logK .+ shift)
 
     theory_ctx = theoretical_modal_context(params; output_dir=output_dir)
 
-    results       = Dict{String, NamedTuple}()
-    resonance_logK = Dict{String, Vector{Float64}}()
+    resonance_logK = Dict{String, Vector{Float64}}(cname => Float64[] for cname in CURVE_NAMES)
     for cname in CURVE_NAMES
-        @info "Computing beam-end roots: $cname"
-        res = get_roots_theoretical_beam(EI_scatter, cname, theory_ctx)
-        results[cname]        = (logK = res.logEI .- shift, xM_norm = res.xM_norm)
-        resonance_logK[cname] = res.resonance_logEI .- shift
+        @info "Computing beam-end resonance detection: $cname"
+        res_coarse = get_roots_theoretical_beam(EI_scatter, cname, theory_ctx)
+        resonance_logK[cname] = res_coarse.resonance_logEI .- shift
     end
 
-    # CSV-based resonance seeding: for uncoupled (d=0) only.  Uncoupled resonances
-    # have half-width ~0.025 logK (no radiation damping); the scatter grid can miss
-    # the sharpest ones.  For coupled, the scatter grid already catches all resonances
-    # (wider peaks), so seeding is skipped to avoid borderline stripes inconsistent
-    # with the LH plot.
+    # CSV-based resonance seeding for uncoupled (d=0) only.
     if Float64(theory_ctx.params.d) == 0.0
         firing_logK = Float64[]
         for (j, le) in enumerate(logEI_axis)
@@ -593,15 +674,20 @@ function build_beam_end_plot(artifact, csv_path, output_dir; xlim_min::Float64)
                 resonance_q_csv = is_odd_csv ? 0.20 : 0.10
                 quantile(alpha_col, resonance_q_csv) < RESONANCE_ALPHA_CUTOFF || continue
                 any(abs.(resonance_logK[cond] .- logK_val) .< 0.05) && continue
-                res_xM = collect(range(Float64(xM_axis[1]), Float64(xM_axis[end]); length=RESONANCE_N_PTS))
-                prev = results[cond]
-                results[cond]        = (logK    = vcat(prev.logK,    fill(logK_val, RESONANCE_N_PTS)),
-                                        xM_norm = vcat(prev.xM_norm, res_xM))
                 push!(resonance_logK[cond], logK_val)
                 @info "CSV-seeded resonance stripe: $cond at logK=$(round(logK_val; digits=3))"
             end
         end
     end
+
+    # Contour grid for theoretical curves.
+    @info "Computing beam-end diagnostic contour grid ($(N_CURVE_LOGK)×$(N_CURVE_XM))…"
+    curve_logK = collect(range(xlim_min, max_logK_data; length=N_CURVE_LOGK))
+    curve_xM   = collect(range(YLIMS[1], YLIMS[2]; length=N_CURVE_XM))
+    EI_curve   = 10 .^ (curve_logK .+ shift)
+    S_mat, A_mat, η1_mat, ηe_mat = compute_diagnostic_grid(
+        EI_curve, curve_xM, theory_ctx, theoretical_endpoint_diagnostics_beam,
+        :eta_beam_1, :eta_beam_end)
 
     okabe_ito    = ["#E69F00", "#56B4E9", "#009E73", "#F0E442",
                     "#0072B2", "#D55E00", "#CC79A7", "#000000"]
@@ -639,17 +725,14 @@ function build_beam_end_plot(artifact, csv_path, output_dir; xlim_min::Float64)
 
     p = heatmap(logEI_axis .- shift, xM_axis, alpha_beam; plt_opts...)
 
-    for (i, cname) in enumerate(CURVE_NAMES)
-        res  = results[cname]
-        mask = (XLIMS[1] .<= res.logK .<= XLIMS[2]) .&
-               (YLIMS[1] .<= res.xM_norm .<= YLIMS[2])
-        isempty(res.logK[mask]) && continue
-        lk_line, xm_line, res_lks = split_xing_resonance(res.logK[mask], res.xM_norm[mask])
-        isempty(lk_line) || plot!(p, lk_line, xm_line;
-              label=BEAM_CURVE_LABELS[i], color=curve_colors[i], linewidth=1.5, linestyle=:solid)
-        for rlk in res_lks
+    add_diagnostic_contours!(p, curve_logK, curve_xM, S_mat, A_mat, η1_mat, ηe_mat,
+                              BEAM_CURVE_LABELS, curve_colors, XLIMS, YLIMS)
+
+    for (ci, cname) in enumerate(CURVE_NAMES[1:2])  # S and A only have resonance stripes
+        col = curve_colors[ci]
+        for rlk in resonance_logK[cname]
             (XLIMS[1] <= rlk <= XLIMS[2]) || continue
-            vline!(p, [rlk]; color=curve_colors[i], linewidth=1.5, linestyle=:solid, label=false)
+            vline!(p, [rlk]; color=col, linewidth=1.5, linestyle=:solid, label=false)
         end
     end
 
