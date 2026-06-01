@@ -168,39 +168,57 @@ function save_cache(sw1, sw2, sw3, sp, F_T_star, sp_re)
 end
 
 function load_or_compute(bp)
-    if isfile(CACHE_PATH)
-        println("Loading cache from $CACHE_PATH …")
-        d   = JLD2.load(CACHE_PATH)
-        sw1 = (; x = d["xM_x"],  thrust = d["xM_T"],  Sxx = d["xM_Sxx"])
-        sw2 = (; x = d["kap_x"], thrust = d["kap_T"], Sxx = d["kap_Sxx"])
-        sw3 = (; x = d["re_x"],  thrust = d["re_T"],  Sxx = d["re_Sxx"])
-        sp  = (; xM_norm = d["sp_xM"], kappa = d["sp_kap"], Re = d["sp_Re"],
-                thrust = d["sp_T"], Sxx = d["sp_Sxx"])
-        F_T_star = if haskey(d, "F_T_star")
-            Float64(d["F_T_star"])
-        else
-            println("Cache is missing F_T^*; computing rigid-inviscid reference …")
-            compute_F_T_star(bp)
-        end
-        sp_re = if haskey(d, "sp_re_T")
-            (; sp.Re, thrust = Float64(d["sp_re_T"]), Sxx = Float64(d["sp_re_Sxx"]))
-        else
-            println("Cache is missing viscous surferbot point; computing …")
-            surferbot_point(bp; nu = NU_WATER)
-        end
-        save_cache(sw1, sw2, sw3, sp, F_T_star, sp_re)
-        return sw1, sw2, sw3, sp, F_T_star, sp_re
+    d = isfile(CACHE_PATH) ? (println("Loading cache from $CACHE_PATH …"); JLD2.load(CACHE_PATH)) : Dict{String,Any}()
+    changed = false
+
+    if all(k -> haskey(d, k), ["xM_x", "xM_T", "xM_Sxx"])
+        sw1 = (; x = d["xM_x"], thrust = d["xM_T"], Sxx = d["xM_Sxx"])
+    else
+        sw1 = run_sweep_xM(bp); GC.gc(); changed = true
+        d["xM_x"] = sw1.x; d["xM_T"] = sw1.thrust; d["xM_Sxx"] = sw1.Sxx
     end
 
-    sw1 = run_sweep_xM(bp);     GC.gc()
-    sw2 = run_sweep_kappa(bp);  GC.gc()
-    sw3 = run_sweep_Re(bp);     GC.gc()
-    sp       = surferbot_point(bp; nu = 0.0)
-    sp_re    = surferbot_point(bp; nu = NU_WATER)
-    F_T_star = compute_F_T_star(bp)
+    if all(k -> haskey(d, k), ["kap_x", "kap_T", "kap_Sxx"])
+        sw2 = (; x = d["kap_x"], thrust = d["kap_T"], Sxx = d["kap_Sxx"])
+    else
+        sw2 = run_sweep_kappa(bp); GC.gc(); changed = true
+        d["kap_x"] = sw2.x; d["kap_T"] = sw2.thrust; d["kap_Sxx"] = sw2.Sxx
+    end
 
-    save_cache(sw1, sw2, sw3, sp, F_T_star, sp_re)
-    println("Saved cache → $CACHE_PATH")
+    if all(k -> haskey(d, k), ["re_x", "re_T", "re_Sxx"])
+        sw3 = (; x = d["re_x"], thrust = d["re_T"], Sxx = d["re_Sxx"])
+    else
+        sw3 = run_sweep_Re(bp); GC.gc(); changed = true
+        d["re_x"] = sw3.x; d["re_T"] = sw3.thrust; d["re_Sxx"] = sw3.Sxx
+    end
+
+    if all(k -> haskey(d, k), ["sp_xM", "sp_kap", "sp_Re", "sp_T", "sp_Sxx"])
+        sp = (; xM_norm = d["sp_xM"], kappa = d["sp_kap"], Re = d["sp_Re"],
+               thrust = d["sp_T"], Sxx = d["sp_Sxx"])
+    else
+        sp = surferbot_point(bp; nu = 0.0); changed = true
+        d["sp_xM"] = sp.xM_norm; d["sp_kap"] = sp.kappa; d["sp_Re"] = sp.Re
+        d["sp_T"]  = sp.thrust;  d["sp_Sxx"] = sp.Sxx
+    end
+
+    if haskey(d, "F_T_star")
+        F_T_star = Float64(d["F_T_star"])
+    else
+        F_T_star = compute_F_T_star(bp); changed = true
+        d["F_T_star"] = F_T_star
+    end
+
+    if haskey(d, "sp_re_T")
+        sp_re = (; sp.Re, thrust = Float64(d["sp_re_T"]), Sxx = Float64(d["sp_re_Sxx"]))
+    else
+        sp_re = surferbot_point(bp; nu = NU_WATER); changed = true
+        d["sp_re_T"] = sp_re.thrust; d["sp_re_Sxx"] = sp_re.Sxx
+    end
+
+    if changed
+        save_cache(sw1, sw2, sw3, sp, F_T_star, sp_re)
+        println("Cache updated → $CACHE_PATH")
+    end
     return sw1, sw2, sw3, sp, F_T_star, sp_re
 end
 
