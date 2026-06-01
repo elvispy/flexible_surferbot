@@ -13,7 +13,7 @@ Scale:  F_T^* is cached from the inviscid rigid Surferbot reference case
         (ν = 0, EI = Inf; all other parameters at the Surferbot point).
 
 Usage:
-  julia --project=. scripts/plot_thrust_sweeps.jl
+  julia --project=. --threads auto scripts/plot_thrust_sweeps.jl
 """
 
 using Surferbot
@@ -21,7 +21,9 @@ using JLD2
 using Plots
 using LaTeXStrings
 using Printf
+using Base.Threads: @threads, ReentrantLock
 
+const PRINT_LOCK = ReentrantLock()
 const CACHE_PATH = joinpath(@__DIR__, "..", "output", "jld2", "thrust_sweeps.jld2")
 const FIG_DIR    = joinpath(@__DIR__, "..", "output", "figures")
 const N_SWEEP    = 50
@@ -61,9 +63,12 @@ function run_sweep_xM(bp)
     T   = Vector{Float64}(undef, N_SWEEP)
     Sxx = Vector{Float64}(undef, N_SWEEP)
     println("Sweep 1/3: motor position ($N_SWEEP points) …")
-    for (i, xM_norm) in enumerate(xs)
+    @threads for i in 1:N_SWEEP
+        xM_norm = xs[i]
         T[i], Sxx[i] = solve_one((motor_position = xM_norm * L, nu = 0.0, EI = Inf), bp)
-        @printf "  [%2d/%d]  xM/L=%.3f   T/d=%+.3e   Sxx=%+.3e\n" i N_SWEEP xM_norm T[i] Sxx[i]
+        lock(PRINT_LOCK) do
+            @printf "  [%2d/%d]  xM/L=%.3f   T/d=%+.3e   Sxx=%+.3e\n" i N_SWEEP xM_norm T[i] Sxx[i]
+        end
     end
     return (; x = xs, thrust = T, Sxx)
 end
@@ -80,10 +85,13 @@ function run_sweep_kappa(bp)
     T   = Vector{Float64}(undef, N_SWEEP)
     Sxx = Vector{Float64}(undef, N_SWEEP)
     println("Sweep 2/3: stiffness κ ($N_SWEEP points) …")
-    for (i, lk) in enumerate(log10_kappa)
+    @threads for i in 1:N_SWEEP
+        lk   = log10_kappa[i]
         EI_i = 10.0^lk * EI_scale
         T[i], Sxx[i] = solve_one((EI = EI_i, motor_position = xM, nu = 0.0), bp)
-        @printf "  [%2d/%d]  log10(κ)=%.2f   T/d=%+.3e   Sxx=%+.3e\n" i N_SWEEP lk T[i] Sxx[i]
+        lock(PRINT_LOCK) do
+            @printf "  [%2d/%d]  log10(κ)=%.2f   T/d=%+.3e   Sxx=%+.3e\n" i N_SWEEP lk T[i] Sxx[i]
+        end
     end
     return (; x = kappa_vals, thrust = T, Sxx)
 end
@@ -100,10 +108,12 @@ function run_sweep_Re(bp)
     T   = Vector{Float64}(undef, N_SWEEP)
     Sxx = Vector{Float64}(undef, N_SWEEP)
     println("Sweep 3/3: Reynolds ($N_SWEEP points) …")
-    for (i, lnu) in enumerate(log10_nu)
-        nu_i = 10.0^lnu
+    @threads for i in 1:N_SWEEP
+        nu_i = 10.0^log10_nu[i]
         T[i], Sxx[i] = solve_one((EI = Inf, motor_position = xM, nu = nu_i), bp)
-        @printf "  [%2d/%d]  Re=%.2e   T/d=%+.3e   Sxx=%+.3e\n" i N_SWEEP Re_vals[i] T[i] Sxx[i]
+        lock(PRINT_LOCK) do
+            @printf "  [%2d/%d]  Re=%.2e   T/d=%+.3e   Sxx=%+.3e\n" i N_SWEEP Re_vals[i] T[i] Sxx[i]
+        end
     end
     return (; x = Re_vals, thrust = T, Sxx)
 end
