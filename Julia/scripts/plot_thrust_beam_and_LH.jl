@@ -180,7 +180,7 @@ end
 
 function render_panel(log10_kappa, xM_axis, delta_grid, fig_title, out_base, bp, shift;
                       mode=:signed_log,
-                      snapshot_logK=Float64[], snapshot_xM=0.0, snapshot_labels=String[],
+                      snapshot_logK=Float64[], snapshot_xMs=Float64[], snapshot_labels=String[],
                       modal_logK=Float64[])
     max_logK = maximum(log10_kappa)
     XLIMS    = (-4.0, max_logK)
@@ -264,9 +264,9 @@ function render_panel(log10_kappa, xM_axis, delta_grid, fig_title, out_base, bp,
     end
 
 
-    snap_markers = [:circle, :rect, :utriangle]
-    for (i, (lk, lab)) in enumerate(zip(snapshot_logK, snapshot_labels))
-        scatter!(p, [lk], [snapshot_xM];
+    snap_markers = [:circle, :rect, :utriangle, :diamond, :dtriangle]
+    for (i, (lk, xm, lab)) in enumerate(zip(snapshot_logK, snapshot_xMs, snapshot_labels))
+        scatter!(p, [lk], [xm];
                  marker=snap_markers[i], markersize=9, color=GOLD,
                  markerstrokecolor=:black, markerstrokewidth=1, label=lab)
     end
@@ -320,18 +320,21 @@ function main()
     render_panel(log10_kappa, grids.xM, grids.beam_grid,
         LaTeXString("Coupled, \$\\Lambda=$Lambda_val\$ — beam \$\\Delta|\\eta|^2/L^2\$"),
         joinpath(fig_dir, "plot_thrust_beam_coupled"), bp, shift; mode=:signed_log,
-        modal_logK)
+        modal_logK, snapshot_logK=Float64[], snapshot_xMs=Float64[], snapshot_labels=String[])
 
     # LH — cube-root transform with real-unit colorbar ticks
-    lh_title = LaTeXString("Coupled, \$\\Lambda=$Lambda_val\$ — LH \$\\Delta|\\eta|^2/L^2\$")
-    snap_kappas = [1.82e-3, 5.43e-3, 1.94e-2]
+    lh_title  = LaTeXString("Coupled, \$\\Lambda=$Lambda_val\$ — LH \$\\Delta|\\eta|^2/L^2\$")
+    xM_sb     = abs(Float64(bp.motor_position)) / Float64(bp.L_raft)
+    # Five operating points matching the kappa_snapshot_5panel figure:
+    #   (a)-(b)-(e)  surferbot xM; (c) α≈0 at κ=5.43e-3; (d) |α|≈1 at κ=5.43e-3
+    snap_kappas = [1.82e-3, 5.43e-3, 5.43e-3, 5.43e-3, 1.94e-2]
     snap_logK   = log10.(snap_kappas)
-    snap_xM     = abs(Float64(bp.motor_position)) / Float64(bp.L_raft)
-    snap_labels = ["Fig 5 (a)", "Fig 5 (b)", "Fig 5 (c)"]
+    snap_xMs    = [xM_sb,  xM_sb,  0.183,  0.272,  xM_sb]
+    snap_labels = ["Fig 5 (a)", "Fig 5 (b)", "Fig 5 (c)", "Fig 5 (d)", "Fig 5 (e)"]
     println("Rendering LH cbrt...")
     render_panel(log10_kappa, grids.xM, domain_grid_norm, lh_title,
         joinpath(fig_dir, "plot_thrust_LH_coupled_cbrt"), bp, shift; mode=:cbrt,
-        snapshot_logK=snap_logK, snapshot_xM=snap_xM, snapshot_labels=snap_labels,
+        snapshot_logK=snap_logK, snapshot_xMs=snap_xMs, snapshot_labels=snap_labels,
         modal_logK)
 end
 

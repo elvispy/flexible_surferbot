@@ -558,17 +558,17 @@ function build_LH_plot(artifact, csv_path, output_dir; xlim_min::Float64)
             label      = CURVE_LABELS[i],
             color      = curve_colors[i],
             linestyle  = curve_styles[i],
-            linewidth  = 2.0)
+            linewidth  = 4.0)
         for rlk in res_lks
             (XLIMS[1] <= rlk <= XLIMS[2]) || continue
             # Resonance stripes: same color, thinner, slightly transparent
-            vline!(p, [rlk]; color=curve_colors[i], linewidth=2.0, label=false)
+            vline!(p, [rlk]; color=curve_colors[i], linewidth=4.0, label=false)
         end
     end
 
     xM_surferbot = abs(Float64(params.motor_position)) / Float64(params.L_raft)
     hline!(p, [xM_surferbot];
-           color     = RGB(0.95, 0.75, 0.05), linewidth = 2.0,
+           color     = RGB(0.95, 0.75, 0.05), linewidth = 4.0,
            linestyle = :dash, label = "Surferbot")
 
     return p
@@ -871,16 +871,16 @@ function build_beam_end_plot(artifact, csv_path, output_dir; xlim_min::Float64)
             label      = BEAM_CURVE_LABELS[i],
             color      = curve_colors[i],
             linestyle  = curve_styles[i],
-            linewidth  = 2.0)
+            linewidth  = 4.0)
         for rlk in res_lks
             (XLIMS[1] <= rlk <= XLIMS[2]) || continue
-            vline!(p, [rlk]; color=curve_colors[i], linewidth=2.0, label=false)
+            vline!(p, [rlk]; color=curve_colors[i], linewidth=4.0, label=false)
         end
     end
 
     xM_surferbot = abs(Float64(theory_ctx.params.motor_position)) / Float64(theory_ctx.params.L_raft)
     hline!(p, [xM_surferbot];
-           color     = RGB(0.95, 0.75, 0.05), linewidth = 2.0,
+           color     = RGB(0.95, 0.75, 0.05), linewidth = 4.0,
            linestyle = :dash, label = "Surferbot")
 
     return p
