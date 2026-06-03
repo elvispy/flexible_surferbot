@@ -134,7 +134,7 @@ function make_figure(result, modal, kappa_val, fig_dir; xM_norm=nothing)
 
     fig = plot(p1, p2;
         layout = grid(1, 2, widths = [0.65, 0.35]),
-        size   = (1152, 380),
+        size   = (1267, 342),
         dpi    = 220,
     )
 
