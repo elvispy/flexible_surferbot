@@ -258,10 +258,6 @@ function render_panel(log10_kappa, xM_axis, delta_grid, fig_title, out_base, bp,
     lk_star, xm_star = operating_point(bp, shift)
 
     hline!(p, [xm_star]; color=GOLD, linewidth=2.0, linestyle=:dash, label="Surferbot")
-    for lk in modal_logK
-        vline!(p, [lk]; color=:grey, linewidth=1.0, linestyle=:dash,
-               label=L"\log_{10}\kappa = %$(lk)")
-    end
 
 
     snap_markers = [:circle, :rect, :utriangle, :diamond, :dtriangle]
