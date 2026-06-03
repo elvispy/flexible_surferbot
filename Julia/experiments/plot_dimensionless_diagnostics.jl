@@ -185,6 +185,8 @@ const NUM_MODES = 6
 # one — not merely a shallow dip. This suppresses spurious detections in regions
 # where |S| and |A| are both large and the minimum is not physically meaningful.
 const RATIO_CUTOFF = 0.5
+const TERM_MIN_XM  = 0.35
+const TERM_TOL     = 0.08
 
 # Run one fluid solve (any EI suffices; Ψ is EI-independent) to obtain the
 # orthonormal mode matrix Ψ on the raft grid.  Phi (= W) is returned for
@@ -278,6 +280,16 @@ function roots_for_condition(condition_name, xgrid, absS, absA, abs_eta_1, abs_e
         return find_filtered_minima(xgrid, abs_eta_end, ratio; ratio_cutoff=RATIO_CUTOFF)
     end
     return Float64[]
+end
+
+function _cond_val_ratio(cname, i, absS, absA, abs_eta_1, abs_eta_end)
+    val = cname == "S"     ? absS[i] :
+          cname == "A"     ? absA[i] :
+          cname == "eta_1" ? abs_eta_1[i] : abs_eta_end[i]
+    den = cname == "S"     ? max(absA[i], eps()) :
+          cname == "A"     ? max(absS[i], eps()) :
+          (abs_eta_1[i] + abs_eta_end[i] + eps())
+    return val, val / den
 end
 
 # Load (or compute and cache) the radiation impedance Z_psi and all fixed modal
@@ -385,11 +397,13 @@ function get_roots_theoretical(artifact, condition_name; output_dir::AbstractStr
     params = artifact.base_params
     EI_list = collect(Float64.(artifact.parameter_axes.EI))
     logEI_axis = log10.(EI_list)
-    xM_grid = collect(range(0.0, 0.49, length=401))
+    xM_grid = collect(range(0.0, 0.5; length=401))
     theory_ctx = theoretical_modal_context(params; output_dir=output_dir)
 
-    pts_logEI = Float64[]
-    pts_xM = Float64[]
+    pts_logEI     = Float64[]
+    pts_xM        = Float64[]
+    prev_hi_roots = Float64[]
+    n             = length(xM_grid)
 
     for (iei, EI) in enumerate(EI_list)
         absS = Float64[]; absA = Float64[]
@@ -406,6 +420,23 @@ function get_roots_theoretical(artifact, condition_name; output_dir::AbstractStr
 
         roots = roots_for_condition(condition_name, xM_grid,
                                     absS, absA, abs_eta_1, abs_eta_end)
+
+        if !isempty(prev_hi_roots)
+            val_n, ratio_n = _cond_val_ratio(condition_name, n,
+                                             absS, absA, abs_eta_1, abs_eta_end)
+            val_n1, _      = _cond_val_ratio(condition_name, n - 1,
+                                             absS, absA, abs_eta_1, abs_eta_end)
+            if val_n <= val_n1 && ratio_n < RATIO_CUTOFF
+                for pxM in prev_hi_roots
+                    if !any(r -> abs(r - pxM) < TERM_TOL, roots)
+                        push!(pts_logEI, logEI_axis[iei])
+                        push!(pts_xM, 0.5)
+                        break
+                    end
+                end
+            end
+        end
+        prev_hi_roots = filter(r -> r > TERM_MIN_XM, roots)
 
         for r in roots
             push!(pts_logEI, logEI_axis[iei])

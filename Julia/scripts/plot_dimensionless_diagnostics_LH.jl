@@ -34,8 +34,14 @@ using Surferbot, JLD2, Plots, LaTeXStrings, Printf, LinearAlgebra, CSV, DataFram
 include(joinpath(@__DIR__, "..", "experiments", "prescribed_wn_diagonal_impedance.jl"))
 const ModalPressureMap = Main.PrescribedWnDiagonalImpedance
 
-const NUM_MODES   = 8
+const NUM_MODES    = 8
 const RATIO_CUTOFF = 0.5
+
+# Branch-terminus detection: when a tracked high-xM root disappears between
+# consecutive EI steps and the function is still decreasing at xM=0.5, we add
+# one terminal scatter point at xM=0.5 for that EI.
+const TERM_MIN_XM = 0.35   # only track roots above this xM as upward branches
+const TERM_TOL    = 0.08   # max xM gap to consider a root "continued"
 
 const RESONANCE_ALPHA_CUTOFF  = 0.04  # 10th-percentile of |α_LH| across xM < this → resonance column
 const RESONANCE_N_PTS         = 20   # number of evenly-spaced xM points to emit per resonance column
@@ -135,20 +141,11 @@ function coerce_flexible_params(params)
     return Surferbot.FlexibleParams(; pairs...)
 end
 
-function find_filtered_minima(xgrid, values, ratio; ratio_cutoff::Float64,
-                               check_boundary::Bool=false)
+function find_filtered_minima(xgrid, values, ratio; ratio_cutoff::Float64)
     roots = Float64[]
     for i in 2:(length(xgrid) - 1)
         if values[i] <= values[i-1] && values[i] <= values[i+1] && ratio[i] < ratio_cutoff
             push!(roots, Float64(xgrid[i]))
-        end
-    end
-    # Boundary check (only for eta conditions, not S/A which are trivially small
-    # near xM=0.5 due to motor antisymmetric placement).
-    if check_boundary
-        n = length(xgrid)
-        if values[n] <= values[n-1] && ratio[n] < ratio_cutoff
-            push!(roots, Float64(xgrid[n]))
         end
     end
     return roots
@@ -163,12 +160,23 @@ function roots_for_condition(condition_name, xgrid, absS, absA, abs_eta_1, abs_e
         return find_filtered_minima(xgrid, absA, ratio; ratio_cutoff=RATIO_CUTOFF)
     elseif condition_name == "eta_1"
         denom = abs_eta_1 .+ abs_eta_end .+ eps()
-        return find_filtered_minima(xgrid, abs_eta_1, abs_eta_1 ./ denom; ratio_cutoff=RATIO_CUTOFF, check_boundary=true)
+        return find_filtered_minima(xgrid, abs_eta_1, abs_eta_1 ./ denom; ratio_cutoff=RATIO_CUTOFF)
     elseif condition_name == "eta_end"
         denom = abs_eta_1 .+ abs_eta_end .+ eps()
-        return find_filtered_minima(xgrid, abs_eta_end, abs_eta_end ./ denom; ratio_cutoff=RATIO_CUTOFF, check_boundary=true)
+        return find_filtered_minima(xgrid, abs_eta_end, abs_eta_end ./ denom; ratio_cutoff=RATIO_CUTOFF)
     end
     return Float64[]
+end
+
+# Return the condition-specific value and ratio at grid index i.
+function _cond_val_ratio(cname, i, absS, absA, abs_eta_1, abs_eta_end)
+    val = cname == "S"     ? absS[i] :
+          cname == "A"     ? absA[i] :
+          cname == "eta_1" ? abs_eta_1[i] : abs_eta_end[i]
+    den = cname == "S"     ? max(absA[i], eps()) :
+          cname == "A"     ? max(absS[i], eps()) :
+          (abs_eta_1[i] + abs_eta_end[i] + eps())
+    return val, val / den
 end
 
 # ─── Modal context (beam-end version kept for comparison / backwards compat) ──
@@ -257,16 +265,33 @@ end
 # ─── Root extraction (LH version) ────────────────────────────────────────────
 
 function get_roots_theoretical_LH(artifact, condition_name; output_dir::AbstractString,
-                                   EI_list::Union{Nothing,AbstractVector{Float64}}=nothing)
-    params     = artifact.base_params
-    EI_list    = EI_list === nothing ? collect(Float64.(artifact.parameter_axes.EI)) : EI_list
+                                   EI_list::Union{Nothing,AbstractVector{Float64}}=nothing,
+                                   n_EI::Int=301)
+    params    = artifact.base_params
+    EI_artifact = collect(Float64.(artifact.parameter_axes.EI))
+    # When an explicit EI_list is provided (e.g. EI_scatter from build_LH_plot),
+    # use it as-is for both root-finding and resonance — the scatter x-axis is
+    # calibrated to it.  When none is given, densify the artifact EI grid so branch
+    # termini are resolved, but keep the artifact grid for resonance detection.
+    if EI_list !== nothing
+        EI_coarse = collect(EI_list)   # resonance uses the same grid as root-finding
+    else
+        EI_coarse = EI_artifact        # resonance: original sparse sweep grid
+        EI_list   = 10 .^ collect(range(log10(EI_artifact[1]),
+                                        log10(EI_artifact[end]); length=n_EI))
+    end
     logEI_axis = log10.(EI_list)
-    xM_grid    = collect(range(0.0, 0.499; length=601))
+    xM_grid    = collect(range(0.0, 0.5; length=601))
     theory_ctx = theoretical_modal_context_LH(params; output_dir=output_dir)
 
-    pts_logEI = Float64[]
-    pts_xM    = Float64[]
+    pts_logEI      = Float64[]
+    pts_xM         = Float64[]
+    prev_hi_roots  = Float64[]
+    prev_hi_lEI    = NaN
+    term_intervals = Tuple{Float64,Float64}[]   # (lEI_last_root, lEI_first_miss)
+    n              = length(xM_grid)
 
+    # ── Fine-grid pass: zero-crossing root finding only (no resonance) ───────────
     for (iei, EI) in enumerate(EI_list)
         absS = Float64[]; absA = Float64[]
         abs_eta_1 = Float64[]; abs_eta_end = Float64[]
@@ -282,30 +307,88 @@ function get_roots_theoretical_LH(artifact, condition_name; output_dir::Abstract
 
         roots = roots_for_condition(condition_name, xM_grid,
                                     absS, absA, abs_eta_1, abs_eta_end)
+
+        # Record terminus interval (no synthetic point — just note the logEI gap).
+        if !isempty(prev_hi_roots)
+            for pxM in prev_hi_roots
+                if !any(r -> abs(r - pxM) < TERM_TOL, roots)
+                    push!(term_intervals, (prev_hi_lEI, logEI_axis[iei]))
+                    break
+                end
+            end
+        end
+
+        curr_hi = filter(r -> r > TERM_MIN_XM, roots)
+        if !isempty(curr_hi)
+            prev_hi_roots = curr_hi
+            prev_hi_lEI   = logEI_axis[iei]
+        else
+            prev_hi_roots = Float64[]
+        end
+
         for r in roots
             push!(pts_logEI, logEI_axis[iei])
             push!(pts_xM,    r)
         end
+    end
 
-        # Resonance pass: α_LH ≈ 0 for ALL xM → whole column is a resonance.
-        # Check directly via the domain-end amplitudes (already computed above).
-        # At a resonance, only even OR odd modes are driven, so S ≈ 0 (odd resonance)
-        # or A ≈ 0 (even resonance). Emit the full vertical stripe on the correct series.
-        if condition_name in ("S", "A")
+    # ── Targeted terminus refinement: dense re-scan of each branch-exit interval ─
+    # Evaluates N_TERM_FINE additional κ steps inside the narrow logEI gap where a
+    # high-xM branch disappeared, finding real roots that get closer to xM = 0.5.
+    # Purely theoretical: same root-finder, no synthetic points.
+    N_TERM_FINE = 30
+    for (lEI_lo, lEI_hi) in unique(term_intervals)
+        fine = collect(range(lEI_lo, lEI_hi; length = N_TERM_FINE + 2))[2:end-1]
+        for lEI in fine
+            EI = 10^lEI
+            absS = Float64[]; absA = Float64[]
+            abs_eta_1 = Float64[]; abs_eta_end = Float64[]
+            for xM_norm in xM_grid
+                q    = solve_theoretical_modal_response(EI, xM_norm, theory_ctx)
+                diag = theoretical_endpoint_diagnostics_LH(q, theory_ctx)
+                push!(absS,      abs(diag.S))
+                push!(absA,      abs(diag.A))
+                push!(abs_eta_1, abs(diag.eta_LH_1))
+                push!(abs_eta_end, abs(diag.eta_LH_end))
+            end
+            for r in roots_for_condition(condition_name, xM_grid,
+                                         absS, absA, abs_eta_1, abs_eta_end)
+                push!(pts_logEI, lEI)
+                push!(pts_xM,    r)
+            end
+        end
+    end
+
+    # ── Coarse-grid pass: resonance detection only (uses original EI spacing) ───
+    # Resonance thresholds were calibrated on the coarse grid; re-running on the
+    # fine grid introduces spurious stripes at new κ values near true resonances.
+    if condition_name in ("S", "A")
+        logEI_coarse = log10.(EI_coarse)
+        for (iei, EI) in enumerate(EI_coarse)
+            absS = Float64[]; absA = Float64[]
+            abs_eta_1 = Float64[]; abs_eta_end = Float64[]
+            for xM_norm in xM_grid
+                q    = solve_theoretical_modal_response(EI, xM_norm, theory_ctx)
+                diag = theoretical_endpoint_diagnostics_LH(q, theory_ctx)
+                push!(absS,      abs(diag.S))
+                push!(absA,      abs(diag.A))
+                push!(abs_eta_1, abs(diag.eta_LH_1))
+                push!(abs_eta_end, abs(diag.eta_LH_end))
+            end
             alpha_col = @. -(abs_eta_1^2 - abs_eta_end^2) /
                             (abs_eta_1^2 + abs_eta_end^2 + eps())
             if quantile(abs.(alpha_col), 0.15) < RESONANCE_ALPHA_CUTOFF
-                # Determine parity: odd resonance → S ≈ 0; even resonance → A ≈ 0
                 is_odd_resonance = mean(absS) < mean(absA)
                 if (condition_name == "S" && is_odd_resonance) ||
                    (condition_name == "A" && !is_odd_resonance)
-                    res_xM = collect(range(xM_grid[1], xM_grid[end]; length=RESONANCE_N_PTS))
-                    append!(pts_logEI, fill(logEI_axis[iei], RESONANCE_N_PTS))
+                    res_xM = collect(range(0.0, 0.5; length=RESONANCE_N_PTS))
+                    append!(pts_logEI, fill(logEI_coarse[iei], RESONANCE_N_PTS))
                     append!(pts_xM,    res_xM)
                 end
             end
         end
     end
+
     return (; logEI=pts_logEI, xM_norm=pts_xM)
 end
 
@@ -431,7 +514,8 @@ function build_LH_plot(artifact, csv_path, output_dir; xlim_min::Float64)
     okabe_ito    = ["#E69F00", "#56B4E9", "#009E73", "#F0E442",
                     "#0072B2", "#D55E00", "#CC79A7", "#000000"]
     curve_colors = [okabe_ito[8], okabe_ito[1], okabe_ito[3], okabe_ito[7]]
-    markers      = [:circle, :rect, :diamond, :utriangle]
+    # Redundant line-style encoding so curves are distinguishable in greyscale
+    curve_styles = [:solid, :solid, :solid, :solid]
 
     plt_opts = (
         xlabel  = L"\log_{10}\,\kappa",
@@ -448,7 +532,7 @@ function build_LH_plot(artifact, csv_path, output_dir; xlim_min::Float64)
         legend_font_halign = :left,
         size    = (820, 640),
         margin  = 6Plots.mm,
-        dpi     = 220,
+        dpi     = 300,
         titlefontsize     = 14,
         guidefontsize     = 14,
         tickfontsize      = 12,
@@ -471,16 +555,20 @@ function build_LH_plot(artifact, csv_path, output_dir; xlim_min::Float64)
         isempty(res.logK[mask]) && continue
         lk_path, xm_path, res_lks = cluster_branches(res.logK[mask], res.xM_norm[mask])
         isempty(lk_path) || plot!(p, lk_path, xm_path;
-            label=CURVE_LABELS[i], color=curve_colors[i], linewidth=2.5)
+            label      = CURVE_LABELS[i],
+            color      = curve_colors[i],
+            linestyle  = curve_styles[i],
+            linewidth  = 2.0)
         for rlk in res_lks
             (XLIMS[1] <= rlk <= XLIMS[2]) || continue
-            vline!(p, [rlk]; color=curve_colors[i], linewidth=2.5, label=false)
+            # Resonance stripes: same color, thinner, slightly transparent
+            vline!(p, [rlk]; color=curve_colors[i], linewidth=2.0, label=false)
         end
     end
 
     xM_surferbot = abs(Float64(params.motor_position)) / Float64(params.L_raft)
     hline!(p, [xM_surferbot];
-           color     = RGB(0.95, 0.75, 0.05), linewidth = 1.5,
+           color     = RGB(0.95, 0.75, 0.05), linewidth = 2.0,
            linestyle = :dash, label = "Surferbot")
 
     return p
@@ -508,14 +596,22 @@ function theoretical_endpoint_diagnostics_beam(q, theory_ctx)
 end
 
 function get_roots_theoretical_beam(EI_list::AbstractVector{Float64}, condition_name,
-                                     theory_ctx)
-    logEI_axis = log10.(EI_list)
-    xM_grid    = collect(range(0.0, 0.499; length=601))
+                                     theory_ctx; n_EI::Int=301)
+    EI_coarse   = collect(EI_list)  # keep original for resonance detection
+    # Densify the EI grid so branch termini are resolved without post-hoc bisection.
+    logEI_dense = collect(range(log10(EI_coarse[1]), log10(EI_coarse[end]); length=n_EI))
+    EI_list     = 10 .^ logEI_dense
+    logEI_axis  = logEI_dense
+    xM_grid     = collect(range(0.0, 0.5; length=601))
 
     pts_logEI      = Float64[]
     pts_xM         = Float64[]
-    res_logEI      = Float64[]  # resonance stripe logEI values (not zero-crossing pts)
-    res_candidates = Tuple{Int, Float64}[]  # (iei, q_val) for resonance stripe candidates
+    res_logEI      = Float64[]
+    res_candidates = Tuple{Int, Float64}[]
+    prev_hi_roots  = Float64[]
+    prev_hi_lEI    = NaN
+    term_intervals = Tuple{Float64,Float64}[]
+    n              = length(xM_grid)
 
     for (iei, EI) in enumerate(EI_list)
         absS = Float64[]; absA = Float64[]
@@ -532,22 +628,69 @@ function get_roots_theoretical_beam(EI_list::AbstractVector{Float64}, condition_
 
         roots = roots_for_condition(condition_name, xM_grid,
                                     absS, absA, abs_eta_1, abs_eta_end)
+
+        if !isempty(prev_hi_roots)
+            for pxM in prev_hi_roots
+                if !any(r -> abs(r - pxM) < TERM_TOL, roots)
+                    push!(term_intervals, (prev_hi_lEI, logEI_axis[iei]))
+                    break
+                end
+            end
+        end
+        curr_hi = filter(r -> r > TERM_MIN_XM, roots)
+        if !isempty(curr_hi)
+            prev_hi_roots = curr_hi; prev_hi_lEI = logEI_axis[iei]
+        else
+            prev_hi_roots = Float64[]
+        end
+
         for r in roots
             push!(pts_logEI, logEI_axis[iei])
             push!(pts_xM,    r)
         end
+    end
 
-        # Resonance candidate collection (deduplication happens after the loop).
-        # S-type resonances (odd, A-dominates) use q=0.20; A-type use q=0.15 (coupled)
-        # or q=0.10 (uncoupled, where resonances are sharper with no radiation damping).
-        if condition_name in ("S", "A")
+    # ── Targeted terminus refinement ─────────────────────────────────────────────
+    N_TERM_FINE = 30
+    for (lEI_lo, lEI_hi) in unique(term_intervals)
+        fine = collect(range(lEI_lo, lEI_hi; length = N_TERM_FINE + 2))[2:end-1]
+        for lEI in fine
+            EI = 10^lEI
+            absS = Float64[]; absA = Float64[]
+            abs_eta_1 = Float64[]; abs_eta_end = Float64[]
+            for xM_norm in xM_grid
+                q    = solve_theoretical_modal_response(EI, xM_norm, theory_ctx)
+                diag = theoretical_endpoint_diagnostics_beam(q, theory_ctx)
+                push!(absS, abs(diag.S)); push!(absA, abs(diag.A))
+                push!(abs_eta_1, abs(diag.eta_beam_1))
+                push!(abs_eta_end, abs(diag.eta_beam_end))
+            end
+            for r in roots_for_condition(condition_name, xM_grid,
+                                         absS, absA, abs_eta_1, abs_eta_end)
+                push!(pts_logEI, lEI); push!(pts_xM, r)
+            end
+        end
+    end
+
+    # ── Coarse-grid resonance detection (original EI spacing, no spurious hits) ─
+    if condition_name in ("S", "A")
+        logEI_coarse = log10.(EI_coarse)
+        is_coupled   = Float64(theory_ctx.params.d) > 0.0
+        n_res        = searchsortedlast(xM_grid, 0.49)
+        for (iei, EI) in enumerate(EI_coarse)
+            absS = Float64[]; absA = Float64[]
+            abs_eta_1 = Float64[]; abs_eta_end = Float64[]
+            for xM_norm in xM_grid
+                q    = solve_theoretical_modal_response(EI, xM_norm, theory_ctx)
+                diag = theoretical_endpoint_diagnostics_beam(q, theory_ctx)
+                push!(absS, abs(diag.S)); push!(absA, abs(diag.A))
+                push!(abs_eta_1, abs(diag.eta_beam_1))
+                push!(abs_eta_end, abs(diag.eta_beam_end))
+            end
             alpha_col = @. -(abs_eta_1^2 - abs_eta_end^2) /
                             (abs_eta_1^2 + abs_eta_end^2 + eps())
             is_odd_resonance = mean(absS) < mean(absA)
-            is_coupled       = Float64(theory_ctx.params.d) > 0.0
             resonance_q = is_odd_resonance ? 0.20 : (is_coupled ? 0.15 : 0.10)
-            # Resonance detection uses only xM ≤ 0.49 to match original threshold behaviour
-            n_res = searchsortedlast(xM_grid, 0.49)
             q_val = quantile(abs.(alpha_col[1:n_res]), resonance_q)
             if q_val < RESONANCE_ALPHA_CUTOFF
                 if (condition_name == "S" && is_odd_resonance) ||
@@ -572,16 +715,18 @@ function get_roots_theoretical_beam(EI_list::AbstractVector{Float64}, condition_
                 push!(groups[end], cand)
             end
         end
-        res_xM_template = collect(range(xM_grid[1], xM_grid[end]; length=RESONANCE_N_PTS))
+        logEI_coarse    = log10.(EI_coarse)
+        res_xM_template = collect(range(0.0, 0.5; length=RESONANCE_N_PTS))
         for group in groups
             _, best_pos = findmin(x -> x[2], group)
             best_iei = group[best_pos][1]
-            best_le  = logEI_axis[best_iei]
+            best_le  = logEI_coarse[best_iei]
             append!(pts_logEI, fill(best_le, RESONANCE_N_PTS))
             append!(pts_xM,    res_xM_template)
             push!(res_logEI, best_le)
         end
     end
+
 
     return (; logEI=pts_logEI, xM_norm=pts_xM, resonance_logEI=res_logEI)
 end
@@ -683,7 +828,7 @@ function build_beam_end_plot(artifact, csv_path, output_dir; xlim_min::Float64)
     okabe_ito    = ["#E69F00", "#56B4E9", "#009E73", "#F0E442",
                     "#0072B2", "#D55E00", "#CC79A7", "#000000"]
     curve_colors = [okabe_ito[8], okabe_ito[1], okabe_ito[3], okabe_ito[7]]
-    markers      = [:circle, :rect, :diamond, :utriangle]
+    curve_styles = [:solid, :solid, :solid, :solid]
 
     plt_opts = (
         xlabel  = L"\log_{10}\,\kappa",
@@ -700,7 +845,7 @@ function build_beam_end_plot(artifact, csv_path, output_dir; xlim_min::Float64)
         legend_font_halign = :left,
         size    = (820, 640),
         margin  = 6Plots.mm,
-        dpi     = 220,
+        dpi     = 300,
         titlefontsize     = 14,
         guidefontsize     = 14,
         tickfontsize      = 12,
@@ -723,16 +868,19 @@ function build_beam_end_plot(artifact, csv_path, output_dir; xlim_min::Float64)
         isempty(res.logK[mask]) && continue
         lk_path, xm_path, res_lks = cluster_branches(res.logK[mask], res.xM_norm[mask])
         isempty(lk_path) || plot!(p, lk_path, xm_path;
-            label=BEAM_CURVE_LABELS[i], color=curve_colors[i], linewidth=2.5)
+            label      = BEAM_CURVE_LABELS[i],
+            color      = curve_colors[i],
+            linestyle  = curve_styles[i],
+            linewidth  = 2.0)
         for rlk in res_lks
             (XLIMS[1] <= rlk <= XLIMS[2]) || continue
-            vline!(p, [rlk]; color=curve_colors[i], linewidth=2.5, label=false)
+            vline!(p, [rlk]; color=curve_colors[i], linewidth=2.0, label=false)
         end
     end
 
     xM_surferbot = abs(Float64(theory_ctx.params.motor_position)) / Float64(theory_ctx.params.L_raft)
     hline!(p, [xM_surferbot];
-           color     = RGB(0.95, 0.75, 0.05), linewidth = 1.5,
+           color     = RGB(0.95, 0.75, 0.05), linewidth = 2.0,
            linestyle = :dash, label = "Surferbot")
 
     return p

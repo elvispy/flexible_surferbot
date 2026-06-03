@@ -2,13 +2,14 @@
 """
 plot_thrust_sweeps.jl
 
-Three separate figures, each with two curves (Numerics, Longuet-Higgins) and
-a star marking the surferbot operating point:
-  1. Motor-position sweep  x = xM/L        (ν = 0)
+Four separate figures, each with two curves (Numerics, Longuet-Higgins) and
+a star marking the surferbot operating point where applicable:
+  1. Motor-position sweep  x = xM/L        (ν = 0, finite EI = κ-fixed)
   2. Stiffness sweep       x = κ  (log)    (ν = 0)
   3. Reynolds sweep        x = Re (log)    (ν swept; y also log)
+  4. Motor-position sweep  x = xM/L        (ν = 0, EI = Inf / rigid limit)
 
-Output: output/figures/thrust_sweep_{xM,kappa,Re}.{pdf,png}
+Output: output/figures/thrust_sweep_{xM,kappa,Re,xM_rigid}.{pdf,png}
 Cache:  output/jld2/thrust_sweeps.jld2
 Scale:  F_T^* is cached from the inviscid rigid Surferbot reference case
         (ν = 0, EI = Inf; all other parameters at the Surferbot point).
@@ -70,7 +71,7 @@ function run_sweep_xM(bp)
     xs = collect(range(0.0, 0.48; length = N_SWEEP))
     T   = Vector{Float64}(undef, N_SWEEP)
     Sxx = Vector{Float64}(undef, N_SWEEP)
-    println("Sweep 1/3: motor position ($N_SWEEP points) …")
+    println("Sweep 1/4: motor position ($N_SWEEP points) …")
     @threads for i in 1:N_SWEEP
         xM_norm = xs[i]
         Base.acquire(SOLVE_SEM)
@@ -97,7 +98,7 @@ function run_sweep_kappa(bp)
     kappa_vals  = 10.0 .^ log10_kappa
     T   = Vector{Float64}(undef, N_SWEEP)
     Sxx = Vector{Float64}(undef, N_SWEEP)
-    println("Sweep 2/3: stiffness κ ($N_SWEEP points) …")
+    println("Sweep 2/4: stiffness κ ($N_SWEEP points) …")
     @threads for i in 1:N_SWEEP
         lk   = log10_kappa[i]
         EI_i = 10.0^lk * EI_scale
@@ -125,7 +126,7 @@ function run_sweep_Re(bp)
 
     T   = Vector{Float64}(undef, N_SWEEP)
     Sxx = Vector{Float64}(undef, N_SWEEP)
-    println("Sweep 3/3: Reynolds ($N_SWEEP points) …")
+    println("Sweep 3/4: Reynolds ($N_SWEEP points) …")
     @threads for i in 1:N_SWEEP
         nu_i = 10.0^log10_nu[i]
         Base.acquire(SOLVE_SEM)
@@ -139,6 +140,27 @@ function run_sweep_Re(bp)
         end
     end
     return (; x = Re_vals, thrust = T, Sxx)
+end
+
+function run_sweep_xM_rigid(bp)
+    L     = Float64(bp.L_raft)
+    xs    = collect(range(0.0, 0.48; length = N_SWEEP))
+    T     = Vector{Float64}(undef, N_SWEEP)
+    Sxx   = Vector{Float64}(undef, N_SWEEP)
+    println("Sweep 4/4: motor position rigid EI=Inf ($N_SWEEP points) …")
+    @threads for i in 1:N_SWEEP
+        xM_norm = xs[i]
+        Base.acquire(SOLVE_SEM)
+        try
+            T[i], Sxx[i] = solve_one((motor_position = xM_norm * L, nu = 0.0, EI = Inf), bp)
+        finally
+            Base.release(SOLVE_SEM)
+        end
+        lock(PRINT_LOCK) do
+            @printf "  [%2d/%d]  xM/L=%.3f   T/d=%+.3e   Sxx=%+.3e\n" i N_SWEEP xM_norm T[i] Sxx[i]
+        end
+    end
+    return (; x = xs, thrust = T, Sxx)
 end
 
 # ─── Surferbot operating point ────────────────────────────────────────────────
@@ -155,12 +177,13 @@ function surferbot_point(bp; nu = 0.0)
 end
 
 # ─── Cache ────────────────────────────────────────────────────────────────────
-function save_cache(sw1, sw2, sw3, sp, F_T_star, sp_re)
+function save_cache(sw1, sw2, sw3, sw4, sp, F_T_star, sp_re)
     mkpath(dirname(CACHE_PATH))
     JLD2.save(CACHE_PATH,
-        "xM_x",  sw1.x,  "xM_T",  sw1.thrust, "xM_Sxx",  sw1.Sxx,
-        "kap_x", sw2.x,  "kap_T", sw2.thrust, "kap_Sxx", sw2.Sxx,
-        "re_x",  sw3.x,  "re_T",  sw3.thrust, "re_Sxx",  sw3.Sxx,
+        "xM_x",       sw1.x,  "xM_T",       sw1.thrust, "xM_Sxx",       sw1.Sxx,
+        "kap_x",      sw2.x,  "kap_T",       sw2.thrust, "kap_Sxx",      sw2.Sxx,
+        "re_x",       sw3.x,  "re_T",        sw3.thrust, "re_Sxx",       sw3.Sxx,
+        "xM_rig_x",   sw4.x,  "xM_rig_T",    sw4.thrust, "xM_rig_Sxx",   sw4.Sxx,
         "sp_xM", sp.xM_norm, "sp_kap", sp.kappa, "sp_Re", sp.Re,
         "sp_T",  sp.thrust,  "sp_Sxx", sp.Sxx,
         "F_T_star", F_T_star,
@@ -215,11 +238,18 @@ function load_or_compute(bp)
         d["sp_re_T"] = sp_re.thrust; d["sp_re_Sxx"] = sp_re.Sxx
     end
 
+    if all(k -> haskey(d, k), ["xM_rig_x", "xM_rig_T", "xM_rig_Sxx"])
+        sw4 = (; x = d["xM_rig_x"], thrust = d["xM_rig_T"], Sxx = d["xM_rig_Sxx"])
+    else
+        sw4 = run_sweep_xM_rigid(bp); GC.gc(); changed = true
+        d["xM_rig_x"] = sw4.x; d["xM_rig_T"] = sw4.thrust; d["xM_rig_Sxx"] = sw4.Sxx
+    end
+
     if changed
-        save_cache(sw1, sw2, sw3, sp, F_T_star, sp_re)
+        save_cache(sw1, sw2, sw3, sw4, sp, F_T_star, sp_re)
         println("Cache updated → $CACHE_PATH")
     end
-    return sw1, sw2, sw3, sp, F_T_star, sp_re
+    return sw1, sw2, sw3, sw4, sp, F_T_star, sp_re
 end
 
 # ─── Plot style ───────────────────────────────────────────────────────────────
@@ -287,7 +317,7 @@ end
 # ─── Main ─────────────────────────────────────────────────────────────────────
 function main()
     bp = Surferbot.Analysis.default_coupled_motor_position_EI_sweep().base_params
-    sw1, sw2, sw3, sp, F_T_star, sp_re = load_or_compute(bp)
+    sw1, sw2, sw3, sw4, sp, F_T_star, sp_re = load_or_compute(bp)
 
     d     = Float64(bp.d)
     @printf "Using F_T^* = %+.6e N from rigid-inviscid Surferbot reference\n" F_T_star
@@ -311,8 +341,12 @@ function main()
         log_x = true, xticks = 10.0 .^ collect(4:8), plot_Sxx = false, plot_hline = false,
         ylims = (0, Inf))
 
+    p4 = make_panel(sw4,
+        L"$x_M / L$",
+        sp.xM_norm, sp.thrust, sp.Sxx, d, F_T_star)
+
     mkpath(FIG_DIR)
-    for (fig, name) in [(p1, "thrust_sweep_xM"), (p2, "thrust_sweep_kappa"), (p3, "thrust_sweep_Re")]
+    for (fig, name) in [(p1, "thrust_sweep_xM"), (p2, "thrust_sweep_kappa"), (p3, "thrust_sweep_Re"), (p4, "thrust_sweep_xM_rigid")]
         savefig(fig, joinpath(FIG_DIR, name * ".pdf"))
         savefig(fig, joinpath(FIG_DIR, name * ".png"))
         println("Saved $(joinpath(FIG_DIR, name)).{pdf,png}")
