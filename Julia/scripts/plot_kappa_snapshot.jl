@@ -111,7 +111,7 @@ end
 
 # ─── Two-panel snapshot figure (original single-snapshot mode) ────────────────
 
-function make_figure(result, modal, kappa_val, fig_dir)
+function make_figure(result, modal, kappa_val, fig_dir; xM_norm=nothing)
     p1 = make_wave_panel(result)
 
     pct = modal.energy_frac .* 100
@@ -138,7 +138,11 @@ function make_figure(result, modal, kappa_val, fig_dir)
         dpi    = 220,
     )
 
-    fname = joinpath(fig_dir, @sprintf("kappa_snapshot_%.2e.pdf", kappa_val))
+    fname = if isnothing(xM_norm)
+        joinpath(fig_dir, @sprintf("kappa_snapshot_%.2e.pdf", kappa_val))
+    else
+        joinpath(fig_dir, @sprintf("kappa_snapshot_%.2e_xM%.3f.pdf", kappa_val, xM_norm))
+    end
     savefig(fig, fname)
     println("Saved $fname")
 end
@@ -202,6 +206,7 @@ end
 function main()
     EI        = nothing
     kappa     = nothing
+    xM_norm   = nothing
     do_5panel = false
     fig_dir   = joinpath(@__DIR__, "..", "output", "figures")
 
@@ -209,6 +214,7 @@ function main()
     while i <= length(ARGS)
         if     ARGS[i] == "--EI";     EI      = parse(Float64, ARGS[i+1]); i += 2
         elseif ARGS[i] == "--kappa";  kappa   = parse(Float64, ARGS[i+1]); i += 2
+        elseif ARGS[i] == "--xM";     xM_norm = parse(Float64, ARGS[i+1]); i += 2
         elseif ARGS[i] == "--outdir"; fig_dir = ARGS[i+1];                 i += 2
         elseif ARGS[i] == "--5panel"; do_5panel = true;                    i += 1
         else   error("Unknown argument: $(ARGS[i])")
@@ -227,7 +233,7 @@ function main()
         EI = kappa * bp.rho_raft * bp.L_raft^4 * bp.omega^2
     end
 
-    params  = build_params(; EI)
+    params  = build_params(; EI, xM_norm)
     derived = Surferbot.derive_params(params)
     kappa   = real(derived.nd_groups.kappa)
     @info @sprintf("EI = %.3e  κ = %.3e", Float64(params.EI), kappa)
@@ -235,7 +241,7 @@ function main()
     result = Surferbot.flexible_solver(params)
     modal  = Surferbot.decompose_raft_freefree_modes(result; num_modes=10, verbose=false)
 
-    make_figure(result, modal, kappa, fig_dir)
+    make_figure(result, modal, kappa, fig_dir; xM_norm)
 end
 
 if abspath(PROGRAM_FILE) == @__FILE__

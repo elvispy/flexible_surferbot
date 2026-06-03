@@ -128,7 +128,7 @@ function make_nm_comparison(artifact, csv_path, output_dir;
     p = heatmap(logEI_axis .- shift, xM_axis, alpha; plt_opts...)
 
     # N = 8 (solid), 6 (dashed), 4 (dotted) — keep equal weight so no family looks secondary
-    modes_cfg = [(8, :solid, 2.0), (6, :dash, 2.0), (4, :dot, 2.0)]
+    modes_cfg = [(8, :solid, 4.0), (6, :dash, 4.0), (4, :dot, 4.0)]
 
     for (nm, lstyle, lw) in modes_cfg
         @info "N=$nm: computing roots"
@@ -155,9 +155,9 @@ function make_nm_comparison(artifact, csv_path, output_dir;
 
     # Dummy entries to explain line-style encoding in the legend
     gray = RGB(0.4, 0.4, 0.4)
-    plot!(p, [NaN], [NaN]; color=gray, linestyle=:solid, linewidth=2.0, label="N = 8")
-    plot!(p, [NaN], [NaN]; color=gray, linestyle=:dash,  linewidth=2.0, label="N = 6")
-    plot!(p, [NaN], [NaN]; color=gray, linestyle=:dot,   linewidth=2.0, label="N = 4")
+    plot!(p, [NaN], [NaN]; color=gray, linestyle=:solid, linewidth=4.0, label="N = 8")
+    plot!(p, [NaN], [NaN]; color=gray, linestyle=:dash,  linewidth=4.0, label="N = 6")
+    plot!(p, [NaN], [NaN]; color=gray, linestyle=:dot,   linewidth=4.0, label="N = 4")
 
     fig_dir = joinpath(output_dir, "figures")
     mkpath(fig_dir)
