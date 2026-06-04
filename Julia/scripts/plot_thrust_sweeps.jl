@@ -314,6 +314,51 @@ function make_panel(sw, xlabel_str, sp_x, sp_T, sp_S, d, F_T_star;
     return p
 end
 
+function compliance_axis(x)
+    return log10(x + 1.0)
+end
+
+function compliance_ticks()
+    values = [0.0; 10.0 .^ collect(0:4)]
+    labels = [L"0", L"10^0", L"10^1", L"10^2", L"10^3", L"10^4"]
+    return compliance_axis.(values), labels
+end
+
+function make_kappa_compliance_panel(sw, sp, d, F_T_star)
+    yt         = sw.thrust .* d ./ F_T_star
+    yS         = sw.Sxx    .* d ./ F_T_star
+    sp_y       = sp.thrust * d / F_T_star
+    chi        = 1.0 ./ sw.x
+    order      = sortperm(chi)
+    tick_pos, tick_labels = compliance_ticks()
+    ylim       = maximum(abs.(vcat(yt, yS, sp_y)))
+
+    p = plot(compliance_axis.(chi[order]), yt[order];
+             label      = "Numerics",
+             color      = :royalblue, linewidth = 2.5,
+             xlabel     = L"$1/\kappa$",
+             ylabel     = L"$F_T/F_T^\ast$",
+             xlims      = (-0.12, compliance_axis(1e4)),
+             xticks     = (tick_pos, tick_labels),
+             ylims      = (-ylim, ylim),
+             BASE_OPTS...,
+             legend = :bottomleft)
+
+    plot!(p, compliance_axis.(chi[order]), yS[order];
+          label     = "Longuet-Higgins",
+          color     = :crimson, linewidth = 2.5, linestyle = :dash)
+
+    hline!(p, [0.0]; color = :black, linewidth = 0.8, linestyle = :dot, label = false)
+
+    scatter!(p, [0.0], [sp_y];
+             marker           = :star5, markersize = 14,
+             color            = RGB(0.95, 0.75, 0.05),
+             markerstrokecolor = :black, markerstrokewidth = 1,
+             label            = "Surferbot")
+
+    return p
+end
+
 # ─── Main ─────────────────────────────────────────────────────────────────────
 function main()
     bp = Surferbot.Analysis.default_coupled_motor_position_EI_sweep().base_params
@@ -327,12 +372,7 @@ function main()
         sp.xM_norm, sp.thrust, sp.Sxx, d, F_T_star;
         plot_surferbot = false)
 
-    kap_ylim = maximum(abs.(sw2.thrust .* d ./ F_T_star))
-    p2 = make_panel(sw2,
-        L"$\kappa$",
-        sp.kappa, sp.thrust, sp.Sxx, d, F_T_star;
-        log_x = true, xticks = 10.0 .^ collect(-4:1), ylims = (-kap_ylim, kap_ylim),
-        surferbot_as_hline = true)
+    p2 = make_kappa_compliance_panel(sw2, sp, d, F_T_star)
 
     p3 = make_panel(sw3,
         L"$Re$",

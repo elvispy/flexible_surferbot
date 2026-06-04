@@ -108,35 +108,41 @@ const BASE_OPTS = (
     grid       = false,
     guidefontsize  = 21,
     tickfontsize   = 18,
-    legendfontsize = 17,
+    legendfontsize = 16,
     fontfamily = "Computer Modern",
 )
 
 function make_plot(sw, sp)
     pad  = 0.10 * (maximum(sw.alpha) - minimum(sw.alpha))
     ylim = (minimum(sw.alpha) - pad, maximum(sw.alpha) + pad)
+    transform(x) = log10(x + 1.0)
+    tick_values = [0.0; 10.0 .^ collect(0:4)]
+    tick_labels = [L"0", L"10^0", L"10^1", L"10^2", L"10^3", L"10^4"]
+    chi = 1.0 ./ sw.kappa
+    order = sortperm(chi)
 
-    p = plot(sw.kappa, sw.alpha;
+    p = plot(transform.(chi[order]), sw.alpha[order];
         label     = L"\alpha",
         color     = :royalblue,
         linewidth = 2.5,
-        xlabel    = L"$\kappa$",
+        xlabel    = L"$1/\kappa$",
         ylabel    = L"$\alpha$",
-        xscale    = :log10,
-        xticks    = 10.0 .^ collect(-4:1),
-        xlims     = (10.0^-4, 10.0^1),
+        xticks    = (transform.(tick_values), tick_labels),
+        xlims     = (-0.12, transform(1e4)),
         ylims     = ylim,
         BASE_OPTS...,
+        legend    = :bottomleft,
     )
 
     hline!(p, [0.0]; color = :black, linewidth = 0.8, linestyle = :dot, label = false)
 
-    vline!(p, [sp.kappa];
-        color     = RGB(0.95, 0.75, 0.05),
-        linewidth = 2.0,
-        linestyle = :dash,
-        label     = "Surferbot",
-    )
+    scatter!(p, [0.0], [sp.alpha];
+        marker           = :star5,
+        markersize       = 14,
+        color            = RGB(0.95, 0.75, 0.05),
+        markerstrokecolor = :black,
+        markerstrokewidth = 1,
+        label            = "Surferbot")
 
     return p
 end
