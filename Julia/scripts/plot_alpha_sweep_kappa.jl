@@ -26,6 +26,7 @@ const CACHE_PATH = joinpath(@__DIR__, "..", "output", "jld2", "alpha_sweep_kappa
 const FIG_DIR    = joinpath(@__DIR__, "..", "output", "figures")
 const N_SWEEP    = 50
 const NU_WATER   = 1e-6
+const RIGID_INVISCID_OVERRIDES = (nu = 0.0, EI = Inf)
 
 # ─── Per-solve extraction ─────────────────────────────────────────────────────
 
@@ -58,12 +59,8 @@ function run_sweep(bp)
 end
 
 function surferbot_alpha(bp)
-    rho_R = Float64(bp.rho_raft)
-    L     = Float64(bp.L_raft)
-    omega = Float64(bp.omega)
-    EI    = Float64(bp.EI)
-    kappa = EI / (rho_R * L^4 * omega^2)
-    alpha = solve_alpha((nu = NU_WATER,), bp)
+    alpha = solve_alpha(RIGID_INVISCID_OVERRIDES, bp)
+    kappa = Inf
     return (; kappa, alpha)
 end
 
@@ -75,6 +72,16 @@ function load_or_compute(bp)
         d  = JLD2.load(CACHE_PATH)
         sw = (; log10_kappa = d["log10_kappa"], kappa = d["kappa"], alpha = d["alpha"])
         sp = (; kappa = d["sp_kappa"], alpha = d["sp_alpha"])
+        if !isinf(Float64(sp.kappa))
+            println("Updating cached Surferbot marker to rigid-inviscid reference …")
+            sp = surferbot_alpha(bp)
+            JLD2.save(CACHE_PATH,
+                "log10_kappa", sw.log10_kappa,
+                "kappa",       sw.kappa,
+                "alpha",       sw.alpha,
+                "sp_kappa",    sp.kappa,
+                "sp_alpha",    sp.alpha)
+        end
         return sw, sp
     end
 
