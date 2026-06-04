@@ -273,7 +273,8 @@ const BASE_OPTS = (
 
 function make_panel(sw, xlabel_str, sp_x, sp_T, sp_S, d, F_T_star;
                     log_x = false, xticks = :auto, plot_Sxx = true, plot_hline = true,
-                    ylims = :auto, surferbot_as_hline = false, plot_surferbot = true)
+                    ylims = :auto, surferbot_as_hline = false, plot_surferbot = true,
+                    left_margin = BASE_OPTS.left_margin)
     yt         = sw.thrust .* d ./ F_T_star
     yS         = sw.Sxx    .* d ./ F_T_star
     ylabel_str = L"$F_T/F_T^\ast$"
@@ -287,7 +288,8 @@ function make_panel(sw, xlabel_str, sp_x, sp_T, sp_S, d, F_T_star;
              xscale     = log_x ? :log10 : :identity,
              xticks     = xticks,
              ylims      = ylims,
-             BASE_OPTS...)
+             BASE_OPTS...,
+             left_margin = left_margin)
 
     if plot_Sxx
         plot!(p, sw.x, yS;
@@ -324,7 +326,7 @@ function compliance_ticks()
     return compliance_axis.(values), labels
 end
 
-function make_kappa_compliance_panel(sw, sp, d, F_T_star)
+function make_kappa_compliance_panel(sw, sp, d, F_T_star; left_margin = BASE_OPTS.left_margin)
     yt         = sw.thrust .* d ./ F_T_star
     yS         = sw.Sxx    .* d ./ F_T_star
     sp_y       = sp.thrust * d / F_T_star
@@ -342,6 +344,7 @@ function make_kappa_compliance_panel(sw, sp, d, F_T_star)
              xticks     = (tick_pos, tick_labels),
              ylims      = (-ylim, ylim),
              BASE_OPTS...,
+             left_margin = left_margin,
              legend = :bottomleft)
 
     plot!(p, compliance_axis.(chi[order]), yS[order];
@@ -370,9 +373,10 @@ function main()
     p1 = make_panel(sw1,
         L"$x_M / L$",
         sp.xM_norm, sp.thrust, sp.Sxx, d, F_T_star;
-        plot_surferbot = false)
+        plot_surferbot = false,
+        left_margin = 5.5Plots.mm)
 
-    p2 = make_kappa_compliance_panel(sw2, sp, d, F_T_star)
+    p2 = make_kappa_compliance_panel(sw2, sp, d, F_T_star; left_margin = 2.0Plots.mm)
 
     p3 = make_panel(sw3,
         L"$Re$",
@@ -383,7 +387,8 @@ function main()
 
     p4 = make_panel(sw4,
         L"$x_M / L$",
-        sp.xM_norm, sp.thrust, sp.Sxx, d, F_T_star)
+        sp.xM_norm, sp.thrust, sp.Sxx, d, F_T_star;
+        left_margin = 11.0Plots.mm)
 
     mkpath(FIG_DIR)
     for (fig, name) in [(p1, "thrust_sweep_xM"), (p2, "thrust_sweep_kappa"), (p3, "thrust_sweep_Re"), (p4, "thrust_sweep_xM_rigid")]

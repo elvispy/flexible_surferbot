@@ -131,6 +131,7 @@ function make_plot(sw, sp)
         xlims     = (-0.12, transform(1e4)),
         ylims     = ylim,
         BASE_OPTS...,
+        left_margin = 0.5Plots.mm,
         legend    = :bottomleft,
     )
 
