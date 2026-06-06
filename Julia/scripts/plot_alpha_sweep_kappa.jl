@@ -2,15 +2,15 @@
 """
 plot_alpha_sweep_kappa.jl
 
-Beam asymmetry α vs flexural parameter κ (log scale), mirroring the style
+Far-field asymmetry α vs flexural parameter κ (log scale), mirroring the style
 of thrust_sweep_kappa.pdf.
 
-  α = (|η̂(ℓ)|² − |η̂(−ℓ)|²) / (|η̂(ℓ)|² + |η̂(−ℓ)|²)
+  α = (|η̂(+L/2)|² − |η̂(−L/2)|²) / (|η̂(+L/2)|² + |η̂(−L/2)|²)
 
-where ±ℓ are the raft beam endpoints (ν = 0).
+where ±L/2 are the domain endpoints (far-field amplitudes, ν = 0).
 
 Output: output/figures/alpha_sweep_kappa.{pdf,png}
-Cache:  output/jld2/alpha_sweep_kappa.jld2
+Cache:  output/jld2/alpha_sweep_kappa_farfield.jld2
 
 Usage:
   julia --project=. scripts/plot_alpha_sweep_kappa.jl
@@ -22,7 +22,7 @@ using Plots
 using LaTeXStrings
 using Printf
 
-const CACHE_PATH = joinpath(@__DIR__, "..", "output", "jld2", "alpha_sweep_kappa.jld2")
+const CACHE_PATH = joinpath(@__DIR__, "..", "output", "jld2", "alpha_sweep_kappa_farfield.jld2")
 const FIG_DIR    = joinpath(@__DIR__, "..", "output", "figures")
 const N_SWEEP    = 50
 const NU_WATER   = 1e-6
@@ -34,7 +34,7 @@ function solve_alpha(bp_overrides, bp)
     p   = Surferbot.Sweep.apply_parameter_overrides(bp, bp_overrides)
     res = Surferbot.flexible_solver(p)
     m   = Surferbot.Analysis.beam_edge_metrics(res)
-    return Surferbot.Analysis.beam_asymmetry(m.eta_left_beam, m.eta_right_beam)
+    return Surferbot.Analysis.beam_asymmetry(m.eta_left_domain, m.eta_right_domain)
 end
 
 # ─── Sweep ────────────────────────────────────────────────────────────────────
