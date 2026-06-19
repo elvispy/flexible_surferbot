@@ -35,8 +35,11 @@ fig = figure('Units', 'centimeters', 'Position', [2 2 17 6.5], ...
 ax = axes(fig);
 hold(ax, 'on');
 
-plot(ax, x_all,       y_all,       'r', 'LineWidth', 1.2);
-plot(ax, x_all(x_c),  y_all(x_c),  'b', 'LineWidth', 2.0);
+col_free = [0.10 0.30 0.80];
+col_raft = [0.00 0.00 0.00];
+
+plot(ax, x_all,       y_all,       'Color', col_free, 'LineWidth', 1.2);
+plot(ax, x_all(x_c),  y_all(x_c),  'Color', col_raft, 'LineWidth', 2.0);
 
 xlabel(ax, '$x$ (cm)',   'Interpreter', 'latex', 'FontSize', 20);
 ylabel(ax, '$h$ ($\mu$m)', 'Interpreter', 'latex', 'FontSize', 20);

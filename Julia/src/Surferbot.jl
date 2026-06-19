@@ -385,8 +385,11 @@ function assemble_flexible_system(params::FlexibleParams{T}) where {T<:Real}
     S13[CC[end], :] = DxRaft[end, :]
     S12[CC[end], R] = (-Complex{T}(1im) * derived.dx * Lambda / We) .* DxFree[1, :]
 
-    S32[:, CC] = Complex{T}(1im) .* Dx2Raft
-    S33 .= Diagonal(derived.dx^2 ./ derived.kappa_vec)
+    # K̄(M/κ) = φ_zxx — exact form; avoids the K̄⁻¹ ≈ -i approximation (valid only for Re → ∞)
+    kappa_inv = T(1) ./ derived.kappa_vec
+    S32[:, CC] = -Dx2Raft
+    S33 .= Complex{T}(1im) .* Diagonal(derived.dx^2 .* kappa_inv) .-
+           Complex{T}(T(2) / Re) .* (Diagonal(kappa_inv) * Dx2Raft)
     S32[boundary_contact, :] .= 0
     S33[boundary_contact, :] .= 0
     S33[1, 1] = 1

@@ -11,6 +11,7 @@ Two heatmaps on the (log₁₀κ, xM/L) plane per coupling case:
 
 Two colour variants for the LH panel:
   :signed_log — signed-log₁₀ scale (kept for reference)
+  :raw_clipped — raw F_T/F_T* with a symmetric clipped color range
   :gp         — GP posterior mean (squared-exponential kernel) on a dense 200×200
                 grid, fitted on asinh-transformed values then back-transformed to
                 raw Δ|η|²/L² units for a plain linear colorbar; training set uses
@@ -74,13 +75,6 @@ function signed_log10_grid(mat::AbstractMatrix{Float64}; eps_frac=1e-6)
     maxabs = maximum(abs, finite_vals)
     ε = maxabs * eps_frac + 1e-30
     return @. sign(mat) * log10(abs(mat) + ε)
-end
-
-# sign(x)·∛|x| — smooth through zero, moderate dynamic-range compression.
-# Less aggressive than log (moderate values still get distinct colours), no
-# scale parameter needed, derivative is finite everywhere except x=0.
-function cbrt_grid(mat::AbstractMatrix{Float64})
-    return @. sign(mat) * cbrt(abs(mat))
 end
 
 # ─── GP surrogate ────────────────────────────────────────────────────────────
@@ -199,20 +193,12 @@ function render_panel(log10_kappa, xM_axis, delta_grid, fig_title, out_base, bp,
         cbticks  = :auto
         kp, xp, cp = log10_kappa, xM_axis, c
 
-    elseif mode == :cbrt
-        cp       = cbrt_grid(delta_grid)
-        clim_val = cbrt(clim_raw)
+    elseif mode == :raw_clipped
+        cp       = delta_grid
+        clim_val = 30.0
         kp, xp   = log10_kappa, xM_axis
         cbtitle  = L"F_T\,/\,F_T^\ast"
-
-        # Colorbar ticks: decade-spaced raw values, positioned in cbrt space.
-        # The uneven spacing on the colorbar axis communicates the nonlinear scale.
-        log_max   = floor(Int, log10(clim_raw))
-        pos_vals  = [10.0^k for k in (log_max-3):log_max]
-        raw_ticks = vcat(-reverse(pos_vals), [0.0], pos_vals)
-        cbrt_pos  = @. sign(raw_ticks) * cbrt(abs(raw_ticks))
-        tick_labs = [v == 0.0 ? "0" : @sprintf("%.0e", v) for v in raw_ticks]
-        cbticks   = (cbrt_pos, tick_labs)
+        cbticks  = [-30, -15, 0, 15, 30]
     end
 
     plt_opts = (
@@ -318,18 +304,18 @@ function main()
         joinpath(fig_dir, "plot_thrust_beam_coupled"), bp, shift; mode=:signed_log,
         modal_logK, snapshot_logK=Float64[], snapshot_xMs=Float64[], snapshot_labels=String[])
 
-    # LH — cube-root transform with real-unit colorbar ticks
+    # LH — raw normalized thrust with a clipped color range.
     lh_title  = LaTeXString("Coupled, \$\\Lambda=$Lambda_val\$ — LH \$\\Delta|\\eta|^2/L^2\$")
     xM_sb     = abs(Float64(bp.motor_position)) / Float64(bp.L_raft)
     # Five operating points matching the kappa_snapshot_5panel figure:
     #   (a)-(b)-(e)  surferbot xM; (c) α≈0 at κ=5.43e-3; (d) |α|≈1 at κ=5.43e-3
-    snap_kappas = [1.82e-3, 5.43e-3, 5.43e-3, 5.43e-3, 1.94e-2]
+    snap_kappas = [1.71103172e-3, 5.43e-3, 5.43e-3, 5.43e-3, 2.01691053e-2]
     snap_logK   = log10.(snap_kappas)
     snap_xMs    = [xM_sb,  xM_sb,  0.183,  0.272,  xM_sb]
     snap_labels = ["Fig 5 (a)", "Fig 5 (b)", "Fig 5 (c)", "Fig 5 (d)", "Fig 5 (e)"]
-    println("Rendering LH cbrt...")
+    println("Rendering LH raw clipped...")
     render_panel(log10_kappa, grids.xM, domain_grid_norm, lh_title,
-        joinpath(fig_dir, "plot_thrust_LH_coupled_cbrt"), bp, shift; mode=:cbrt,
+        joinpath(fig_dir, "plot_thrust_LH_coupled_cbrt"), bp, shift; mode=:raw_clipped,
         snapshot_logK=snap_logK, snapshot_xMs=snap_xMs, snapshot_labels=snap_labels,
         modal_logK)
 end

@@ -20,19 +20,31 @@ Usage:
 
 using Surferbot
 using JLD2
-using Plots
+using CairoMakie
 using LaTeXStrings
 using Printf
+using CSV
+using DataFrames
 using Base.Threads: @threads, ReentrantLock
 
 const PRINT_LOCK   = ReentrantLock()
 const MAX_WORKERS  = min(Threads.nthreads(), 4)
 const SOLVE_SEM    = Base.Semaphore(MAX_WORKERS)
 const CACHE_PATH   = joinpath(@__DIR__, "..", "output", "jld2", "thrust_sweeps.jld2")
+const ALPHA_CACHE_PATH = joinpath(@__DIR__, "..", "output", "jld2", "alpha_sweep_kappa_farfield.jld2")
+const GRID_ALPHA_CSV = joinpath(@__DIR__, "..", "output", "csv", "sweeper_coupled_full_grid.csv")
 const FIG_DIR    = joinpath(@__DIR__, "..", "output", "figures")
 const N_SWEEP    = 50
 const NU_WATER   = 1e-6
 const RIGID_INVISCID_OVERRIDES = (nu = 0.0, EI = Inf)
+const BLUE = RGBf(0.10, 0.30, 0.80)
+const RED = RGBf(0.78, 0.12, 0.18)
+const ALPHA_COLOR = RGBf(0.00, 0.45, 0.25)
+const GOLD = RGBf(0.84, 0.55, 0.10)
+const GRAY = RGBf(0.25, 0.25, 0.25)
+const LM_FONT = "Latin Modern Roman"
+const XM_HIGHLIGHTS = [0.12, 0.183, 0.272]
+const KAPPA_HIGHLIGHTS = [1.71103172e-3, 5.43e-3, 2.01691053e-2]
 
 # ─── Per-solve extraction ─────────────────────────────────────────────────────
 function compute_Sxx(result)
@@ -49,6 +61,13 @@ function solve_one(bp_overrides, bp)
     res = Surferbot.flexible_solver(p)
     d   = Float64(res.metadata.args.d)
     return res.thrust / d, compute_Sxx(res)
+end
+
+function solve_alpha(bp_overrides, bp)
+    p   = Surferbot.Sweep.apply_parameter_overrides(bp, bp_overrides)
+    res = Surferbot.flexible_solver(p)
+    m   = Surferbot.Analysis.beam_edge_metrics(res)
+    return Surferbot.Analysis.beam_asymmetry(m.eta_left_domain, m.eta_right_domain)
 end
 
 function compute_F_T_star(bp)
@@ -163,6 +182,49 @@ function run_sweep_xM_rigid(bp)
     return (; x = xs, thrust = T, Sxx)
 end
 
+function run_alpha_xM(bp)
+    L        = Float64(bp.L_raft)
+    rho_R    = Float64(bp.rho_raft)
+    omega    = Float64(bp.omega)
+    EI_xM    = XM_SWEEP_KAPPA * rho_R * L^4 * omega^2
+    xs = collect(range(0.0, 0.48; length = N_SWEEP))
+    alpha = Vector{Float64}(undef, N_SWEEP)
+    println("Alpha sweep: flexible motor position ($N_SWEEP points) …")
+    @threads for i in 1:N_SWEEP
+        xM_norm = xs[i]
+        Base.acquire(SOLVE_SEM)
+        try
+            alpha[i] = solve_alpha((motor_position = xM_norm * L, nu = 0.0, EI = EI_xM), bp)
+        finally
+            Base.release(SOLVE_SEM)
+        end
+        lock(PRINT_LOCK) do
+            @printf "  [%2d/%d]  xM/L=%.3f   α=%+.4f\n" i N_SWEEP xM_norm alpha[i]
+        end
+    end
+    return (; x = xs, alpha)
+end
+
+function run_alpha_xM_rigid(bp)
+    L = Float64(bp.L_raft)
+    xs = collect(range(0.0, 0.48; length = N_SWEEP))
+    alpha = Vector{Float64}(undef, N_SWEEP)
+    println("Alpha sweep: rigid motor position ($N_SWEEP points) …")
+    @threads for i in 1:N_SWEEP
+        xM_norm = xs[i]
+        Base.acquire(SOLVE_SEM)
+        try
+            alpha[i] = solve_alpha((motor_position = xM_norm * L, nu = 0.0, EI = Inf), bp)
+        finally
+            Base.release(SOLVE_SEM)
+        end
+        lock(PRINT_LOCK) do
+            @printf "  [%2d/%d]  xM/L=%.3f   α=%+.4f\n" i N_SWEEP xM_norm alpha[i]
+        end
+    end
+    return (; x = xs, alpha)
+end
+
 # ─── Surferbot operating point ────────────────────────────────────────────────
 function surferbot_point(bp; nu = 0.0)
     T, Sxx  = solve_one((nu = nu, EI = Inf), bp)
@@ -190,212 +252,209 @@ function save_cache(sw1, sw2, sw3, sw4, sp, F_T_star, sp_re)
         "sp_re_T", sp_re.thrust, "sp_re_Sxx", sp_re.Sxx)
 end
 
-function load_or_compute(bp)
-    d = isfile(CACHE_PATH) ? (println("Loading cache from $CACHE_PATH …"); JLD2.load(CACHE_PATH)) : Dict{String,Any}()
-    changed = false
+function load_cached_sweeps()
+    isfile(CACHE_PATH) || error("Missing cache: $CACHE_PATH. Refusing to run simulations from the plotting script.")
+    println("Loading cache from $CACHE_PATH …")
+    d = JLD2.load(CACHE_PATH)
+    required = [
+        "xM_x", "xM_T", "xM_Sxx",
+        "kap_x", "kap_T", "kap_Sxx",
+        "re_x", "re_T", "re_Sxx",
+        "xM_rig_x", "xM_rig_T", "xM_rig_Sxx",
+        "sp_xM", "sp_kap", "sp_Re", "sp_T", "sp_Sxx",
+        "F_T_star", "sp_re_T", "sp_re_Sxx",
+    ]
+    missing = filter(k -> !haskey(d, k), required)
+    isempty(missing) || error("Cache is missing keys $(join(missing, ", ")); refusing to compute them here.")
 
-    if all(k -> haskey(d, k), ["xM_x", "xM_T", "xM_Sxx"])
-        sw1 = (; x = d["xM_x"], thrust = d["xM_T"], Sxx = d["xM_Sxx"])
-    else
-        sw1 = run_sweep_xM(bp); GC.gc(); changed = true
-        d["xM_x"] = sw1.x; d["xM_T"] = sw1.thrust; d["xM_Sxx"] = sw1.Sxx
-    end
-
-    if all(k -> haskey(d, k), ["kap_x", "kap_T", "kap_Sxx"])
-        sw2 = (; x = d["kap_x"], thrust = d["kap_T"], Sxx = d["kap_Sxx"])
-    else
-        sw2 = run_sweep_kappa(bp); GC.gc(); changed = true
-        d["kap_x"] = sw2.x; d["kap_T"] = sw2.thrust; d["kap_Sxx"] = sw2.Sxx
-    end
-
-    if all(k -> haskey(d, k), ["re_x", "re_T", "re_Sxx"])
-        sw3 = (; x = d["re_x"], thrust = d["re_T"], Sxx = d["re_Sxx"])
-    else
-        sw3 = run_sweep_Re(bp); GC.gc(); changed = true
-        d["re_x"] = sw3.x; d["re_T"] = sw3.thrust; d["re_Sxx"] = sw3.Sxx
-    end
-
-    if all(k -> haskey(d, k), ["sp_xM", "sp_kap", "sp_Re", "sp_T", "sp_Sxx"])
-        sp = (; xM_norm = d["sp_xM"], kappa = d["sp_kap"], Re = d["sp_Re"],
-               thrust = d["sp_T"], Sxx = d["sp_Sxx"])
-    else
-        sp = surferbot_point(bp; nu = 0.0); changed = true
-        d["sp_xM"] = sp.xM_norm; d["sp_kap"] = sp.kappa; d["sp_Re"] = sp.Re
-        d["sp_T"]  = sp.thrust;  d["sp_Sxx"] = sp.Sxx
-    end
-
-    if haskey(d, "F_T_star")
-        F_T_star = Float64(d["F_T_star"])
-    else
-        F_T_star = compute_F_T_star(bp); changed = true
-        d["F_T_star"] = F_T_star
-    end
-
-    if haskey(d, "sp_re_T")
-        sp_re = (; sp.Re, thrust = Float64(d["sp_re_T"]), Sxx = Float64(d["sp_re_Sxx"]))
-    else
-        sp_re = surferbot_point(bp; nu = NU_WATER); changed = true
-        d["sp_re_T"] = sp_re.thrust; d["sp_re_Sxx"] = sp_re.Sxx
-    end
-
-    if all(k -> haskey(d, k), ["xM_rig_x", "xM_rig_T", "xM_rig_Sxx"])
-        sw4 = (; x = d["xM_rig_x"], thrust = d["xM_rig_T"], Sxx = d["xM_rig_Sxx"])
-    else
-        sw4 = run_sweep_xM_rigid(bp); GC.gc(); changed = true
-        d["xM_rig_x"] = sw4.x; d["xM_rig_T"] = sw4.thrust; d["xM_rig_Sxx"] = sw4.Sxx
-    end
-
-    if changed
-        save_cache(sw1, sw2, sw3, sw4, sp, F_T_star, sp_re)
-        println("Cache updated → $CACHE_PATH")
-    end
-    return sw1, sw2, sw3, sw4, sp, F_T_star, sp_re
+    sw1 = (; x = d["xM_x"], thrust = d["xM_T"], Sxx = d["xM_Sxx"])
+    sw2 = (; x = d["kap_x"], thrust = d["kap_T"], Sxx = d["kap_Sxx"])
+    sw3 = (; x = d["re_x"], thrust = d["re_T"], Sxx = d["re_Sxx"])
+    sw4 = (; x = d["xM_rig_x"], thrust = d["xM_rig_T"], Sxx = d["xM_rig_Sxx"])
+    sp = (; xM_norm = d["sp_xM"], kappa = d["sp_kap"], Re = d["sp_Re"],
+           thrust = d["sp_T"], Sxx = d["sp_Sxx"])
+    sp_re = (; Re = d["sp_Re"], thrust = Float64(d["sp_re_T"]), Sxx = Float64(d["sp_re_Sxx"]))
+    return sw1, sw2, sw3, sw4, sp, Float64(d["F_T_star"]), sp_re
 end
 
 # ─── Plot style ───────────────────────────────────────────────────────────────
-const BASE_OPTS = (
-    legend     = :bottomright,
-    background_color_legend = RGBA(1, 1, 1, 0.85),
-    foreground_color_legend = :black,
-    size       = (1094, 380),
-    dpi        = 220,
-    bottom_margin = 12Plots.mm,
-    left_margin   = 10Plots.mm,
-    top_margin    = 5Plots.mm,
-    right_margin  = 5Plots.mm,
-    framestyle = :box,
-    grid       = false,
-    guidefontsize  = 21,
-    tickfontsize   = 18,
-    legendfontsize = 16,
-    fontfamily = "Computer Modern",
-)
+function load_alpha_sweep()
+    isfile(ALPHA_CACHE_PATH) || error("Missing alpha sweep cache: $ALPHA_CACHE_PATH. Run scripts/plot_alpha_sweep_kappa.jl first.")
+    d = JLD2.load(ALPHA_CACHE_PATH)
+    return (; kappa = d["kappa"], alpha = d["alpha"])
+end
 
-function make_panel(sw, xlabel_str, sp_x, sp_T, sp_S, d, F_T_star;
-                    log_x = false, xticks = :auto, plot_Sxx = true, plot_hline = true,
-                    ylims = :auto, surferbot_as_hline = false, plot_surferbot = true,
-                    left_margin = BASE_OPTS.left_margin)
-    yt         = sw.thrust .* d ./ F_T_star
-    yS         = sw.Sxx    .* d ./ F_T_star
-    ylabel_str = L"$F_T/F_T^\ast$"
-    sp_y       = sp_T * d / F_T_star
+function load_motor_alpha_from_csv(bp; target_kappa)
+    isfile(GRID_ALPHA_CSV) || error("Missing alpha grid CSV: $GRID_ALPHA_CSV")
+    df = CSV.read(GRID_ALPHA_CSV, DataFrame)
+    shift = log10(Float64(bp.rho_raft) * Float64(bp.L_raft)^4 * Float64(bp.omega)^2)
+    logk = df.log10_EI .- shift
+    target = isnothing(target_kappa) ? maximum(logk) : log10(target_kappa)
+    nearest = sort(unique(logk))[argmin(abs.(sort(unique(logk)) .- target))]
+    mask = abs.(logk .- nearest) .< 1e-10
+    rows = df[mask, :]
+    order = sortperm(rows.xM_over_L)
+    label = isnothing(target_kappa) ? @sprintf("stiffest grid κ=%.3g", 10.0^nearest) :
+                                      @sprintf("grid κ=%.3g", 10.0^nearest)
+    println("Loaded motor-position alpha from $label")
+    return (; x = Float64.(rows.xM_over_L[order]), alpha = Float64.(rows.alpha[order]))
+end
 
-    p = plot(sw.x, yt;
-             label      = "Numerics",
-             color      = :royalblue, linewidth = 2.5,
-             xlabel     = xlabel_str,
-             ylabel     = ylabel_str,
-             xscale     = log_x ? :log10 : :identity,
-             xticks     = xticks,
-             ylims      = ylims,
-             BASE_OPTS...,
-             left_margin = left_margin)
+function panel_limits(y1, y2; include_zero=true)
+    vals = vcat(y1, y2)
+    if include_zero
+        vals = vcat(vals, 0.0)
+    end
+    lo, hi = minimum(vals), maximum(vals)
+    pad = 0.08 * max(hi - lo, eps())
+    return (lo - pad, hi + pad)
+end
 
-    if plot_Sxx
-        plot!(p, sw.x, yS;
-              label     = "Longuet-Higgins",
-              color     = :crimson, linewidth = 2.5, linestyle = :dash)
+function makie_figure()
+    set_theme!(Theme(
+        fonts = (; regular = LM_FONT),
+        fontsize = 19,
+        Axis = (;
+            xlabelsize = 24,
+            ylabelsize = 24,
+            xticklabelsize = 19,
+            yticklabelsize = 19,
+            xgridvisible = false,
+            ygridvisible = false,
+            topspinevisible = true,
+            rightspinevisible = true,
+            bottomspinevisible = true,
+            leftspinevisible = true,
+        ),
+        Legend = (;
+            labelsize = 17,
+            framevisible = true,
+            patchsize = (34, 16),
+        ),
+    ))
+    return Figure(size = (1094, 380), backgroundcolor = :white)
+end
+
+function add_dual_axis!(fig, sw, alpha_sw, d, F_T_star; xlabel, xscale=identity,
+                        xticks=Makie.automatic, ylims=nothing, show_Sxx=true,
+                        show_zero=true, highlight_x=Float64[], legend_position=:rb)
+    yt = sw.thrust .* d ./ F_T_star
+    yS = sw.Sxx .* d ./ F_T_star
+    ylim = isnothing(ylims) ? panel_limits(yt, show_Sxx ? yS : yt) : ylims
+    order = sortperm(sw.x)
+    alpha_order = sortperm(alpha_sw.x)
+
+    ax = Axis(fig[1, 1];
+        xlabel, ylabel = L"F_T/F_T^\ast",
+        xscale, xticks, ytickformat = x -> [@sprintf("%.0f", v) for v in x],
+        limits = ((minimum(sw.x), maximum(sw.x)), ylim))
+    l1 = lines!(ax, sw.x[order], yt[order]; color = BLUE, linewidth = 3)
+    handles = [l1]
+    labels = Any["Numerics"]
+    if show_Sxx
+        l2 = lines!(ax, sw.x[order], yS[order]; color = RED, linewidth = 3, linestyle = :dash)
+        push!(handles, l2); push!(labels, "Longuet-Higgins")
+    end
+    if show_zero
+        hlines!(ax, [0.0]; color = (:black, 0.55), linewidth = 1)
+    end
+    if !isempty(highlight_x)
+        vlines!(ax, highlight_x; color = (GRAY, 0.75), linestyle = :dash, linewidth = 1.5)
     end
 
-    plot_hline && hline!(p, [0.0]; color = :black, linewidth = 0.8, linestyle = :dot, label = false)
+    axr = Axis(fig[1, 1];
+        xscale, xticks,
+        yaxisposition = :right,
+        ylabel = L"\alpha",
+        ylabelcolor = ALPHA_COLOR,
+        yticklabelcolor = ALPHA_COLOR,
+        rightspinecolor = ALPHA_COLOR,
+        ytickcolor = ALPHA_COLOR,
+        xgridvisible = false,
+        ygridvisible = false,
+        backgroundcolor = :transparent,
+        limits = ((minimum(sw.x), maximum(sw.x)), (-1.1, 1.1)))
+    hidespines!(axr, :l, :b, :t)
+    hidexdecorations!(axr; grid = false)
+    l3 = lines!(axr, alpha_sw.x[alpha_order], alpha_sw.alpha[alpha_order];
+        color = ALPHA_COLOR, linewidth = 3)
+    push!(handles, l3); push!(labels, L"\alpha")
 
-    if plot_surferbot
-        if surferbot_as_hline
-            hline!(p, [sp_y];
-                   color     = RGB(0.95, 0.75, 0.05), linewidth = 2.0,
-                   linestyle = :dash, label = "Surferbot")
-        else
-            scatter!(p, [sp_x], [sp_y];
-                     marker           = :star5, markersize = 14,
-                     color            = RGB(0.95, 0.75, 0.05),
-                     markerstrokecolor = :black, markerstrokewidth = 1,
-                     label            = "Surferbot")
-        end
+    axislegend(ax, handles, labels; position = legend_position,
+        backgroundcolor = (:white, 0.86), framecolor = (:black, 0.45))
+    return fig
+end
+
+function make_sweep_panel(sw, alpha_sw, d, F_T_star; xlabel, outfile,
+                          xscale=identity, xticks=Makie.automatic,
+                          ylims=nothing, show_Sxx=true, show_zero=true,
+                          highlight_x=Float64[], legend_position=:rb)
+    fig = makie_figure()
+    add_dual_axis!(fig, sw, alpha_sw, d, F_T_star; xlabel, xscale, xticks,
+        ylims, show_Sxx, show_zero, highlight_x, legend_position)
+    save(outfile * ".pdf", fig)
+    save(outfile * ".png", fig; px_per_unit = 2)
+    println("Saved $outfile.{pdf,png}")
+end
+
+function make_single_axis_panel(sw, d, F_T_star; xlabel, outfile,
+                                xscale=identity, xticks=Makie.automatic,
+                                ylims=nothing, show_zero=true)
+    fig = makie_figure()
+    yt = sw.thrust .* d ./ F_T_star
+    order = sortperm(sw.x)
+    ylim = isnothing(ylims) ? panel_limits(yt, yt) : ylims
+    ax = Axis(fig[1, 1];
+        xlabel, ylabel = L"F_T/F_T^\ast",
+        xscale, xticks, limits = ((minimum(sw.x), maximum(sw.x)), ylim))
+    lines!(ax, sw.x[order], yt[order]; color = BLUE, linewidth = 3, label = "Numerics")
+    if show_zero
+        hlines!(ax, [0.0]; color = (:black, 0.55), linewidth = 1)
     end
-
-    return p
-end
-
-function compliance_axis(x)
-    return log10(x + 1.0)
-end
-
-function compliance_ticks()
-    values = [0.0; 10.0 .^ collect(0:4)]
-    labels = [L"0", L"10^0", L"10^1", L"10^2", L"10^3", L"10^4"]
-    return compliance_axis.(values), labels
-end
-
-function make_kappa_compliance_panel(sw, sp, d, F_T_star; left_margin = BASE_OPTS.left_margin)
-    yt         = sw.thrust .* d ./ F_T_star
-    yS         = sw.Sxx    .* d ./ F_T_star
-    sp_y       = sp.thrust * d / F_T_star
-    chi        = 1.0 ./ sw.x
-    order      = sortperm(chi)
-    tick_pos, tick_labels = compliance_ticks()
-    ylim       = maximum(abs.(vcat(yt, yS, sp_y)))
-
-    p = plot(compliance_axis.(chi[order]), yt[order];
-             label      = "Numerics",
-             color      = :royalblue, linewidth = 2.5,
-             xlabel     = L"$1/\kappa$",
-             ylabel     = L"$F_T/F_T^\ast$",
-             xlims      = (-0.12, compliance_axis(1e4)),
-             xticks     = (tick_pos, tick_labels),
-             ylims      = (-ylim, ylim),
-             BASE_OPTS...,
-             left_margin = left_margin,
-             legend = :bottomleft)
-
-    plot!(p, compliance_axis.(chi[order]), yS[order];
-          label     = "Longuet-Higgins",
-          color     = :crimson, linewidth = 2.5, linestyle = :dash)
-
-    hline!(p, [0.0]; color = :black, linewidth = 0.8, linestyle = :dot, label = false)
-
-    scatter!(p, [0.0], [sp_y];
-             marker           = :star5, markersize = 14,
-             color            = RGB(0.95, 0.75, 0.05),
-             markerstrokecolor = :black, markerstrokewidth = 1,
-             label            = "Surferbot")
-
-    return p
+    axislegend(ax; position = :rb, backgroundcolor = (:white, 0.86), framecolor = (:black, 0.45))
+    save(outfile * ".pdf", fig)
+    save(outfile * ".png", fig; px_per_unit = 2)
+    println("Saved $outfile.{pdf,png}")
 end
 
 # ─── Main ─────────────────────────────────────────────────────────────────────
 function main()
     bp = Surferbot.Analysis.default_coupled_motor_position_EI_sweep().base_params
-    sw1, sw2, sw3, sw4, sp, F_T_star, sp_re = load_or_compute(bp)
+    sw1, sw2, sw3, sw4, sp, F_T_star, sp_re = load_cached_sweeps()
+    alpha_kappa = load_alpha_sweep()
+    alpha_kappa_sw = (; x = alpha_kappa.kappa, alpha = alpha_kappa.alpha)
+    alpha_xM = load_motor_alpha_from_csv(bp; target_kappa = XM_SWEEP_KAPPA)
+    alpha_xM_rigid = load_motor_alpha_from_csv(bp; target_kappa = nothing)
 
     d     = Float64(bp.d)
     @printf "Using F_T^* = %+.6e N from rigid-inviscid Surferbot reference\n" F_T_star
 
-    p1 = make_panel(sw1,
-        L"$x_M / L$",
-        sp.xM_norm, sp.thrust, sp.Sxx, d, F_T_star;
-        plot_surferbot = false,
-        left_margin = 5.5Plots.mm)
-
-    p2 = make_kappa_compliance_panel(sw2, sp, d, F_T_star; left_margin = 2.0Plots.mm)
-
-    p3 = make_panel(sw3,
-        L"$Re$",
-        sp_re.Re, sp_re.thrust, sp_re.Sxx, d, F_T_star;
-        # Omit the Longuet-Higgins/Sxx comparison from the viscous sweep.
-        log_x = true, xticks = 10.0 .^ collect(4:8), plot_Sxx = false, plot_hline = false,
-        ylims = (0, Inf))
-
-    p4 = make_panel(sw4,
-        L"$x_M / L$",
-        sp.xM_norm, sp.thrust, sp.Sxx, d, F_T_star;
-        left_margin = 11.0Plots.mm)
-
     mkpath(FIG_DIR)
-    for (fig, name) in [(p1, "thrust_sweep_xM"), (p2, "thrust_sweep_kappa"), (p3, "thrust_sweep_Re"), (p4, "thrust_sweep_xM_rigid")]
-        savefig(fig, joinpath(FIG_DIR, name * ".pdf"))
-        savefig(fig, joinpath(FIG_DIR, name * ".png"))
-        println("Saved $(joinpath(FIG_DIR, name)).{pdf,png}")
-    end
+    make_sweep_panel(sw1, alpha_xM, d, F_T_star;
+        xlabel = L"x_M/L",
+        outfile = joinpath(FIG_DIR, "thrust_sweep_xM"),
+        highlight_x = XM_HIGHLIGHTS)
+    make_sweep_panel(sw2, alpha_kappa_sw, d, F_T_star;
+        xlabel = L"\kappa",
+        outfile = joinpath(FIG_DIR, "thrust_sweep_kappa"),
+        xscale = log10,
+        xticks = (10.0 .^ collect(-4:1),
+                  [L"10^{-4}", L"10^{-3}", L"10^{-2}", L"10^{-1}", L"10^{0}", L"10^{1}"]),
+        ylims = (-32.0, 32.0),
+        highlight_x = KAPPA_HIGHLIGHTS,
+        legend_position = :rb)
+    make_single_axis_panel(sw3, d, F_T_star;
+        xlabel = L"Re",
+        outfile = joinpath(FIG_DIR, "thrust_sweep_Re"),
+        xscale = log10,
+        xticks = (10.0 .^ collect(4:8),
+                  [L"10^{4}", L"10^{5}", L"10^{6}", L"10^{7}", L"10^{8}"]),
+        ylims = (0.0, maximum(sw3.thrust .* d ./ F_T_star) * 1.08),
+        show_zero = false)
+    make_sweep_panel(sw4, alpha_xM_rigid, d, F_T_star;
+        xlabel = L"x_M/L",
+        outfile = joinpath(FIG_DIR, "thrust_sweep_xM_rigid"),
+        highlight_x = XM_HIGHLIGHTS)
 end
 
 if abspath(PROGRAM_FILE) == @__FILE__
