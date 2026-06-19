@@ -8,13 +8,19 @@ if !haskey(ENV, "GKSwstype") || isempty(ENV["GKSwstype"])
     ENV["GKSwstype"] = "100"
 end
 
-using Plots
-gr()
-
 export SurferbotRunRecord,
        normalize_run,
        write_provenance_json,
        render_surferbot_run
+
+function ensure_plots_backend!()
+    if !isdefined(@__MODULE__, :Plots)
+        @eval import Plots
+    end
+    plots = Base.invokelatest(getfield, @__MODULE__, :Plots)
+    Base.invokelatest(plots.gr)
+    return plots
+end
 
 """
     SurferbotRunRecord
@@ -308,18 +314,19 @@ Generate a single frame plot for the simulation at time `t`.
 The raft is colour-coded by log₁₀(EI): dark = stiff, light grey = compliant.
 """
 function plot_frame(record::SurferbotRunRecord, t::Real; omega::Real, x_contact_mask, motor_idx::Union{Nothing,Int}, show_motor::Bool)
+    Plots = ensure_plots_backend!()
     scaleY = 1e6
     y        = real.(record.eta .* exp.(1im * omega * t)) .* scaleY
     x_scaled = record.x .* 1e2
     y_limit  = maximum(abs.(record.eta)) * scaleY * 1.1
 
     # ── Water surface ─────────────────────────────────────────────────────────
-    p = plot(
+    p = Base.invokelatest(Plots.plot,
         x_scaled, y;
         fillrange  = -y_limit,
-        fillcolor  = RGBA(0.18, 0.48, 0.80, 0.18),
-        fillalpha  = 1.0,
-        color      = RGB(0.12, 0.38, 0.72),
+        fillcolor  = :steelblue,
+        fillalpha  = 0.18,
+        color      = :steelblue4,
         linewidth  = 2.0,
         label      = false,
         xlabel     = "x  (cm)",
@@ -329,13 +336,12 @@ function plot_frame(record::SurferbotRunRecord, t::Real; omega::Real, x_contact_
         title      = @sprintf("f = %.1f Hz     t = %.3f s     U = %.3f mm/s",
                                omega / (2π), t, record.U * 1e3),
         legend     = show_motor ? :topright : false,
-        background_color_legend = RGBA(1, 1, 1, 0.85),
+        background_color_legend = :white,
         size       = (1400, 520),
         dpi        = 150,
         background_color = :white,
         framestyle = :box,
         grid       = false,
-        margin     = 8Plots.mm,
         guidefontsize  = 18,
         tickfontsize   = 15,
         titlefontsize  = 16,
@@ -362,9 +368,9 @@ function plot_frame(record::SurferbotRunRecord, t::Real; omega::Real, x_contact_
             # norm_EI: 0 = most compliant (light grey), 1 = stiffest (dark)
             norm_EI = span < 1e-10 ? zeros(n_raft) : (log_EI .- lo) ./ span
 
-            scatter!(p, x_raft, y_raft;
+            Base.invokelatest(Plots.scatter!, p, x_raft, y_raft;
                      marker_z          = norm_EI,
-                     colormap          = cgrad([:gainsboro, :black]),
+                     colormap          = [:gainsboro, :black],
                      clims             = (0.0, 1.0),
                      colorbar          = false,
                      markersize         = 7,
@@ -372,16 +378,16 @@ function plot_frame(record::SurferbotRunRecord, t::Real; omega::Real, x_contact_
                      label              = false)
         else
             # Fallback for scalar or missing EI
-            plot!(p, x_raft, y_raft; color = :black, linewidth = 8, label = false)
+            Base.invokelatest(Plots.plot!, p, x_raft, y_raft; color = :black, linewidth = 8, label = false)
         end
     end
 
     # ── Motor marker ──────────────────────────────────────────────────────────
     if show_motor && motor_idx !== nothing
-        scatter!(p, [x_scaled[motor_idx]], [y[motor_idx]];
+        Base.invokelatest(Plots.scatter!, p, [x_scaled[motor_idx]], [y[motor_idx]];
                  marker             = :star5,
                  markersize          = 18,
-                 color              = RGB(0.95, 0.75, 0.05),
+                 color              = :gold,
                  markerstrokecolor   = :white,
                  markerstrokewidth   = 1.5,
                  label              = "Motor")
@@ -408,6 +414,7 @@ Render a simulation run as an MP4 video with provenance metadata.
 - A NamedTuple `(mp4 = path, json = path)`.
 """
 function render_surferbot_run(input; outdir::AbstractString=pwd(), basename::AbstractString="waves", fps::Int=30, duration_periods::Real=10, nframes::Union{Nothing,Int}=nothing, script_name::AbstractString=Base.basename(PROGRAM_FILE))
+    Plots = ensure_plots_backend!()
     record = normalize_run(input)
     mkpath(outdir)
     mp4_path = joinpath(outdir, basename * ".mp4")
@@ -430,11 +437,13 @@ function render_surferbot_run(input; outdir::AbstractString=pwd(), basename::Abs
     total_frames = something(nframes, Int(round(duration_periods * fps)))
     tvec = range(0, stop = duration_periods * (2π / omega), length = total_frames)
 
-    anim = @animate for t in tvec
-        plot_frame(record, t; omega = omega, x_contact_mask = contact_mask, motor_idx = motor_idx, show_motor = motor_idx !== nothing)
+    anim = Base.invokelatest(Plots.Animation)
+    for t in tvec
+        frame_plot = plot_frame(record, t; omega = omega, x_contact_mask = contact_mask, motor_idx = motor_idx, show_motor = motor_idx !== nothing)
+        Base.invokelatest(Plots.frame, anim, frame_plot)
     end
 
-    mp4(anim, mp4_path, fps = fps)
+    Base.invokelatest(Plots.mp4, anim, mp4_path; fps = fps)
     return (mp4 = mp4_path, json = json_path)
 end
 
