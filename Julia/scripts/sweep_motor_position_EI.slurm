@@ -15,4 +15,4 @@ module load julia
 
 # Pass the SLURM_ARRAY_TASK_ID as the task_id to handle one EI slice
 # and 'both' to run uncoupled and coupled sequentially within that task.
-julia --project=../ sweeper_modal_coefficients.jl $SLURM_ARRAY_TASK_ID both
+julia --project=../ sweep_motor_position_EI.jl $SLURM_ARRAY_TASK_ID both

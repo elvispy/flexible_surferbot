@@ -1,9 +1,9 @@
 using Surferbot, JLD2, Printf, Statistics
 
 const SCRIPT_DIR  = @__DIR__
-const output_dir  = joinpath(SCRIPT_DIR, "output")
+const output_dir  = joinpath(SCRIPT_DIR, "..", "output")
 
-include(joinpath(SCRIPT_DIR, "scripts", "plot_dimensionless_diagnostics_LH.jl"))
+include(joinpath(SCRIPT_DIR, "..", "scripts", "plot_dimensionless_diagnostics_LH.jl"))
 
 art_cpl  = Surferbot.Sweep.load_sweep(joinpath(output_dir, "jld2",
                "sweep_motor_position_EI_coupled_from_matlab.jld2"))

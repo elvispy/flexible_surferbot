@@ -1,6 +1,6 @@
 using Surferbot, CSV, DataFrames, Statistics, LinearAlgebra, Printf
-include(joinpath(@__DIR__, "scripts/plot_dimensionless_diagnostics_LH.jl"))
-output_dir = joinpath(@__DIR__, "output")
+include(joinpath(@__DIR__, "../scripts/plot_dimensionless_diagnostics_LH.jl"))
+output_dir = joinpath(@__DIR__, "../output")
 shift = log10(0.052 * 0.05^4 * (2π*80)^2)
 xM_grid = collect(range(0.0, 0.49; length=401))
 
