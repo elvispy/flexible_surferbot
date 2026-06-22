@@ -4,8 +4,8 @@ plot_fig4_Aguero2026.jl
 
 Rigid-raft validation figure (Fig 4, Aguero 2026):
   Wave profile η(x) across the full 14 cm domain.
-  Blue segment: raft contact region.
-  Red segment: free water on either side.
+  Blue: free water surface on either side.
+  Black: raft contact region.
 
 EI = Inf  (rigid limit), ν = 1e-6 m²/s (water), motor at −3 mm left of centre.
 motor_inertia doubled (×2.0) vs default to match Benham 2024 amplitude A = 150 µm.
@@ -16,6 +16,9 @@ Ports MATLAB/utils/plot_one.m to Julia.
 using Surferbot
 using Plots
 using LaTeXStrings
+
+const FIG1_FREE_SURFACE = "#1A4DCC"
+const FIG1_RAFT = "#000000"
 
 function main()
     fig_dir = joinpath(@__DIR__, "..", "output", "figures")
@@ -48,7 +51,7 @@ function main()
     eta_um = real.(result.eta .* exp(im * theta)) .* 1e6
 
     p = plot(x_cm, eta_um;
-        color          = :red,
+        color          = FIG1_FREE_SURFACE,
         linewidth      = 1.2,
         label          = false,
         xlabel         = L"x\;(\mathrm{cm})",
@@ -69,9 +72,9 @@ function main()
         right_margin   =  4Plots.mm,
     )
     plot!(p, x_cm[contact], eta_um[contact];
-        color = :blue, linewidth = 2.0, label = false)
+        color = FIG1_RAFT, linewidth = 2.5, label = false)
 
-    fname = joinpath(fig_dir, "fig4_Aguero2026.pdf")
+    fname = joinpath(fig_dir, "plot_fig4_Aguero2026_1.pdf")
     savefig(p, fname)
     println("Saved $fname")
 end
