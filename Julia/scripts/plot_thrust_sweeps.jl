@@ -353,10 +353,10 @@ function add_dual_axis!(fig, sw, alpha_sw, d, F_T_star; xlabel, xscale=identity,
         limits = ((minimum(sw.x), maximum(sw.x)), ylim))
     l1 = lines!(ax, sw.x[order], yt[order]; color = BLUE, linewidth = 3)
     handles = [l1]
-    labels = Any["Numerics"]
+    labels = [L"Numerics"]
     if show_Sxx
         l2 = lines!(ax, sw.x[order], yS[order]; color = RED, linewidth = 3, linestyle = :dash)
-        push!(handles, l2); push!(labels, "Longuet-Higgins")
+        push!(handles, l2); push!(labels, L"Longuet-Higgins")
     end
     if show_zero
         hlines!(ax, [0.0]; color = (:black, 0.55), linewidth = 1)
@@ -377,10 +377,8 @@ function add_dual_axis!(fig, sw, alpha_sw, d, F_T_star; xlabel, xscale=identity,
         ygridvisible = false,
         backgroundcolor = :transparent,
         limits = ((minimum(sw.x), maximum(sw.x)), (-1.1, 1.1)),
-        ytickformat = vals -> map(vals) do v
-            v < 0 ? latexstring(@sprintf("%.1f", v)) :
-                    latexstring("\\;\\;", @sprintf("%.1f", v))
-        end)
+        yticklabelalign = (:right, :center),
+        yticklabelpad = 40)
     hidespines!(axr, :l, :b, :t)
     hidexdecorations!(axr; grid = false)
     l3 = lines!(axr, alpha_sw.x[alpha_order], alpha_sw.alpha[alpha_order];

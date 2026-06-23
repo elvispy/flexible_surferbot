@@ -383,15 +383,13 @@ function draw_sweep_axis!(figpos, sweep; legend_position = :rb,
         ygridvisible = false,
         backgroundcolor = :transparent,
         limits = ((minimum(sweep.x), maximum(sweep.x)), (-1.1, 1.1)),
-        ytickformat = vals -> map(vals) do v
-            v < 0 ? latexstring(@sprintf("%.1f", v)) :
-                    latexstring("\\;\\;", @sprintf("%.1f", v))
-        end)
+        yticklabelalign = (:right, :center),
+        yticklabelpad = 55)
     CM.hidespines!(axr, :l, :b, :t)
     CM.hidexdecorations!(axr; grid = false)
     aorder = sortperm(sweep.alpha_x)
     l3 = CM.lines!(axr, sweep.alpha_x[aorder], sweep.alpha[aorder]; color = MAKIE_ALPHA, linewidth = 2.6)
-    CM.axislegend(ax, [l1, l2, l3], Any["Numerics", "Longuet-Higgins", L"\alpha"];
+    CM.axislegend(ax, [l1, l2, l3], [L"Numerics", L"Longuet-Higgins", L"\alpha"];
         position = legend_position, backgroundcolor = (:white, 0.86), framecolor = (:black, 0.45),
         labelsize = legend_labelsize, patchsize = legend_patchsize)
     return ax
@@ -432,7 +430,7 @@ function solve_snapshot_ops(ops)
         EI = op.kappa * EI_scale
         p = build_params(; EI, xM_norm=op.xM)
         result = Surferbot.flexible_solver(p)
-        modal = Surferbot.decompose_raft_freefree_modes(result; num_modes=6, verbose=false)
+        modal = Surferbot.decompose_raft_freefree_modes(result; num_modes=10, verbose=false)
         push!(results, result)
         push!(modals, modal)
     end
@@ -457,7 +455,7 @@ function make_snapshot_grid(fig_dir; kind::Symbol, op_indices, filename, column_
     modal_energy_ylims = common_modal_energy_limits(modals)
     sweep = load_sweep_cache_for_grid(kind)
 
-    fig = CM.Figure(size = (1500, 1100), backgroundcolor = :white)
+    fig = CM.Figure(size = (1500, 935), backgroundcolor = :white)
     draw_sweep_axis!(fig[1, 1:3], sweep; legend_position = :rb)
 
     for j in 1:3
