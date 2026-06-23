@@ -9,7 +9,7 @@ a star marking the surferbot operating point where applicable:
   3. Reynolds sweep        x = Re (log)    (ν swept; y also log)
   4. Motor-position sweep  x = xM/L        (ν = 0, EI = Inf / rigid limit)
 
-Output: output/figures/thrust_sweep_{xM,kappa,Re,xM_rigid}.{pdf,png}
+Output: output/figures/plot_thrust_sweeps_{xM,kappa,Re,xM_rigid}.{pdf,png}
 Cache:  output/jld2/thrust_sweeps.jld2
 Scale:  F_T^* is cached from the inviscid rigid Surferbot reference case
         (ν = 0, EI = Inf; all other parameters at the Surferbot point).
@@ -44,7 +44,7 @@ const GOLD = RGBf(0.84, 0.55, 0.10)
 const GRAY = RGBf(0.25, 0.25, 0.25)
 const LM_FONT = "Latin Modern Roman"
 const XM_HIGHLIGHTS = [0.12, 0.183, 0.272]
-const KAPPA_HIGHLIGHTS = [1.71103172e-3, 5.43e-3, 2.01691053e-2]
+const KAPPA_HIGHLIGHTS = [1.71103172e-3, 5.43e-3, 2.22e-2]
 
 # ─── Per-solve extraction ─────────────────────────────────────────────────────
 function compute_Sxx(result)
@@ -311,12 +311,15 @@ function panel_limits(y1, y2; include_zero=true)
 end
 
 function makie_figure()
+    # Print scale = textwidth / native_fig_width = 468 / 1094 = 0.428.
+    # xlabelsize=21  → 21×0.428 = 9.0 pt
+    # xticklabelsize=19 → 19×0.428 = 8.1 pt
     set_theme!(Theme(
         fonts = (; regular = LM_FONT),
         fontsize = 19,
         Axis = (;
-            xlabelsize = 24,
-            ylabelsize = 24,
+            xlabelsize = 21,
+            ylabelsize = 21,
             xticklabelsize = 19,
             yticklabelsize = 19,
             xgridvisible = false,
@@ -327,9 +330,9 @@ function makie_figure()
             leftspinevisible = true,
         ),
         Legend = (;
-            labelsize = 17,
+            labelsize = 19,
             framevisible = true,
-            patchsize = (34, 16),
+            patchsize = (38, 16),
         ),
     ))
     return Figure(size = (1094, 380), backgroundcolor = :white)
@@ -373,7 +376,11 @@ function add_dual_axis!(fig, sw, alpha_sw, d, F_T_star; xlabel, xscale=identity,
         xgridvisible = false,
         ygridvisible = false,
         backgroundcolor = :transparent,
-        limits = ((minimum(sw.x), maximum(sw.x)), (-1.1, 1.1)))
+        limits = ((minimum(sw.x), maximum(sw.x)), (-1.1, 1.1)),
+        ytickformat = vals -> map(vals) do v
+            v < 0 ? latexstring(@sprintf("%.1f", v)) :
+                    latexstring("\\;\\;", @sprintf("%.1f", v))
+        end)
     hidespines!(axr, :l, :b, :t)
     hidexdecorations!(axr; grid = false)
     l3 = lines!(axr, alpha_sw.x[alpha_order], alpha_sw.alpha[alpha_order];
@@ -432,11 +439,11 @@ function main()
     mkpath(FIG_DIR)
     make_sweep_panel(sw1, alpha_xM, d, F_T_star;
         xlabel = L"x_M/L",
-        outfile = joinpath(FIG_DIR, "thrust_sweep_xM"),
+        outfile = joinpath(FIG_DIR, "plot_thrust_sweeps_xM"),
         highlight_x = XM_HIGHLIGHTS)
     make_sweep_panel(sw2, alpha_kappa_sw, d, F_T_star;
         xlabel = L"\kappa",
-        outfile = joinpath(FIG_DIR, "thrust_sweep_kappa"),
+        outfile = joinpath(FIG_DIR, "plot_thrust_sweeps_kappa"),
         xscale = log10,
         xticks = (10.0 .^ collect(-4:1),
                   [L"10^{-4}", L"10^{-3}", L"10^{-2}", L"10^{-1}", L"10^{0}", L"10^{1}"]),
@@ -445,7 +452,7 @@ function main()
         legend_position = :rb)
     make_single_axis_panel(sw3, d, F_T_star;
         xlabel = L"Re",
-        outfile = joinpath(FIG_DIR, "thrust_sweep_Re"),
+        outfile = joinpath(FIG_DIR, "plot_thrust_sweeps_Re"),
         xscale = log10,
         xticks = (10.0 .^ collect(4:8),
                   [L"10^{4}", L"10^{5}", L"10^{6}", L"10^{7}", L"10^{8}"]),
@@ -453,7 +460,7 @@ function main()
         show_zero = false)
     make_sweep_panel(sw4, alpha_xM_rigid, d, F_T_star;
         xlabel = L"x_M/L",
-        outfile = joinpath(FIG_DIR, "thrust_sweep_xM_rigid"),
+        outfile = joinpath(FIG_DIR, "plot_thrust_sweeps_xM_rigid"),
         highlight_x = XM_HIGHLIGHTS)
 end
 

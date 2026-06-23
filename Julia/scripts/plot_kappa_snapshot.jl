@@ -7,11 +7,11 @@ Two modes:
 1. Single snapshot (default / --EI / --kappa):
    Two-panel figure for one operating point:
      (a) Free-surface profile η(x) with a scatter marker at the motor position
-     (b) Spectral energy fraction in each free-free beam mode W_n
+     (b) Modal amplitude |q_n|^2 in each free-free beam mode on a log axis
 
 2. Paper snapshot series (--paper-snapshots):
    The five two-panel figures used in the manuscript, generated with a common
-   modal-energy scale across panels.
+   modal-amplitude scale across panels.
 
 3. Five-panel snapshot figure (--5panel):
    One-row figure with panels (a)–(e) covering three κ values and five
@@ -82,7 +82,7 @@ const LM_FONT = "Latin Modern Roman"
 const THRUST_CACHE_PATH = joinpath(@__DIR__, "..", "output", "jld2", "thrust_sweeps.jld2")
 const ALPHA_CACHE_PATH = joinpath(@__DIR__, "..", "output", "jld2", "alpha_sweep_kappa_farfield.jld2")
 const GRID_ALPHA_CSV = joinpath(@__DIR__, "..", "output", "csv", "sweeper_coupled_full_grid.csv")
-const KAPPA_HIGHLIGHTS = [1.71103172e-3, 5.43e-3, 2.01691053e-2]
+const KAPPA_HIGHLIGHTS = [1.71103172e-3, 5.43e-3, 2.22e-2]
 const XM_HIGHLIGHTS = [0.12, 0.183, 0.272]
 
 const STYLE = (
@@ -102,7 +102,7 @@ function paper_snapshot_ops()
         (kappa=5.43e-3, xM=xM_sb,  file_xM=nothing, label="(b)"),
         (kappa=5.43e-3, xM=0.183,  file_xM=0.183,   label="(c)"),
         (kappa=5.43e-3, xM=0.272,  file_xM=0.272,   label="(d)"),
-        (kappa=2.01691053e-2, xM=xM_sb,  file_xM=nothing, label="(e)"),
+        (kappa=2.22e-2, xM=xM_sb,  file_xM=nothing, label="(e)"),
     ]
     return bp, EI_scale, xM_sb, ops
 end
@@ -150,36 +150,36 @@ end
 
 # ─── Two-panel snapshot figure (original single-snapshot mode) ────────────────
 
-function common_log10_energy_limits(modals; decades=6.0)
+function common_modal_energy_limits(modals; decades=6.0)
     all_energy = reduce(vcat, (abs2.(modal.q) for modal in modals))
     positive = all_energy[all_energy .> 0]
-    isempty(positive) && return (-decades, 0.0)
+    isempty(positive) && return (10.0^(-decades), 1.0)
 
     ymax = ceil(log10(maximum(positive)))
     ymin_from_data = floor(log10(minimum(positive)))
     ymin_from_span = ymax - decades
     ymin = max(ymin_from_data, ymin_from_span)
-    return (ymin, ymax)
+    return (10.0^ymin, 10.0^ymax)
 end
 
 function make_figure(result, modal, kappa_val, fig_dir; xM_norm=nothing,
-                     log10_energy_ylims=nothing)
+                     modal_energy_ylims=nothing)
     p1 = make_wave_panel(result)
 
     mode_energy = abs2.(modal.q)
-    ylims = isnothing(log10_energy_ylims) ? common_log10_energy_limits([modal]) : log10_energy_ylims
-    log10_energy = log10.(max.(mode_energy, 10.0 ^ ylims[1]))
-    p2  = bar(modal.n, log10_energy;
+    ylims = isnothing(modal_energy_ylims) ? common_modal_energy_limits([modal]) : modal_energy_ylims
+    mode_energy = max.(mode_energy, ylims[1])
+    p2  = bar(modal.n, mode_energy;
         xticks        = modal.n,
         xlabel        = L"n",
-        ylabel        = L"\log_{10}|q_n|^2",
+        ylabel        = L"|q_n|^2",
         label         = false,
         fillcolor     = :steelblue,
         linecolor     = :steelblue,
         linewidth     = 0.5,
         grid          = :y,
         ylims         = ylims,
-        yticks        = Int(ylims[1]):2:Int(ylims[2]),
+        yscale        = :log10,
         fillrange     = ylims[1],
         bottom_margin = 11Plots.mm,
         left_margin   = 12Plots.mm,
@@ -195,9 +195,9 @@ function make_figure(result, modal, kappa_val, fig_dir; xM_norm=nothing,
     )
 
     fname = if isnothing(xM_norm)
-        joinpath(fig_dir, @sprintf("kappa_snapshot_%.2e.pdf", kappa_val))
+        joinpath(fig_dir, @sprintf("plot_kappa_snapshot_%.2e.pdf", kappa_val))
     else
-        joinpath(fig_dir, @sprintf("kappa_snapshot_%.2e_xM%.3f.pdf", kappa_val, xM_norm))
+        joinpath(fig_dir, @sprintf("plot_kappa_snapshot_%.2e_xM%.3f.pdf", kappa_val, xM_norm))
     end
     savefig(fig, fname)
     println("Saved $fname")
@@ -218,12 +218,12 @@ function main_paper_snapshots(fig_dir)
         push!(modals, modal)
     end
 
-    log10_energy_ylims = common_log10_energy_limits(modals)
-    @info @sprintf("Shared log10 modal-energy y-limits: %.1f to %.1f",
-                   log10_energy_ylims[1], log10_energy_ylims[2])
+    modal_energy_ylims = common_modal_energy_limits(modals)
+    @info @sprintf("Shared modal-amplitude y-limits: %.3e to %.3e",
+                   modal_energy_ylims[1], modal_energy_ylims[2])
     for (result, modal, op) in zip(results, modals, ops)
         make_figure(result, modal, op.kappa, fig_dir;
-                    xM_norm=op.file_xM, log10_energy_ylims=log10_energy_ylims)
+                    xM_norm=op.file_xM, modal_energy_ylims=modal_energy_ylims)
     end
 end
 
@@ -263,7 +263,7 @@ function main_5panel(fig_dir)
         dpi    = 300,
     )
 
-    fname = joinpath(fig_dir, "kappa_snapshot_5panel.pdf")
+    fname = joinpath(fig_dir, "plot_kappa_snapshot_5panel.pdf")
     savefig(fig, fname)
     println("Saved $fname")
     savefig(fig, replace(fname, ".pdf" => ".png"))
@@ -273,14 +273,19 @@ end
 # ─── Composite snapshot grids ────────────────────────────────────────────────
 
 function makie_snapshot_theme!()
+    # Print scale = textwidth / native_fig_width = 468 / 1500 = 0.312.
+    # Column panel labels: 26 × 0.312 = 8.1 pt
+    # Column panel ticks:  22 × 0.312 = 6.9 pt
+    # Sweep row uses explicit overrides in draw_sweep_axis! (29 → 9.1 pt, 26 → 8.1 pt).
     CM.set_theme!(CM.Theme(
         fonts = (; regular = LM_FONT),
-        fontsize = 15,
+        fontsize = 22,
         Axis = (;
-            xlabelsize = 17,
-            ylabelsize = 17,
-            xticklabelsize = 13,
-            yticklabelsize = 13,
+            xlabelsize = 26,
+            ylabelsize = 26,
+            xticklabelsize = 22,
+            yticklabelsize = 22,
+            titlesize = 26,
             xgridvisible = false,
             ygridvisible = false,
             topspinevisible = true,
@@ -289,9 +294,9 @@ function makie_snapshot_theme!()
             leftspinevisible = true,
         ),
         Legend = (;
-            labelsize = 13,
+            labelsize = 22,
             framevisible = true,
-            patchsize = (25, 12),
+            patchsize = (44, 20),
         ),
     ))
 end
@@ -341,11 +346,19 @@ function load_motor_alpha_from_csv(bp; target_kappa)
     return (; x = Float64.(rows.xM_over_L[order]), alpha = Float64.(rows.alpha[order]))
 end
 
-function draw_sweep_axis!(figpos, sweep; legend_position = :rb)
+function draw_sweep_axis!(figpos, sweep; legend_position = :rb,
+                           sweep_labelsize = 29, sweep_ticksize = 26,
+                           legend_labelsize = 26, legend_patchsize = (55, 23))
+    # sweep_labelsize/sweep_ticksize override the column-panel theme defaults
+    # for this full-width row (scale 0.416): 22→9.2pt, 19→7.9pt
     ylim = 1.08 * maximum(abs.(vcat(sweep.y, sweep.ylh, 0.0)))
     ax = CM.Axis(figpos;
         xlabel = sweep.xlabel,
         ylabel = L"F_T/F_T^\ast",
+        xlabelsize = sweep_labelsize,
+        ylabelsize = sweep_labelsize,
+        xticklabelsize = sweep_ticksize,
+        yticklabelsize = sweep_ticksize,
         xscale = sweep.xscale,
         xticks = sweep.xticks,
         limits = ((minimum(sweep.x), maximum(sweep.x)), (-ylim, ylim)))
@@ -360,6 +373,8 @@ function draw_sweep_axis!(figpos, sweep; legend_position = :rb)
         xticks = sweep.xticks,
         yaxisposition = :right,
         ylabel = L"\alpha",
+        ylabelsize = sweep_labelsize,
+        yticklabelsize = sweep_ticksize,
         ylabelcolor = MAKIE_ALPHA,
         yticklabelcolor = MAKIE_ALPHA,
         rightspinecolor = MAKIE_ALPHA,
@@ -367,13 +382,18 @@ function draw_sweep_axis!(figpos, sweep; legend_position = :rb)
         xgridvisible = false,
         ygridvisible = false,
         backgroundcolor = :transparent,
-        limits = ((minimum(sweep.x), maximum(sweep.x)), (-1.1, 1.1)))
+        limits = ((minimum(sweep.x), maximum(sweep.x)), (-1.1, 1.1)),
+        ytickformat = vals -> map(vals) do v
+            v < 0 ? latexstring(@sprintf("%.1f", v)) :
+                    latexstring("\\;\\;", @sprintf("%.1f", v))
+        end)
     CM.hidespines!(axr, :l, :b, :t)
     CM.hidexdecorations!(axr; grid = false)
     aorder = sortperm(sweep.alpha_x)
     l3 = CM.lines!(axr, sweep.alpha_x[aorder], sweep.alpha[aorder]; color = MAKIE_ALPHA, linewidth = 2.6)
     CM.axislegend(ax, [l1, l2, l3], Any["Numerics", "Longuet-Higgins", L"\alpha"];
-        position = legend_position, backgroundcolor = (:white, 0.86), framecolor = (:black, 0.45))
+        position = legend_position, backgroundcolor = (:white, 0.86), framecolor = (:black, 0.45),
+        labelsize = legend_labelsize, patchsize = legend_patchsize)
     return ax
 end
 
@@ -384,8 +404,6 @@ function draw_wave_axis!(ax, result; ylim, show_ylabel, title)
     CM.lines!(ax, x_cm[contact], eta_um[contact]; color = :black, linewidth = 3.0)
     CM.scatter!(ax, [x_cm[motor_idx]], [eta_um[motor_idx]];
         color = MAKIE_LOAD, strokecolor = MAKIE_LOAD, markersize = 10)
-    CM.text!(ax, [x_cm[motor_idx] + 0.18], [eta_um[motor_idx]];
-        text = [L"x_M"], color = MAKIE_LOAD, fontsize = 14, align = (:left, :center))
     ax.title = title
     ax.xlabel = L"x\;(\mathrm{cm})"
     ax.ylabel = show_ylabel ? L"h\;(\mu\mathrm{m})" : ""
@@ -395,13 +413,13 @@ end
 
 function draw_modal_axis!(ax, modal; ylims, show_ylabel)
     mode_energy = abs2.(modal.q)
-    floor_val = 10.0 ^ ylims[1]
-    log10_energy = log10.(max.(mode_energy, floor_val))
-    CM.barplot!(ax, modal.n, log10_energy; color = MAKIE_BLUE, strokecolor = MAKIE_BLUE)
+    mode_energy = max.(mode_energy, ylims[1])
+    CM.barplot!(ax, modal.n, mode_energy;
+        color = MAKIE_BLUE, strokecolor = MAKIE_BLUE, fillto = ylims[1])
     ax.xlabel = L"n"
-    ax.ylabel = show_ylabel ? L"\log_{10}|q_n|^2" : ""
+    ax.ylabel = show_ylabel ? L"|q_n|^2" : ""
     ax.xticks = modal.n
-    ax.yticks = collect(Int(ylims[1]):2:Int(ylims[2]))
+    ax.yticks = CM.LogTicks(CM.WilkinsonTicks(4))
     CM.ylims!(ax, ylims...)
 end
 
@@ -414,7 +432,7 @@ function solve_snapshot_ops(ops)
         EI = op.kappa * EI_scale
         p = build_params(; EI, xM_norm=op.xM)
         result = Surferbot.flexible_solver(p)
-        modal = Surferbot.decompose_raft_freefree_modes(result; num_modes=10, verbose=false)
+        modal = Surferbot.decompose_raft_freefree_modes(result; num_modes=6, verbose=false)
         push!(results, result)
         push!(modals, modal)
     end
@@ -436,22 +454,19 @@ function make_snapshot_grid(fig_dir; kind::Symbol, op_indices, filename, column_
     ops = all_ops[op_indices]
     results, modals = solve_snapshot_ops(ops)
     ylim = wave_ylim(results)
-    log10_energy_ylims = common_log10_energy_limits(modals)
+    modal_energy_ylims = common_modal_energy_limits(modals)
     sweep = load_sweep_cache_for_grid(kind)
 
-    fig = CM.Figure(size = (1500, 1180), backgroundcolor = :white)
+    fig = CM.Figure(size = (1500, 1100), backgroundcolor = :white)
     draw_sweep_axis!(fig[1, 1:3], sweep; legend_position = :rb)
 
     for j in 1:3
         axw = CM.Axis(fig[2, j]; title = column_titles[j])
         draw_wave_axis!(axw, results[j]; ylim, show_ylabel = (j == 1), title = column_titles[j])
-        axm = CM.Axis(fig[3, j])
-        draw_modal_axis!(axm, modals[j]; ylims = log10_energy_ylims, show_ylabel = (j == 1))
+        axm = CM.Axis(fig[3, j]; yscale = log10)
+        draw_modal_axis!(axm, modals[j]; ylims = modal_energy_ylims, show_ylabel = (j == 1))
     end
 
-    CM.rowsize!(fig.layout, 1, CM.Relative(1/3))
-    CM.rowsize!(fig.layout, 2, CM.Relative(1/3))
-    CM.rowsize!(fig.layout, 3, CM.Relative(1/3))
     CM.rowgap!(fig.layout, 18)
     CM.colgap!(fig.layout, 18)
 
@@ -465,14 +480,14 @@ function main_snapshot_grids(fig_dir)
     make_snapshot_grid(fig_dir;
         kind = :kappa,
         op_indices = [1, 2, 5],
-        filename = "kappa_snapshot_grid_flexibility",
+        filename = "plot_kappa_snapshot_grid_flexibility",
         column_titles = [L"\kappa=1.71\times10^{-3}",
                          L"\kappa=5.43\times10^{-3}",
-                         L"\kappa=2.02\times10^{-2}"])
+                         L"\kappa=2.22\times10^{-2}"])
     make_snapshot_grid(fig_dir;
         kind = :xM,
         op_indices = [2, 3, 4],
-        filename = "kappa_snapshot_grid_motor_position",
+        filename = "plot_kappa_snapshot_grid_motor_position",
         column_titles = [L"x_M/L=0.12",
                          L"x_M/L=0.183",
                          L"x_M/L=0.272"])
