@@ -252,34 +252,71 @@ function save_cache(sw1, sw2, sw3, sw4, sp, F_T_star, sp_re)
         "sp_re_T", sp_re.thrust, "sp_re_Sxx", sp_re.Sxx)
 end
 
-function load_cached_sweeps()
-    isfile(CACHE_PATH) || error("Missing cache: $CACHE_PATH. Refusing to run simulations from the plotting script.")
-    println("Loading cache from $CACHE_PATH …")
-    d = JLD2.load(CACHE_PATH)
-    required = [
-        "xM_x", "xM_T", "xM_Sxx",
-        "kap_x", "kap_T", "kap_Sxx",
-        "re_x", "re_T", "re_Sxx",
-        "xM_rig_x", "xM_rig_T", "xM_rig_Sxx",
-        "sp_xM", "sp_kap", "sp_Re", "sp_T", "sp_Sxx",
-        "F_T_star", "sp_re_T", "sp_re_Sxx",
-    ]
-    missing = filter(k -> !haskey(d, k), required)
-    isempty(missing) || error("Cache is missing keys $(join(missing, ", ")); refusing to compute them here.")
+function load_or_compute(bp)
+    d = isfile(CACHE_PATH) ? (println("Loading cache from $CACHE_PATH …"); JLD2.load(CACHE_PATH)) : Dict{String,Any}()
+    changed = false
 
-    sw1 = (; x = d["xM_x"], thrust = d["xM_T"], Sxx = d["xM_Sxx"])
-    sw2 = (; x = d["kap_x"], thrust = d["kap_T"], Sxx = d["kap_Sxx"])
-    sw3 = (; x = d["re_x"], thrust = d["re_T"], Sxx = d["re_Sxx"])
-    sw4 = (; x = d["xM_rig_x"], thrust = d["xM_rig_T"], Sxx = d["xM_rig_Sxx"])
-    sp = (; xM_norm = d["sp_xM"], kappa = d["sp_kap"], Re = d["sp_Re"],
-           thrust = d["sp_T"], Sxx = d["sp_Sxx"])
-    sp_re = (; Re = d["sp_Re"], thrust = Float64(d["sp_re_T"]), Sxx = Float64(d["sp_re_Sxx"]))
-    return sw1, sw2, sw3, sw4, sp, Float64(d["F_T_star"]), sp_re
+    if all(k -> haskey(d, k), ["xM_x", "xM_T", "xM_Sxx"])
+        sw1 = (; x = d["xM_x"], thrust = d["xM_T"], Sxx = d["xM_Sxx"])
+    else
+        sw1 = run_sweep_xM(bp); GC.gc(); changed = true
+        d["xM_x"] = sw1.x; d["xM_T"] = sw1.thrust; d["xM_Sxx"] = sw1.Sxx
+    end
+
+    if all(k -> haskey(d, k), ["kap_x", "kap_T", "kap_Sxx"])
+        sw2 = (; x = d["kap_x"], thrust = d["kap_T"], Sxx = d["kap_Sxx"])
+    else
+        sw2 = run_sweep_kappa(bp); GC.gc(); changed = true
+        d["kap_x"] = sw2.x; d["kap_T"] = sw2.thrust; d["kap_Sxx"] = sw2.Sxx
+    end
+
+    if all(k -> haskey(d, k), ["re_x", "re_T", "re_Sxx"])
+        sw3 = (; x = d["re_x"], thrust = d["re_T"], Sxx = d["re_Sxx"])
+    else
+        sw3 = run_sweep_Re(bp); GC.gc(); changed = true
+        d["re_x"] = sw3.x; d["re_T"] = sw3.thrust; d["re_Sxx"] = sw3.Sxx
+    end
+
+    if all(k -> haskey(d, k), ["sp_xM", "sp_kap", "sp_Re", "sp_T", "sp_Sxx"])
+        sp = (; xM_norm = d["sp_xM"], kappa = d["sp_kap"], Re = d["sp_Re"],
+               thrust = d["sp_T"], Sxx = d["sp_Sxx"])
+    else
+        sp = surferbot_point(bp; nu = 0.0); changed = true
+        d["sp_xM"] = sp.xM_norm; d["sp_kap"] = sp.kappa; d["sp_Re"] = sp.Re
+        d["sp_T"]  = sp.thrust;  d["sp_Sxx"] = sp.Sxx
+    end
+
+    if haskey(d, "F_T_star")
+        F_T_star = Float64(d["F_T_star"])
+    else
+        F_T_star = compute_F_T_star(bp); changed = true
+        d["F_T_star"] = F_T_star
+    end
+
+    if haskey(d, "sp_re_T")
+        sp_re = (; sp.Re, thrust = Float64(d["sp_re_T"]), Sxx = Float64(d["sp_re_Sxx"]))
+    else
+        sp_re = surferbot_point(bp; nu = NU_WATER); changed = true
+        d["sp_re_T"] = sp_re.thrust; d["sp_re_Sxx"] = sp_re.Sxx
+    end
+
+    if all(k -> haskey(d, k), ["xM_rig_x", "xM_rig_T", "xM_rig_Sxx"])
+        sw4 = (; x = d["xM_rig_x"], thrust = d["xM_rig_T"], Sxx = d["xM_rig_Sxx"])
+    else
+        sw4 = run_sweep_xM_rigid(bp); GC.gc(); changed = true
+        d["xM_rig_x"] = sw4.x; d["xM_rig_T"] = sw4.thrust; d["xM_rig_Sxx"] = sw4.Sxx
+    end
+
+    if changed
+        save_cache(sw1, sw2, sw3, sw4, sp, F_T_star, sp_re)
+        println("Cache updated → $CACHE_PATH")
+    end
+    return sw1, sw2, sw3, sw4, sp, F_T_star, sp_re
 end
 
 # ─── Plot style ───────────────────────────────────────────────────────────────
 function load_alpha_sweep()
-    isfile(ALPHA_CACHE_PATH) || error("Missing alpha sweep cache: $ALPHA_CACHE_PATH. Run scripts/plot_alpha_sweep_kappa.jl first.")
+    isfile(ALPHA_CACHE_PATH) || error("Missing alpha sweep cache: $ALPHA_CACHE_PATH. Run Julia/scripts/plot_alpha_sweep_kappa.jl first.")
     d = JLD2.load(ALPHA_CACHE_PATH)
     return (; kappa = d["kappa"], alpha = d["alpha"])
 end
@@ -311,9 +348,6 @@ function panel_limits(y1, y2; include_zero=true)
 end
 
 function makie_figure()
-    # Print scale = textwidth / native_fig_width = 468 / 1094 = 0.428.
-    # xlabelsize=21  → 21×0.428 = 9.0 pt
-    # xticklabelsize=19 → 19×0.428 = 8.1 pt
     set_theme!(Theme(
         fonts = (; regular = LM_FONT),
         fontsize = 19,
@@ -336,6 +370,32 @@ function makie_figure()
         ),
     ))
     return Figure(size = (1094, 380), backgroundcolor = :white)
+end
+
+function makie_grid_sweep_figure()
+    # Matches the sweep row in the snapshot grids (1500 × 355 native, same scale/fonts).
+    set_theme!(Theme(
+        fonts = (; regular = LM_FONT),
+        fontsize = 26,
+        Axis = (;
+            xlabelsize = 29,
+            ylabelsize = 29,
+            xticklabelsize = 26,
+            yticklabelsize = 26,
+            xgridvisible = false,
+            ygridvisible = false,
+            topspinevisible = true,
+            rightspinevisible = true,
+            bottomspinevisible = true,
+            leftspinevisible = true,
+        ),
+        Legend = (;
+            labelsize = 26,
+            framevisible = true,
+            patchsize = (55, 23),
+        ),
+    ))
+    return Figure(size = (1500, 355), backgroundcolor = :white)
 end
 
 function add_dual_axis!(fig, sw, alpha_sw, d, F_T_star; xlabel, xscale=identity,
@@ -377,8 +437,7 @@ function add_dual_axis!(fig, sw, alpha_sw, d, F_T_star; xlabel, xscale=identity,
         ygridvisible = false,
         backgroundcolor = :transparent,
         limits = ((minimum(sw.x), maximum(sw.x)), (-1.1, 1.1)),
-        yticklabelalign = (:right, :center),
-        yticklabelpad = 40)
+        ytickformat = vals -> [latexstring(@sprintf("%.1f", v)) for v in vals])
     hidespines!(axr, :l, :b, :t)
     hidexdecorations!(axr; grid = false)
     l3 = lines!(axr, alpha_sw.x[alpha_order], alpha_sw.alpha[alpha_order];
@@ -393,8 +452,9 @@ end
 function make_sweep_panel(sw, alpha_sw, d, F_T_star; xlabel, outfile,
                           xscale=identity, xticks=Makie.automatic,
                           ylims=nothing, show_Sxx=true, show_zero=true,
-                          highlight_x=Float64[], legend_position=:rb)
-    fig = makie_figure()
+                          highlight_x=Float64[], legend_position=:rb,
+                          grid_style=false)
+    fig = grid_style ? makie_grid_sweep_figure() : makie_figure()
     add_dual_axis!(fig, sw, alpha_sw, d, F_T_star; xlabel, xscale, xticks,
         ylims, show_Sxx, show_zero, highlight_x, legend_position)
     save(outfile * ".pdf", fig)
@@ -425,7 +485,7 @@ end
 # ─── Main ─────────────────────────────────────────────────────────────────────
 function main()
     bp = Surferbot.Analysis.default_coupled_motor_position_EI_sweep().base_params
-    sw1, sw2, sw3, sw4, sp, F_T_star, sp_re = load_cached_sweeps()
+    sw1, sw2, sw3, sw4, sp, F_T_star, sp_re = load_or_compute(bp)
     alpha_kappa = load_alpha_sweep()
     alpha_kappa_sw = (; x = alpha_kappa.kappa, alpha = alpha_kappa.alpha)
     alpha_xM = load_motor_alpha_from_csv(bp; target_kappa = XM_SWEEP_KAPPA)
@@ -459,7 +519,8 @@ function main()
     make_sweep_panel(sw4, alpha_xM_rigid, d, F_T_star;
         xlabel = L"x_M/L",
         outfile = joinpath(FIG_DIR, "plot_thrust_sweeps_xM_rigid"),
-        highlight_x = XM_HIGHLIGHTS)
+        highlight_x = XM_HIGHLIGHTS,
+        grid_style = true)
 end
 
 if abspath(PROGRAM_FILE) == @__FILE__
