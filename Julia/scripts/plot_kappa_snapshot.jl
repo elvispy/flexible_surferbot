@@ -452,7 +452,7 @@ function make_snapshot_grid(fig_dir; kind::Symbol, op_indices, filename, column_
     ops = all_ops[op_indices]
     results, modals = solve_snapshot_ops(ops)
     ylim = wave_ylim(results)
-    modal_energy_ylims = common_modal_energy_limits(modals)
+    modal_energy_ylims = (1e-14, 1e-8)
     sweep = load_sweep_cache_for_grid(kind)
 
     fig = CM.Figure(size = (1500, 935), backgroundcolor = :white)
