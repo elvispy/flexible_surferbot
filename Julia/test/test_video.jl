@@ -17,7 +17,7 @@ function make_fake_video_result()
         L_raft = 0.05,
     )
     metadata = (args = args, system = nothing)
-    return FlexibleResult(0.0125, -0.75, 1.25, x, z, phi, phi_z, eta, pressure, metadata)
+    return FlexibleResult(0.0125, -0.75, 1.25, x, z, phi, phi_z, eta, pressure, 0.0, 0.0, metadata)
 end
 
 @testset "video rendering" begin

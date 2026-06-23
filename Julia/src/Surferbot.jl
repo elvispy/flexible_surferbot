@@ -367,12 +367,15 @@ function assemble_flexible_system(params::FlexibleParams{T}) where {T<:Real}
     S12[R[2:(end - 1)], R] = (-derived.dx^2 / Fr^2) .* I_NP[R[2:(end - 1)], R] .+ (T(1) / (We * Gamma)) .* DxxFree[2:(end - 1), :]
 
     CC = idxContact
-    DxRaft = getNonCompactFDmatrix(nb_contact, T(1.0), 1, derived.params.ooa)
+    DxRaft  = getNonCompactFDmatrix(nb_contact, T(1.0), 1, derived.params.ooa)
     Dx2Raft = getNonCompactFDmatrix(nb_contact, T(1.0), 2, derived.params.ooa)
+    Dx3Raft = getNonCompactFDmatrix(nb_contact, T(1.0), 3, derived.params.ooa)
 
-    inertia_diag = Diagonal(Complex{T}.(1im .* derived.inertia_vec .- 1im * Gamma * Lambda / Fr^2))
+    # Fix 1: exact K̄⁻¹ in raft balance — adds (2/Re)·inertia_coeff·∂_xx φ_z
+    inertia_coeff = derived.inertia_vec .- Gamma * Lambda / Fr^2
+    inertia_diag  = Diagonal(Complex{T}.(1im .* inertia_coeff))
     S11[CC, CC] = (Complex{T}(1im) * Lambda * Gamma * derived.dx^2) .* I_NP[CC, CC] .- (T(2) * Gamma * Lambda / Re) .* Dx2Raft
-    S12[CC, CC] = derived.dx^2 .* inertia_diag
+    S12[CC, CC] = derived.dx^2 .* inertia_diag .+ (T(2) / Re) .* (Diagonal(Complex{T}.(inertia_coeff)) * Dx2Raft)
     S13[CC, :] = Dx2Raft
 
     boundary_contact = [1, nb_contact]
@@ -380,10 +383,14 @@ function assemble_flexible_system(params::FlexibleParams{T}) where {T<:Real}
     S12[CC[boundary_contact], :] .= 0
     S13[CC[boundary_contact], :] .= 0
 
-    S13[CC[1], :] = DxRaft[1, :]
-    S12[CC[1], L] = (-Complex{T}(1im) * derived.dx * Lambda / We) .* DxFree[end, :]
-    S13[CC[end], :] = DxRaft[end, :]
-    S12[CC[end], R] = (-Complex{T}(1im) * derived.dx * Lambda / We) .* DxFree[1, :]
+    # Fix 2: exact K̄ in edge condition — K̄·M_x = ∓(Λ/We)·φ_zx
+    # Left edge:  K̄·M_x + (Λ/We)·φ_zx = 0  →  S12 coeff = +(Λ/We)
+    # Right edge: K̄·M_x − (Λ/We)·φ_zx = 0  →  S12 coeff = −(Λ/We)
+    edge_visc = Complex{T}(T(2) / (Re * derived.dx^2))
+    S13[CC[1], :]   = Complex{T}(1im) .* DxRaft[1, :]   .- edge_visc .* Dx3Raft[1, :]
+    S12[CC[1], L]   = (Lambda / We) .* DxFree[end, :]
+    S13[CC[end], :] = Complex{T}(1im) .* DxRaft[end, :] .- edge_visc .* Dx3Raft[end, :]
+    S12[CC[end], R] = (-Lambda / We) .* DxFree[1, :]
 
     # K̄(M/κ) = φ_zxx — exact form; avoids the K̄⁻¹ ≈ -i approximation (valid only for Re → ∞)
     kappa_inv = T(1) ./ derived.kappa_vec

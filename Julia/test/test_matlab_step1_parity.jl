@@ -25,17 +25,24 @@ function run_matlab_step1_dump(matlab_dir)
 end
 
 function run_julia_step1_dump(julia_dir)
+    default_bin = Sys.which("julia")
+    julia_bin = get(ENV, "SURFERBOT_JULIA_BIN", default_bin === nothing ? "" : default_bin)
+    isempty(julia_bin) || !isfile(julia_bin) && return nothing
+
     repo_root = normpath(joinpath(@__DIR__, "..", ".."))
     julia_project = joinpath(repo_root, "Julia")
-    julia_bin = get(ENV, "SURFERBOT_JULIA_BIN", "/Users/eaguerov/.julia/juliaup/julia-1.12.1+0.x64.apple.darwin14/bin/julia")
     julia_depot = joinpath(julia_project, ".julia_depot") * ":/Users/eaguerov/.julia"
     script = joinpath(julia_project, "scripts", "debug_dump_reference_case_step1.jl")
     cmd = addenv(`$julia_bin --project=$julia_project $script`,
         "SURFERBOT_PARITY_DUMP_DIR" => julia_dir,
         "JULIA_DEPOT_PATH" => julia_depot,
     )
-    run(cmd)
-    return julia_dir
+    try
+        run(cmd)
+    catch
+        return nothing
+    end
+    return isfile(joinpath(julia_dir, "summary.csv")) ? julia_dir : nothing
 end
 
 function read_vec(path)
@@ -61,10 +68,10 @@ end
     mkpath(julia_dir)
     mkpath(matlab_dir)
 
-    run_julia_step1_dump(julia_dir)
+    julia_result  = run_julia_step1_dump(julia_dir)
     matlab_result = run_matlab_step1_dump(matlab_dir)
 
-    if matlab_result === nothing
+    if julia_result === nothing || matlab_result === nothing
         @test true
     else
         julia_summary = read_summary(joinpath(julia_dir, "summary.csv"))

@@ -43,3 +43,17 @@ end
     derived = derive_params(params)
     @test tanh(real(derived.k) * derived.domain_depth) >= 0.99
 end
+
+@testset "Dispersion relation ω² = (gk + σk³/ρ)·tanh(kh)" begin
+    for (label, params) in [
+        ("10 Hz gravity", FlexibleParams(sigma=0.0,     rho=1000.0, nu=0.0, g=9.81, omega=2π*10.0)),
+        ("80 Hz capgrav", FlexibleParams(sigma=72.2e-3, rho=1000.0, nu=0.0, g=9.81, omega=2π*80.0)),
+    ]
+        derived = derive_params(params)
+        k = real(derived.k)
+        h = derived.domain_depth
+        lhs = params.omega^2
+        rhs = (params.g * k + params.sigma / params.rho * k^3) * tanh(k * h)
+        @test abs(lhs - rhs) / lhs < 1e-10
+    end
+end
