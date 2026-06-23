@@ -455,7 +455,8 @@ function make_snapshot_grid(fig_dir; kind::Symbol, op_indices, filename, column_
     modal_energy_ylims = (1e-14, 1e-8)
     sweep = load_sweep_cache_for_grid(kind)
 
-    fig = CM.Figure(size = (1500, 935), backgroundcolor = :white)
+    fig = CM.Figure(size = (1500, 995), backgroundcolor = :white)
+    CM.rowsize!(fig.layout, 1, CM.Fixed(355))  # keep sweep row at original height
     draw_sweep_axis!(fig[1, 1:3], sweep; legend_position = :rb)
 
     for j in 1:3
