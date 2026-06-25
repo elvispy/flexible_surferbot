@@ -11,8 +11,9 @@ module load julia
 
 export GKSwstype=nul
 
-# Regenerate thrust_sweeps.jld2 (plot_thrust_sweeps.jl self-caches via load_or_compute)
-julia --project="$SLURM_SUBMIT_DIR/../" --threads 4 "$SLURM_SUBMIT_DIR/plot_thrust_sweeps.jl"
+# alpha_sweep_kappa_farfield.jld2 runs at nu=0 so it is not stale after the
+# kappa edge BC fix. Only thrust_sweeps.jld2 is stale (Re sweep + sp_re use
+# nonzero nu). Delete the old cache so load_or_compute recomputes everything.
+rm -f "$SLURM_SUBMIT_DIR/../output/jld2/thrust_sweeps.jld2"
 
-# Regenerate alpha_sweep_kappa_farfield.jld2 (self-caching script)
-julia --project="$SLURM_SUBMIT_DIR/../" "$SLURM_SUBMIT_DIR/plot_alpha_sweep_kappa.jl"
+julia --project="$SLURM_SUBMIT_DIR/../" --threads 4 "$SLURM_SUBMIT_DIR/plot_thrust_sweeps.jl"
