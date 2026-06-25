@@ -383,8 +383,7 @@ function draw_sweep_axis!(figpos, sweep; legend_position = :rb,
         ygridvisible = false,
         backgroundcolor = :transparent,
         limits = ((minimum(sweep.x), maximum(sweep.x)), (-1.1, 1.1)),
-        yticklabelalign = (:right, :center),
-        yticklabelpad = 55)
+        ytickformat = vals -> [latexstring(@sprintf("%.1f", v)) for v in vals])
     CM.hidespines!(axr, :l, :b, :t)
     CM.hidexdecorations!(axr; grid = false)
     aorder = sortperm(sweep.alpha_x)

@@ -213,7 +213,7 @@ function render_panel(log10_kappa, xM_axis, delta_grid, fig_title, out_base, bp,
         legend             = :bottomright,
         background_color_legend = RGBA(1, 1, 1, 0.85),
         foreground_color_legend = :black,
-        legendfontsize     = 11,
+        legendfontsize     = 9,
         colorbar           = true,
         colorbar_title     = cbtitle,
         colorbar_titlefontsize     = 11,
@@ -241,9 +241,6 @@ function render_panel(log10_kappa, xM_axis, delta_grid, fig_title, out_base, bp,
 
     GOLD = RGB(0.95, 0.75, 0.05)
 
-    lk_star, xm_star = operating_point(bp, shift)
-
-    hline!(p, [xm_star]; color=GOLD, linewidth=2.0, linestyle=:dash, label="Surferbot")
 
 
     snap_markers = [:circle, :rect, :utriangle, :diamond, :dtriangle]
@@ -301,7 +298,7 @@ function main()
     # Beam — signed-log only (unchanged)
     render_panel(log10_kappa, grids.xM, grids.beam_grid,
         LaTeXString("Coupled, \$\\Lambda=$Lambda_val\$ — beam \$\\Delta|\\eta|^2/L^2\$"),
-        joinpath(fig_dir, "plot_thrust_beam_coupled"), bp, shift; mode=:signed_log,
+        joinpath(fig_dir, "plot_thrust_beam_and_LH_beam"), bp, shift; mode=:signed_log,
         modal_logK, snapshot_logK=Float64[], snapshot_xMs=Float64[], snapshot_labels=String[])
 
     # LH — raw normalized thrust with a clipped color range.
@@ -309,13 +306,13 @@ function main()
     xM_sb     = abs(Float64(bp.motor_position)) / Float64(bp.L_raft)
     # Five operating points matching the kappa_snapshot_5panel figure:
     #   (a)-(b)-(e)  surferbot xM; (c) α≈0 at κ=5.43e-3; (d) |α|≈1 at κ=5.43e-3
-    snap_kappas = [1.71103172e-3, 5.43e-3, 5.43e-3, 5.43e-3, 2.01691053e-2]
+    snap_kappas = [1.71103172e-3, 5.43e-3, 5.43e-3, 5.43e-3, 2.22e-2]
     snap_logK   = log10.(snap_kappas)
     snap_xMs    = [xM_sb,  xM_sb,  0.183,  0.272,  xM_sb]
-    snap_labels = ["Fig 5 (a)", "Fig 5 (b)", "Fig 5 (c)", "Fig 5 (d)", "Fig 5 (e)"]
+    snap_labels = [L"Fig.~5\,(a)", L"Figs.~5\,(b),\,6\,(a)", L"Fig.~6\,(b)", L"Fig.~6\,(c)", L"Fig.~5\,(c)"]
     println("Rendering LH raw clipped...")
     render_panel(log10_kappa, grids.xM, domain_grid_norm, lh_title,
-        joinpath(fig_dir, "plot_thrust_LH_coupled_cbrt"), bp, shift; mode=:raw_clipped,
+        joinpath(fig_dir, "plot_thrust_beam_and_LH_LH_cbrt"), bp, shift; mode=:raw_clipped,
         snapshot_logK=snap_logK, snapshot_xMs=snap_xMs, snapshot_labels=snap_labels,
         modal_logK)
 end

@@ -566,11 +566,6 @@ function build_LH_plot(artifact, csv_path, output_dir; xlim_min::Float64)
         end
     end
 
-    xM_surferbot = abs(Float64(params.motor_position)) / Float64(params.L_raft)
-    hline!(p, [xM_surferbot];
-           color     = RGB(0.95, 0.75, 0.05), linewidth = 4.0,
-           linestyle = :dash, label = "Surferbot")
-
     return p
 end
 
@@ -878,11 +873,6 @@ function build_beam_end_plot(artifact, csv_path, output_dir; xlim_min::Float64)
         end
     end
 
-    xM_surferbot = abs(Float64(theory_ctx.params.motor_position)) / Float64(theory_ctx.params.L_raft)
-    hline!(p, [xM_surferbot];
-           color     = RGB(0.95, 0.75, 0.05), linewidth = 4.0,
-           linestyle = :dash, label = "Surferbot")
-
     return p
 end
 
@@ -902,7 +892,7 @@ function main()
     p_cpl_LH = build_LH_plot(art_cpl,
                                joinpath(output_dir, "csv", "sweeper_coupled_full_grid.csv"),
                                output_dir; xlim_min=-4.0)
-    out_cpl_LH = joinpath(fig_dir, "plot_dimensionless_diagnostics_cpl_theo_LH.pdf")
+    out_cpl_LH = joinpath(fig_dir, "plot_dimensionless_diagnostics_LH_cpl_theo.pdf")
     savefig(p_cpl_LH, out_cpl_LH)
     println("Saved $out_cpl_LH")
 
@@ -910,7 +900,7 @@ function main()
     p_cpl_beam = build_beam_end_plot(art_cpl,
                                       joinpath(output_dir, "csv", "sweeper_coupled_full_grid.csv"),
                                       output_dir; xlim_min=-4.0)
-    out_cpl_beam = joinpath(fig_dir, "plot_dimensionless_diagnostics_cpl_beam.pdf")
+    out_cpl_beam = joinpath(fig_dir, "plot_dimensionless_diagnostics_LH_cpl_beam.pdf")
     savefig(p_cpl_beam, out_cpl_beam)
     println("Saved $out_cpl_beam")
 
@@ -921,7 +911,7 @@ function main()
     p_ucpl_beam = build_beam_end_plot(art_ucpl,
                                        joinpath(output_dir, "csv", "sweeper_uncoupled_full_grid.csv"),
                                        output_dir; xlim_min=-4.0)
-    out_ucpl_beam = joinpath(fig_dir, "plot_dimensionless_diagnostics_ucpl_beam.pdf")
+    out_ucpl_beam = joinpath(fig_dir, "plot_dimensionless_diagnostics_LH_ucpl_beam.pdf")
     savefig(p_ucpl_beam, out_ucpl_beam)
     println("Saved $out_ucpl_beam")
 end

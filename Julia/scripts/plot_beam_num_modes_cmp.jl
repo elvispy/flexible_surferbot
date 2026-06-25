@@ -180,11 +180,11 @@ function main()
 
     make_nm_comparison(art_cpl,
         joinpath(output_dir, "csv", "sweeper_coupled_full_grid.csv"),
-        output_dir; xlim_min=-4.0, outname="beam_num_modes_cmp_cpl")
+        output_dir; xlim_min=-4.0, outname="plot_beam_num_modes_cmp_cpl")
 
     make_nm_comparison(art_ucpl,
         joinpath(output_dir, "csv", "sweeper_uncoupled_full_grid.csv"),
-        output_dir; xlim_min=-4.0, outname="beam_num_modes_cmp_ucpl")
+        output_dir; xlim_min=-4.0, outname="plot_beam_num_modes_cmp_ucpl")
 end
 
 if abspath(PROGRAM_FILE) == @__FILE__

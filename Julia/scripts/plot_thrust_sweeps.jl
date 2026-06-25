@@ -44,6 +44,25 @@ const GOLD = RGBf(0.84, 0.55, 0.10)
 const GRAY = RGBf(0.25, 0.25, 0.25)
 const LM_FONT = "Latin Modern Roman"
 const XM_HIGHLIGHTS = [0.12, 0.183, 0.272]
+
+function setup_lm_mathfonts()
+    MTE_ID = Base.PkgId(Base.UUID("0a4f8689-d25c-4efe-a92b-7142dfc1aa53"), "MathTeXEngine")
+    MTE = get(Base.loaded_modules, MTE_ID, nothing)
+    MTE === nothing && return
+    LM = "/usr/local/texlive/2025/texmf-dist/fonts/opentype/public/lm"
+    LM_MATH = "/usr/local/texlive/2025/texmf-dist/fonts/opentype/public/lm-math/latinmodern-math.otf"
+    isfile(LM_MATH) || return
+    try
+        MTE.set_texfont_family!(
+            regular    = joinpath(LM, "lmroman10-regular.otf"),
+            italic     = joinpath(LM, "lmroman10-italic.otf"),
+            bold       = joinpath(LM, "lmroman10-bold.otf"),
+            bolditalic = joinpath(LM, "lmroman10-bolditalic.otf"),
+            math       = LM_MATH,
+        )
+    catch
+    end
+end
 const KAPPA_HIGHLIGHTS = [1.71103172e-3, 5.43e-3, 2.22e-2]
 
 # ─── Per-solve extraction ─────────────────────────────────────────────────────
@@ -350,12 +369,14 @@ end
 function makie_figure()
     set_theme!(Theme(
         fonts = (; regular = LM_FONT),
-        fontsize = 19,
+        fontsize = 21,
         Axis = (;
-            xlabelsize = 21,
-            ylabelsize = 21,
-            xticklabelsize = 19,
-            yticklabelsize = 19,
+            xlabelsize = 23,
+            ylabelsize = 23,
+            xticklabelsize = 21,
+            yticklabelsize = 21,
+            xticklabelfont = LM_FONT,
+            yticklabelfont = LM_FONT,
             xgridvisible = false,
             ygridvisible = false,
             topspinevisible = true,
@@ -364,7 +385,7 @@ function makie_figure()
             leftspinevisible = true,
         ),
         Legend = (;
-            labelsize = 19,
+            labelsize = 21,
             framevisible = true,
             patchsize = (38, 16),
         ),
@@ -484,6 +505,7 @@ end
 
 # ─── Main ─────────────────────────────────────────────────────────────────────
 function main()
+    setup_lm_mathfonts()
     bp = Surferbot.Analysis.default_coupled_motor_position_EI_sweep().base_params
     sw1, sw2, sw3, sw4, sp, F_T_star, sp_re = load_or_compute(bp)
     alpha_kappa = load_alpha_sweep()

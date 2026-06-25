@@ -52,27 +52,28 @@ function main()
 
     p = plot(x_cm, eta_um;
         color          = FIG1_FREE_SURFACE,
-        linewidth      = 1.2,
+        linewidth      = 2.8,
         label          = false,
         xlabel         = L"x\;(\mathrm{cm})",
         ylabel         = L"h\;(\mu\mathrm{m})",
         xlims          = (-7, 7),
         ylims          = (-300, 300),
+        xticks         = -6:2:6,
         yticks         = -300:100:300,
         grid           = true,
         framestyle     = :box,
         fontfamily     = "Computer Modern",
-        guidefontsize  = 20,
-        tickfontsize   = 15,
-        size           = (1100, 420),
+        guidefontsize  = 43,
+        tickfontsize   = 32,
+        size           = (1100, 530),
         dpi            = 220,
-        left_margin    = 12Plots.mm,
-        bottom_margin  = 10Plots.mm,
+        left_margin    = -1Plots.mm,
+        bottom_margin  = 14Plots.mm,
         top_margin     =  4Plots.mm,
         right_margin   =  4Plots.mm,
     )
     plot!(p, x_cm[contact], eta_um[contact];
-        color = FIG1_RAFT, linewidth = 2.5, label = false)
+        color = FIG1_RAFT, linewidth = 5.6, label = false)
 
     fname = joinpath(fig_dir, "plot_fig4_Aguero2026_1.pdf")
     savefig(p, fname)
