@@ -396,7 +396,7 @@ function assemble_flexible_system(params::FlexibleParams{T}) where {T<:Real}
     kappa_inv = T(1) ./ derived.kappa_vec
     S32[:, CC] = -Dx2Raft
     S33 .= Complex{T}(1im) .* Diagonal(derived.dx^2 .* kappa_inv) .-
-           Complex{T}(T(2) / Re) .* (Diagonal(kappa_inv) * Dx2Raft)
+           Complex{T}(T(2) / Re) .* (Dx2Raft * Diagonal(kappa_inv))
     S32[boundary_contact, :] .= 0
     S33[boundary_contact, :] .= 0
     S33[1, 1] = 1
