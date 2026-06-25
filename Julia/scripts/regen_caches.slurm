@@ -11,9 +11,12 @@ module load julia
 
 export GKSwstype=nul
 
-# alpha_sweep_kappa_farfield.jld2 runs at nu=0 so it is not stale after the
-# kappa edge BC fix. Only thrust_sweeps.jld2 is stale (Re sweep + sp_re use
-# nonzero nu). Delete the old cache so load_or_compute recomputes everything.
+# Staleness analysis: sweep base params have nu=0, sigma=72.2mN/m (water).
+# Fix 1 (O(2/Re)) and Fix 2 viscous term vanish exactly at nu=0.
+# Fix 2 Lambda/We term is O(6.7e-9) — below double precision for all quantities.
+# Therefore: CSV sweeps and alpha_sweep_kappa_farfield.jld2 are NOT stale.
+# Only thrust_sweeps.jld2 is stale: Re sweep and sp_re run at nu=nu_water.
+# Delete the old cache so load_or_compute recomputes those components.
 rm -f "$SLURM_SUBMIT_DIR/../output/jld2/thrust_sweeps.jld2"
 
 julia --project="$SLURM_SUBMIT_DIR/../" --threads 4 "$SLURM_SUBMIT_DIR/plot_thrust_sweeps.jl"
