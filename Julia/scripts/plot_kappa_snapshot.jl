@@ -78,6 +78,9 @@ const MAKIE_RED = CM.RGBf(0.78, 0.12, 0.18)
 const MAKIE_ALPHA = CM.RGBf(0.00, 0.45, 0.25)
 const MAKIE_LOAD = CM.RGBf(0.66, 0.43, 0.05)
 const MAKIE_GRAY = CM.RGBf(0.25, 0.25, 0.25)
+const COLUMN_COLORS = [CM.RGBf(0.58, 0.58, 0.58), CM.RGBf(0.35, 0.35, 0.35), CM.RGBf(0.10, 0.10, 0.10)]
+const COLUMN_LINEWIDTHS = [1.5, 3.0, 4.5]
+const COLUMN_SPINEWIDTHS = [1.0, 2.0, 3.0]
 const LM_FONT = "Latin Modern Roman"
 const THRUST_CACHE_PATH = joinpath(@__DIR__, "..", "output", "jld2", "thrust_sweeps.jld2")
 const ALPHA_CACHE_PATH = joinpath(@__DIR__, "..", "output", "jld2", "alpha_sweep_kappa_farfield.jld2")
@@ -348,7 +351,9 @@ end
 
 function draw_sweep_axis!(figpos, sweep; legend_position = :rb,
                            sweep_labelsize = 29, sweep_ticksize = 26,
-                           legend_labelsize = 26, legend_patchsize = (55, 23))
+                           legend_labelsize = 26, legend_patchsize = (55, 23),
+                           highlight_colors = fill(MAKIE_GRAY, length(sweep.highlights)),
+                           highlight_linewidths = fill(1.5, length(sweep.highlights)))
     # sweep_labelsize/sweep_ticksize override the column-panel theme defaults
     # for this full-width row (scale 0.416): 22→9.2pt, 19→7.9pt
     ylim = 1.08 * maximum(abs.(vcat(sweep.y, sweep.ylh, 0.0)))
@@ -366,7 +371,9 @@ function draw_sweep_axis!(figpos, sweep; legend_position = :rb,
     l1 = CM.lines!(ax, sweep.x[order], sweep.y[order]; color = MAKIE_BLUE, linewidth = 2.6)
     l2 = CM.lines!(ax, sweep.x[order], sweep.ylh[order]; color = MAKIE_RED, linewidth = 2.6, linestyle = :dash)
     CM.hlines!(ax, [0.0]; color = (:black, 0.55), linewidth = 0.9)
-    CM.vlines!(ax, sweep.highlights; color = (MAKIE_GRAY, 0.75), linewidth = 1.4, linestyle = :dash)
+    for (xh, col, lw) in zip(sweep.highlights, highlight_colors, highlight_linewidths)
+        CM.vlines!(ax, [xh]; color = (col, 0.85), linewidth = lw, linestyle = :dash)
+    end
 
     axr = CM.Axis(figpos;
         xscale = sweep.xscale,
@@ -456,12 +463,20 @@ function make_snapshot_grid(fig_dir; kind::Symbol, op_indices, filename, column_
 
     fig = CM.Figure(size = (1500, 995), backgroundcolor = :white)
     CM.rowsize!(fig.layout, 1, CM.Fixed(355))  # keep sweep row at original height
-    draw_sweep_axis!(fig[1, 1:3], sweep; legend_position = :rb)
+    draw_sweep_axis!(fig[1, 1:3], sweep; legend_position = :rb,
+        highlight_colors = COLUMN_COLORS, highlight_linewidths = COLUMN_LINEWIDTHS)
 
     for j in 1:3
-        axw = CM.Axis(fig[2, j]; title = column_titles[j])
+        col = COLUMN_COLORS[j]
+        sw  = COLUMN_SPINEWIDTHS[j]
+        axw = CM.Axis(fig[2, j];
+            title = column_titles[j], titlecolor = col,
+            leftspinecolor = col, rightspinecolor = col,
+            topspinecolor = col, bottomspinecolor = col, spinewidth = sw)
         draw_wave_axis!(axw, results[j]; ylim, show_ylabel = (j == 1), title = column_titles[j])
-        axm = CM.Axis(fig[3, j]; yscale = log10)
+        axm = CM.Axis(fig[3, j]; yscale = log10,
+            leftspinecolor = col, rightspinecolor = col,
+            topspinecolor = col, bottomspinecolor = col, spinewidth = sw)
         draw_modal_axis!(axm, modals[j]; ylims = modal_energy_ylims, show_ylabel = (j == 1))
     end
 

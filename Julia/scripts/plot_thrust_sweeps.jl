@@ -394,7 +394,7 @@ function makie_figure()
 end
 
 function makie_grid_sweep_figure()
-    # Matches the sweep row in the snapshot grids (1500 × 355 native, same scale/fonts).
+    # Row height matches the sweep row in the snapshot grids: Fixed(355) Makie units.
     set_theme!(Theme(
         fonts = (; regular = LM_FONT),
         fontsize = 26,
@@ -416,7 +416,8 @@ function makie_grid_sweep_figure()
             patchsize = (55, 23),
         ),
     ))
-    return Figure(size = (1500, 355), backgroundcolor = :white)
+    fig = Figure(size = (1500, 355), backgroundcolor = :white)
+    return fig
 end
 
 function add_dual_axis!(fig, sw, alpha_sw, d, F_T_star; xlabel, xscale=identity,
@@ -541,7 +542,7 @@ function main()
     make_sweep_panel(sw4, alpha_xM_rigid, d, F_T_star;
         xlabel = L"x_M/L",
         outfile = joinpath(FIG_DIR, "plot_thrust_sweeps_xM_rigid"),
-        highlight_x = XM_HIGHLIGHTS,
+        highlight_x = Float64[],
         grid_style = true)
 end
 

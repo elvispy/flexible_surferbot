@@ -1,3 +1,13 @@
+Rules to be followed when working with this repository
+
+This repository is the code companion of the paper situated at ~/Documents/Github/overleaf/wave-driven-propulsion/
+A symlink has been created for you to have the source of truth of the latex file. Here are some conventions:
+experiments/ is for scripts that are used for debugging, and are not meant to produce things that last.
+scripts/ have plotting, postprocessing, and sweep scripts that produce lasting output. They are prepended with plot_*, postprocess_*, and sweep_* respectively
+output/[csv|jld2] are the output code
+- If a script generates plots, they should have the same name as the generating script, and appended _X, where X is any qualifier.
+- The plot_scripts should never run sweeps, and only read pre-run files. They can run up to 10 simulations per file.
+
 This is the set of guidelines to be followed to achieve MATLAB/Julia parity
 from the MATLAB/old_code. THese guidelines are non-negotiables:
 
