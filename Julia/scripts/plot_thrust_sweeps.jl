@@ -479,6 +479,10 @@ function make_sweep_panel(sw, alpha_sw, d, F_T_star; xlabel, outfile,
     fig = grid_style ? makie_grid_sweep_figure() : makie_figure()
     add_dual_axis!(fig, sw, alpha_sw, d, F_T_star; xlabel, xscale, xticks,
         ylims, show_Sxx, show_zero, highlight_x, legend_position)
+    if grid_style
+        Makie.rowsize!(fig.layout, 1, Makie.Fixed(355))
+        Makie.resize_to_layout!(fig)
+    end
     save(outfile * ".pdf", fig)
     save(outfile * ".png", fig; px_per_unit = 2)
     println("Saved $outfile.{pdf,png}")
