@@ -67,7 +67,12 @@ function main()
         tickfontsize   = 29,
         size           = (1100, 530),
         dpi            = 220,
-        left_margin    =  3Plots.mm,
+        # left_margin must stay >~10.2mm: below that, GR clips the ascender
+        # off any tall letter (h, b, l, d - confirmed across all of them) in
+        # this rotated ylabel, turning "h" into what reads as "n". This is a
+        # margin/protrusion bug in GR's rotated-text bounding box, unrelated
+        # to font style (italic vs upright made no difference).
+        left_margin    = 10.5Plots.mm,
         bottom_margin  = 14Plots.mm,
         top_margin     =  4Plots.mm,
         right_margin   =  0Plots.mm,
