@@ -67,10 +67,10 @@ function main()
         tickfontsize   = 29,
         size           = (1100, 530),
         dpi            = 220,
-        left_margin    = 10Plots.mm,
+        left_margin    =  3Plots.mm,
         bottom_margin  = 14Plots.mm,
         top_margin     =  4Plots.mm,
-        right_margin   =  4Plots.mm,
+        right_margin   =  0Plots.mm,
     )
     plot!(p, x_cm[contact], eta_um[contact];
         color = FIG1_RAFT, linewidth = 5.6, label = false)

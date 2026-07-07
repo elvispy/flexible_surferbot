@@ -369,40 +369,14 @@ end
 function makie_figure()
     set_theme!(Theme(
         fonts = (; regular = LM_FONT),
-        fontsize = 21,
-        Axis = (;
-            xlabelsize = 23,
-            ylabelsize = 23,
-            xticklabelsize = 21,
-            yticklabelsize = 21,
-            xticklabelfont = LM_FONT,
-            yticklabelfont = LM_FONT,
-            xgridvisible = false,
-            ygridvisible = false,
-            topspinevisible = true,
-            rightspinevisible = true,
-            bottomspinevisible = true,
-            leftspinevisible = true,
-        ),
-        Legend = (;
-            labelsize = 21,
-            framevisible = true,
-            patchsize = (38, 16),
-        ),
-    ))
-    return Figure(size = (1094, 380), backgroundcolor = :white)
-end
-
-function makie_grid_sweep_figure()
-    # Row height matches the sweep row in the snapshot grids: Fixed(355) Makie units.
-    set_theme!(Theme(
-        fonts = (; regular = LM_FONT),
         fontsize = 26,
         Axis = (;
             xlabelsize = 29,
             ylabelsize = 29,
             xticklabelsize = 26,
             yticklabelsize = 26,
+            xticklabelfont = LM_FONT,
+            yticklabelfont = LM_FONT,
             xgridvisible = false,
             ygridvisible = false,
             topspinevisible = true,
@@ -416,8 +390,7 @@ function makie_grid_sweep_figure()
             patchsize = (55, 23),
         ),
     ))
-    fig = Figure(size = (1500, 355), backgroundcolor = :white)
-    return fig
+    return Figure(size = (1500, 400), backgroundcolor = :white)
 end
 
 function add_dual_axis!(fig, sw, alpha_sw, d, F_T_star; xlabel, xscale=identity,
@@ -430,9 +403,12 @@ function add_dual_axis!(fig, sw, alpha_sw, d, F_T_star; xlabel, xscale=identity,
     alpha_order = sortperm(alpha_sw.x)
 
     ax = Axis(fig[1, 1];
-        xlabel, ylabel = L"F_T/F_T^\ast",
+        xlabel,
         xscale, xticks, ytickformat = x -> [@sprintf("%.0f", v) for v in x],
-        limits = ((minimum(sw.x), maximum(sw.x)), ylim))
+        limits = ((minimum(sw.x), maximum(sw.x)), ylim),
+        alignmode = Makie.Mixed(left = Makie.Protrusion(125), right = Makie.Protrusion(90)))
+
+    Label(fig[1, 1, Makie.Left()], L"F_T/F_T^\ast", rotation = pi/2, fontsize = 29, font = LM_FONT)
     l1 = lines!(ax, sw.x[order], yt[order]; color = BLUE, linewidth = 3)
     handles = [l1]
     labels = [L"Numerics"]
@@ -459,12 +435,16 @@ function add_dual_axis!(fig, sw, alpha_sw, d, F_T_star; xlabel, xscale=identity,
         ygridvisible = false,
         backgroundcolor = :transparent,
         limits = ((minimum(sw.x), maximum(sw.x)), (-1.1, 1.1)),
-        ytickformat = vals -> [latexstring(@sprintf("%.1f", v)) for v in vals])
+        ytickformat = vals -> [latexstring(@sprintf("%.1f", v)) for v in vals],
+        alignmode = Makie.Mixed(right = Makie.Protrusion(90)))
     hidespines!(axr, :l, :b, :t)
     hidexdecorations!(axr; grid = false)
     l3 = lines!(axr, alpha_sw.x[alpha_order], alpha_sw.alpha[alpha_order];
         color = ALPHA_COLOR, linewidth = 3)
     push!(handles, l3); push!(labels, L"\alpha")
+
+    Makie.colsize!(fig.layout, 1, Makie.Fixed(1285))
+    Makie.rowsize!(fig.layout, 1, Makie.Fixed(355))
 
     axislegend(ax, handles, labels; position = legend_position,
         backgroundcolor = (:white, 0.86), framecolor = (:black, 0.45))
@@ -476,13 +456,10 @@ function make_sweep_panel(sw, alpha_sw, d, F_T_star; xlabel, outfile,
                           ylims=nothing, show_Sxx=true, show_zero=true,
                           highlight_x=Float64[], legend_position=:rb,
                           grid_style=false)
-    fig = grid_style ? makie_grid_sweep_figure() : makie_figure()
+    fig = makie_figure()
     add_dual_axis!(fig, sw, alpha_sw, d, F_T_star; xlabel, xscale, xticks,
         ylims, show_Sxx, show_zero, highlight_x, legend_position)
-    if grid_style
-        Makie.rowsize!(fig.layout, 1, Makie.Fixed(355))
-        Makie.resize_to_layout!(fig)
-    end
+    Makie.resize_to_layout!(fig)
     save(outfile * ".pdf", fig)
     save(outfile * ".png", fig; px_per_unit = 2)
     println("Saved $outfile.{pdf,png}")
@@ -495,13 +472,22 @@ function make_single_axis_panel(sw, d, F_T_star; xlabel, outfile,
     yt = sw.thrust .* d ./ F_T_star
     order = sortperm(sw.x)
     ylim = isnothing(ylims) ? panel_limits(yt, yt) : ylims
+    
     ax = Axis(fig[1, 1];
-        xlabel, ylabel = L"F_T/F_T^\ast",
-        xscale, xticks, limits = ((minimum(sw.x), maximum(sw.x)), ylim))
+        xlabel,
+        xscale, xticks, limits = ((minimum(sw.x), maximum(sw.x)), ylim),
+        alignmode = Makie.Mixed(left = Makie.Protrusion(125), right = Makie.Protrusion(90)))
+        
+    Label(fig[1, 1, Makie.Left()], L"F_T/F_T^\ast", rotation = pi/2, fontsize = 29, font = LM_FONT)
     lines!(ax, sw.x[order], yt[order]; color = BLUE, linewidth = 3, label = "Numerics")
     if show_zero
         hlines!(ax, [0.0]; color = (:black, 0.55), linewidth = 1)
     end
+    
+    Makie.colsize!(fig.layout, 1, Makie.Fixed(1285))
+    Makie.rowsize!(fig.layout, 1, Makie.Fixed(355))
+    Makie.resize_to_layout!(fig)
+
     axislegend(ax; position = :rb, backgroundcolor = (:white, 0.86), framecolor = (:black, 0.45))
     save(outfile * ".pdf", fig)
     save(outfile * ".png", fig; px_per_unit = 2)
@@ -535,13 +521,15 @@ function main()
         ylims = (-32.0, 32.0),
         highlight_x = KAPPA_HIGHLIGHTS,
         legend_position = :rb)
+    yt3  = sw3.thrust .* d ./ F_T_star
+    pad3 = 0.08 * (maximum(yt3) - minimum(yt3))
     make_single_axis_panel(sw3, d, F_T_star;
         xlabel = L"Re",
         outfile = joinpath(FIG_DIR, "plot_thrust_sweeps_Re"),
         xscale = log10,
         xticks = (10.0 .^ collect(4:8),
                   [L"10^{4}", L"10^{5}", L"10^{6}", L"10^{7}", L"10^{8}"]),
-        ylims = (0.0, maximum(sw3.thrust .* d ./ F_T_star) * 1.08),
+        ylims = (minimum(yt3) - pad3, maximum(yt3) + pad3),
         show_zero = false)
     make_sweep_panel(sw4, alpha_xM_rigid, d, F_T_star;
         xlabel = L"x_M/L",
