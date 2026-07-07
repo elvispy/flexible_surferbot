@@ -473,22 +473,33 @@ function make_single_axis_panel(sw, d, F_T_star; xlabel, outfile,
     order = sortperm(sw.x)
     ylim = isnothing(ylims) ? panel_limits(yt, yt) : ylims
     
+    # Standalone-panel font scale: this panel is embedded at 0.7\textwidth as a
+    # single sub-figure (Fig 3c), unlike the other make_sweep_panel outputs of
+    # this script (embedded at full \textwidth), so it needs larger absolute
+    # font sizes to print at the same size as neighbouring panels. Factor
+    # measured directly from the compiled PDF: panel-b tick digit height
+    # (4.98pt) / panel-c tick digit height (3.0pt) = 1.66.
+    FONT_SCALE = 1.66
     ax = Axis(fig[1, 1];
         xlabel,
+        xlabelsize = 29 * FONT_SCALE,
+        xticklabelsize = 26 * FONT_SCALE,
+        yticklabelsize = 26 * FONT_SCALE,
         xscale, xticks, limits = ((minimum(sw.x), maximum(sw.x)), ylim),
-        alignmode = Makie.Mixed(left = Makie.Protrusion(125), right = Makie.Protrusion(90)))
-        
-    Label(fig[1, 1, Makie.Left()], L"F_T/F_T^\ast", rotation = pi/2, fontsize = 29, font = LM_FONT)
+        alignmode = Makie.Mixed(left = Makie.Protrusion(125 * FONT_SCALE), right = Makie.Protrusion(90 * FONT_SCALE)))
+
+    Label(fig[1, 1, Makie.Left()], L"F_T/F_T^\ast", rotation = pi/2, fontsize = 29 * FONT_SCALE, font = LM_FONT)
     lines!(ax, sw.x[order], yt[order]; color = BLUE, linewidth = 3, label = "Numerics")
     if show_zero
         hlines!(ax, [0.0]; color = (:black, 0.55), linewidth = 1)
     end
-    
+
     Makie.colsize!(fig.layout, 1, Makie.Fixed(1285))
     Makie.rowsize!(fig.layout, 1, Makie.Fixed(355))
     Makie.resize_to_layout!(fig)
 
-    axislegend(ax; position = :rb, backgroundcolor = (:white, 0.86), framecolor = (:black, 0.45))
+    axislegend(ax; position = :rt, labelsize = 26 * FONT_SCALE,
+        backgroundcolor = (:white, 0.86), framecolor = (:black, 0.45))
     save(outfile * ".pdf", fig)
     save(outfile * ".png", fig; px_per_unit = 2)
     println("Saved $outfile.{pdf,png}")
