@@ -42,22 +42,32 @@ const RED = RGBf(0.78, 0.12, 0.18)
 const ALPHA_COLOR = RGBf(0.00, 0.45, 0.25)
 const GOLD = RGBf(0.84, 0.55, 0.10)
 const GRAY = RGBf(0.25, 0.25, 0.25)
-const LM_FONT = "Latin Modern Roman"
+# The paper body (jfm.cls) uses plain LaTeX default Computer Modern, and
+# Plots.jl/GR's fontfamily="Computer Modern" (see plot_fig4_Aguero2026.jl)
+# resolves to the same family. "Latin Modern" is a distinct, only visually-
+# similar redesign -- using it here made every Makie-generated label/tick
+# subtly mismatched against the rest of the paper. cm-unicode ships true
+# Computer Modern as OTF, so text glyphs now match exactly. MathTeXEngine
+# still needs a math font with an OpenType MATH table for symbol layout;
+# cm-unicode ships no such file, so math symbols keep Latin Modern Math
+# (harder to notice a mismatch on symbols than on the italic and digit
+# glyphs of the tick labels/legend text most of these figures show).
+const CMU_DIR = "/usr/local/texlive/2025/texmf-dist/fonts/opentype/public/cm-unicode"
+const LM_FONT = joinpath(CMU_DIR, "cmunrm.otf")
 const XM_HIGHLIGHTS = [0.12, 0.183, 0.272]
 
 function setup_lm_mathfonts()
     MTE_ID = Base.PkgId(Base.UUID("0a4f8689-d25c-4efe-a92b-7142dfc1aa53"), "MathTeXEngine")
     MTE = get(Base.loaded_modules, MTE_ID, nothing)
     MTE === nothing && return
-    LM = "/usr/local/texlive/2025/texmf-dist/fonts/opentype/public/lm"
     LM_MATH = "/usr/local/texlive/2025/texmf-dist/fonts/opentype/public/lm-math/latinmodern-math.otf"
     isfile(LM_MATH) || return
     try
         MTE.set_texfont_family!(
-            regular    = joinpath(LM, "lmroman10-regular.otf"),
-            italic     = joinpath(LM, "lmroman10-italic.otf"),
-            bold       = joinpath(LM, "lmroman10-bold.otf"),
-            bolditalic = joinpath(LM, "lmroman10-bolditalic.otf"),
+            regular    = joinpath(CMU_DIR, "cmunrm.otf"),
+            italic     = joinpath(CMU_DIR, "cmunti.otf"),
+            bold       = joinpath(CMU_DIR, "cmunbx.otf"),
+            bolditalic = joinpath(CMU_DIR, "cmunbi.otf"),
             math       = LM_MATH,
         )
     catch
@@ -377,6 +387,8 @@ function makie_figure()
             yticklabelsize = 26,
             xticklabelfont = LM_FONT,
             yticklabelfont = LM_FONT,
+            xlabelfont = LM_FONT,
+            ylabelfont = LM_FONT,
             xgridvisible = false,
             ygridvisible = false,
             topspinevisible = true,
@@ -411,10 +423,10 @@ function add_dual_axis!(fig, sw, alpha_sw, d, F_T_star; xlabel, xscale=identity,
     Label(fig[1, 1, Makie.Left()], L"F_T/F_T^\ast", rotation = pi/2, fontsize = 29, font = LM_FONT)
     l1 = lines!(ax, sw.x[order], yt[order]; color = BLUE, linewidth = 3)
     handles = [l1]
-    labels = [L"Numerics"]
+    labels = [L"\text{Numerics}"]
     if show_Sxx
         l2 = lines!(ax, sw.x[order], yS[order]; color = RED, linewidth = 3, linestyle = :dash)
-        push!(handles, l2); push!(labels, L"Longuet-Higgins")
+        push!(handles, l2); push!(labels, L"\text{Longuet{-}Higgins}")
     end
     if show_zero
         hlines!(ax, [0.0]; color = (:black, 0.55), linewidth = 1)
@@ -435,7 +447,7 @@ function add_dual_axis!(fig, sw, alpha_sw, d, F_T_star; xlabel, xscale=identity,
         ygridvisible = false,
         backgroundcolor = :transparent,
         limits = ((minimum(sw.x), maximum(sw.x)), (-1.1, 1.1)),
-        ytickformat = vals -> [latexstring(@sprintf("%.1f", v)) for v in vals],
+        ytickformat = vals -> [@sprintf("%.1f", v) for v in vals],
         alignmode = Makie.Mixed(right = Makie.Protrusion(90)))
     hidespines!(axr, :l, :b, :t)
     hidexdecorations!(axr; grid = false)

@@ -81,12 +81,35 @@ const MAKIE_GRAY = CM.RGBf(0.25, 0.25, 0.25)
 const COLUMN_COLORS = [CM.RGBf(0.58, 0.58, 0.58), CM.RGBf(0.35, 0.35, 0.35), CM.RGBf(0.10, 0.10, 0.10)]
 const COLUMN_LINEWIDTHS = [1.5, 3.0, 4.5]
 const COLUMN_SPINEWIDTHS = [1.0, 2.0, 3.0]
-const LM_FONT = "Latin Modern Roman"
+# See plot_thrust_sweeps.jl setup_lm_mathfonts() for why this is cm-unicode
+# (true Computer Modern, matching the paper body and STYLE.fontfamily above)
+# rather than "Latin Modern Roman".
+const CMU_DIR = "/usr/local/texlive/2025/texmf-dist/fonts/opentype/public/cm-unicode"
+const LM_FONT = joinpath(CMU_DIR, "cmunrm.otf")
+
+function setup_lm_mathfonts()
+    MTE_ID = Base.PkgId(Base.UUID("0a4f8689-d25c-4efe-a92b-7142dfc1aa53"), "MathTeXEngine")
+    MTE = get(Base.loaded_modules, MTE_ID, nothing)
+    MTE === nothing && return
+    LM_MATH = "/usr/local/texlive/2025/texmf-dist/fonts/opentype/public/lm-math/latinmodern-math.otf"
+    isfile(LM_MATH) || return
+    try
+        MTE.set_texfont_family!(
+            regular    = joinpath(CMU_DIR, "cmunrm.otf"),
+            italic     = joinpath(CMU_DIR, "cmunti.otf"),
+            bold       = joinpath(CMU_DIR, "cmunbx.otf"),
+            bolditalic = joinpath(CMU_DIR, "cmunbi.otf"),
+            math       = LM_MATH,
+        )
+    catch
+    end
+end
 const THRUST_CACHE_PATH = joinpath(@__DIR__, "..", "output", "jld2", "thrust_sweeps.jld2")
 const ALPHA_CACHE_PATH = joinpath(@__DIR__, "..", "output", "jld2", "alpha_sweep_kappa_farfield.jld2")
 const GRID_ALPHA_CSV = joinpath(@__DIR__, "..", "output", "csv", "sweeper_coupled_full_grid.csv")
 const KAPPA_HIGHLIGHTS = [1.71103172e-3, 5.43e-3, 2.22e-2]
 const XM_HIGHLIGHTS = [0.12, 0.183, 0.272]
+const SNAPSHOT_CACHE_PATH = joinpath(@__DIR__, "..", "output", "jld2", "kappa_snapshots_cache.jld2")
 
 const STYLE = (
     framestyle    = :box,
@@ -108,6 +131,30 @@ function paper_snapshot_ops()
         (kappa=2.22e-2, xM=xM_sb,  file_xM=nothing, label="(e)"),
     ]
     return bp, EI_scale, xM_sb, ops
+end
+
+function get_cached_snapshot(op, EI_scale)
+    d = isfile(SNAPSHOT_CACHE_PATH) ? JLD2.load(SNAPSHOT_CACHE_PATH) : Dict{String,Any}()
+    key_res = @sprintf("res_k%.3e_x%.3f", op.kappa, op.xM)
+    key_mod = @sprintf("mod_k%.3e_x%.3f", op.kappa, op.xM)
+    
+    if haskey(d, key_res) && haskey(d, key_mod)
+        println("Loaded snapshot from cache: κ=$(op.kappa) xM=$(op.xM)")
+        return d[key_res], d[key_mod]
+    else
+        @info @sprintf("Solving snapshot κ=%.2e  xM/L=%.3f", op.kappa, op.xM)
+        EI = op.kappa * EI_scale
+        p = build_params(; EI, xM_norm=op.xM)
+        result = Surferbot.flexible_solver(p)
+        modal = Surferbot.decompose_raft_freefree_modes(result; num_modes=10, verbose=false)
+        
+        d[key_res] = result
+        d[key_mod] = modal
+        mkpath(dirname(SNAPSHOT_CACHE_PATH))
+        JLD2.save(SNAPSHOT_CACHE_PATH, d)
+        
+        return result, modal
+    end
 end
 
 function make_wave_panel(result; ylim=1500, small=false,
@@ -212,11 +259,7 @@ function main_paper_snapshots(fig_dir)
     results = []
     modals = []
     for op in ops
-        @info @sprintf("Solving κ=%.2e  xM/L=%.3f", op.kappa, op.xM)
-        EI = op.kappa * EI_scale
-        p = build_params(; EI, xM_norm=op.xM)
-        result = Surferbot.flexible_solver(p)
-        modal = Surferbot.decompose_raft_freefree_modes(result; num_modes=10, verbose=false)
+        result, modal = get_cached_snapshot(op, EI_scale)
         push!(results, result)
         push!(modals, modal)
     end
@@ -237,10 +280,8 @@ function main_5panel(fig_dir)
 
     results = []
     for op in ops
-        @info @sprintf("Solving κ=%.2e  xM/L=%.3f", op.kappa, op.xM)
-        EI = op.kappa * EI_scale
-        p  = build_params(; EI, xM_norm=op.xM)
-        push!(results, Surferbot.flexible_solver(p))
+        result, _ = get_cached_snapshot(op, EI_scale)
+        push!(results, result)
     end
 
     # Common y-axis limit across all panels
@@ -289,6 +330,11 @@ function makie_snapshot_theme!()
             xticklabelsize = 22,
             yticklabelsize = 22,
             titlesize = 26,
+            xticklabelfont = LM_FONT,
+            yticklabelfont = LM_FONT,
+            xlabelfont = LM_FONT,
+            ylabelfont = LM_FONT,
+            titlefont = LM_FONT,
             xgridvisible = false,
             ygridvisible = false,
             topspinevisible = true,
@@ -349,7 +395,7 @@ function load_motor_alpha_from_csv(bp; target_kappa)
     return (; x = Float64.(rows.xM_over_L[order]), alpha = Float64.(rows.alpha[order]))
 end
 
-function draw_sweep_axis!(figpos, sweep; legend_position = :rb,
+function draw_sweep_axis!(figpos, labelpos, sweep; legend_position = :rb,
                            sweep_labelsize = 29, sweep_ticksize = 26,
                            legend_labelsize = 26, legend_patchsize = (55, 23),
                            highlight_colors = fill(MAKIE_GRAY, length(sweep.highlights)),
@@ -357,16 +403,19 @@ function draw_sweep_axis!(figpos, sweep; legend_position = :rb,
     # sweep_labelsize/sweep_ticksize override the column-panel theme defaults
     # for this full-width row (scale 0.416): 22→9.2pt, 19→7.9pt
     ylim = 1.08 * maximum(abs.(vcat(sweep.y, sweep.ylh, 0.0)))
+    
     ax = CM.Axis(figpos;
         xlabel = sweep.xlabel,
-        ylabel = L"F_T/F_T^\ast",
         xlabelsize = sweep_labelsize,
-        ylabelsize = sweep_labelsize,
         xticklabelsize = sweep_ticksize,
         yticklabelsize = sweep_ticksize,
         xscale = sweep.xscale,
         xticks = sweep.xticks,
-        limits = ((minimum(sweep.x), maximum(sweep.x)), (-ylim, ylim)))
+        limits = ((minimum(sweep.x), maximum(sweep.x)), (-ylim, ylim)),
+        alignmode = CM.Mixed(left = CM.Protrusion(125), right = CM.Protrusion(90)))
+        
+    CM.Label(labelpos, L"F_T/F_T^\ast", rotation = pi/2, fontsize = sweep_labelsize, font = LM_FONT)
+        
     order = sortperm(sweep.x)
     l1 = CM.lines!(ax, sweep.x[order], sweep.y[order]; color = MAKIE_BLUE, linewidth = 2.6)
     l2 = CM.lines!(ax, sweep.x[order], sweep.ylh[order]; color = MAKIE_RED, linewidth = 2.6, linestyle = :dash)
@@ -390,12 +439,14 @@ function draw_sweep_axis!(figpos, sweep; legend_position = :rb,
         ygridvisible = false,
         backgroundcolor = :transparent,
         limits = ((minimum(sweep.x), maximum(sweep.x)), (-1.1, 1.1)),
-        ytickformat = vals -> [latexstring(@sprintf("%.1f", v)) for v in vals])
+        ytickformat = vals -> [@sprintf("%.1f", v) for v in vals],
+        alignmode = CM.Mixed(right = CM.Protrusion(90)))
     CM.hidespines!(axr, :l, :b, :t)
     CM.hidexdecorations!(axr; grid = false)
     aorder = sortperm(sweep.alpha_x)
     l3 = CM.lines!(axr, sweep.alpha_x[aorder], sweep.alpha[aorder]; color = MAKIE_ALPHA, linewidth = 2.6)
-    CM.axislegend(ax, [l1, l2, l3], [L"Numerics", L"Longuet-Higgins", L"\alpha"];
+
+    CM.axislegend(ax, [l1, l2, l3], [L"\text{Numerics}", L"\text{Longuet{-}Higgins}", L"\alpha"];
         position = legend_position, backgroundcolor = (:white, 0.86), framecolor = (:black, 0.45),
         labelsize = legend_labelsize, patchsize = legend_patchsize)
     return ax
@@ -432,11 +483,7 @@ function solve_snapshot_ops(ops)
     results = []
     modals = []
     for op in ops
-        @info @sprintf("Solving grid snapshot κ=%.2e  xM/L=%.3f", op.kappa, op.xM)
-        EI = op.kappa * EI_scale
-        p = build_params(; EI, xM_norm=op.xM)
-        result = Surferbot.flexible_solver(p)
-        modal = Surferbot.decompose_raft_freefree_modes(result; num_modes=10, verbose=false)
+        result, modal = get_cached_snapshot(op, EI_scale)
         push!(results, result)
         push!(modals, modal)
     end
@@ -453,6 +500,7 @@ function wave_ylim(results)
 end
 
 function make_snapshot_grid(fig_dir; kind::Symbol, op_indices, filename, column_titles)
+    setup_lm_mathfonts()
     makie_snapshot_theme!()
     _, _, _, all_ops = paper_snapshot_ops()
     ops = all_ops[op_indices]
@@ -463,7 +511,7 @@ function make_snapshot_grid(fig_dir; kind::Symbol, op_indices, filename, column_
 
     fig = CM.Figure(size = (1500, 995), backgroundcolor = :white)
     CM.rowsize!(fig.layout, 1, CM.Fixed(355))  # keep sweep row at original height
-    draw_sweep_axis!(fig[1, 1:3], sweep; legend_position = :rb,
+    draw_sweep_axis!(fig[1, 1:3], fig[1, 1:3, CM.Left()], sweep; legend_position = :rb,
         highlight_colors = COLUMN_COLORS, highlight_linewidths = COLUMN_LINEWIDTHS)
 
     for j in 1:3
