@@ -34,7 +34,7 @@ function plot_modes()
     beta_vals = vcat(0.0, 0.0, Surferbot.freefree_betaL_roots(n_modes - 2))
 
     y_all = vcat(modes...)
-    ylim_abs = max(abs(minimum(y_all)), abs(maximum(y_all))) * 1.12
+    ylim_abs = max(abs(minimum(y_all)), abs(maximum(y_all))) * 1.35
     ylims = (-ylim_abs, ylim_abs)
 
     set_theme!(Theme(
