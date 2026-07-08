@@ -31,6 +31,7 @@ end
 function plot_modes()
     xi, modes = freefree_modes_l2(5)
     n_modes = length(modes)
+    beta_vals = vcat(0.0, 0.0, Surferbot.freefree_betaL_roots(n_modes - 2))
 
     y_all = vcat(modes...)
     ylim_abs = max(abs(minimum(y_all)), abs(maximum(y_all))) * 1.12
@@ -69,8 +70,9 @@ function plot_modes()
         hlines!(ax, [0.0]; color = (:black, 0.25), linewidth = 0.8)
         lines!(ax, xi, modes[i]; color = :black, linewidth = 1.8)
         label_y = ylim_abs * 0.90
+        label = @sprintf("n = %d,\\; \\beta_n = %.2f", n, beta_vals[i])
         text!(ax, -0.50, label_y;
-            text = latexstring("n = $n"),
+            text = latexstring(label),
             fontsize = 20, font = LM_FONT,
             align = (:left, :top))
     end

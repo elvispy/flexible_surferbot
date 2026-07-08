@@ -30,6 +30,7 @@ FIGURES := \
 	$(FIG_DIR)/plot_kappa_snapshot_grid_motor_position.pdf \
 	$(FIG_DIR)/plot_thrust_beam_and_LH_LH_cbrt.pdf \
 	$(FIG_DIR)/plot_dimensionless_diagnostics_LH_cpl_theo.pdf \
+	$(FIG_DIR)/plot_freefree_modes.pdf \
 	$(FIG_DIR)/plot_beam_num_modes_cmp_cpl.pdf \
 	$(FIG_DIR)/plot_fig10_modal_maps_3x3.pdf \
 	$(FIG_DIR)/plot_fig4_Aguero2026_1.pdf
@@ -60,6 +61,9 @@ $(FIG_DIR)/plot_thrust_beam_and_LH_LH_cbrt.pdf: plot_thrust_beam_and_LH.jl \
 $(FIG_DIR)/plot_dimensionless_diagnostics_LH_cpl_theo.pdf: plot_dimensionless_diagnostics_LH.jl \
 		$(SWEEP_CPL_JLD2) $(SWEEP_UCPL_JLD2) $(SWEEP_CPL_CSV) $(SWEEP_UCPL_CSV)
 	$(JULIA) --threads auto $<
+
+$(FIG_DIR)/plot_freefree_modes.pdf: plot_freefree_modes.jl
+	$(JULIA) $<
 
 $(FIG_DIR)/plot_beam_num_modes_cmp_cpl.pdf: plot_beam_num_modes_cmp.jl \
 		$(SWEEP_CPL_JLD2) $(SWEEP_UCPL_JLD2) $(SWEEP_CPL_CSV)
