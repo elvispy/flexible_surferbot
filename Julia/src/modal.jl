@@ -768,29 +768,30 @@ end
 """
     capillary_endpoint_map(psi_end, psi_start, s_vec, s_vec_left)
 
-Capillary endpoint coupling matrix `C^σ_mn = ψ_end[m]·s_vec[n] - ψ_start[m]·s_vec_left[n]`
-(dimensional analogue of paper eq:Ksigma_linear_map_app, before the `d·σ`
-prefactor; multiply the result by that prefactor at the call site).
+Capillary endpoint coupling matrix `C^σ_mn = ψ_end[m]·s_vec[n] + ψ_start[m]·s_vec_left[n]`
+(dimensional analogue of paper eq:Ksigma_linear_map_app, matching that
+equation's `+` exactly; multiply the result by the `d·σ` prefactor at the
+call site).
 
-The second term is SUBTRACTED, not added: `s_vec`/`s_vec_left` are
-slope/derivative quantities, which pick up an extra sign flip under
-reflection relative to a position quantity like `psi_end`/`psi_start`
-(`d(-x)/dx = -1`). This is required for `C^σ` to be exactly parity-block-
-diagonal (couple only same-parity modes) given that `psi_start[m] =
-(-1)^m·psi_end[m]` and `s_vec_left[n] = (-1)^(n+1)·s_vec[n]` individually hold
-(both verified against the free-free mode basis's own parity). Getting this
-sign wrong silently breaks the C1 symmetry a physically symmetric problem
-must have (e.g. forcing exactly at the raft's center must produce an exactly
-antisymmetric-mode-free response) without erroring — the previous `+` sign
-coupled opposite-parity modes and made that antisymmetric response spuriously
-nonzero.
+Requires `s_vec`/`s_vec_left` (the exterior slopes η'(±L/2^±)) to already
+carry the same sign convention as the validated "Fix 2" edge condition in
+`assemble_flexible_system` (right-edge quantities pick up an extra minus
+relative to the mirror-image left-edge quantities — see
+`prescribed_wn_diagonal_impedance.jl`'s `edge_slopes`). With that convention,
+`psi_start[m] = (-1)^m·psi_end[m]` and `s_vec_left[n] = (-1)^n·s_vec[n]`
+individually hold (both verified against the free-free mode basis's own
+parity and the validated a_vec/a_vec_left pattern), which makes `C^σ` exactly
+parity-block-diagonal (couples only same-parity modes), as it must: forcing
+exactly at the raft's center must produce an exactly antisymmetric-mode-free
+response. A missing sign anywhere in this chain breaks that silently, without
+erroring, by coupling opposite-parity modes instead.
 
 # Returns
 `N×N` matrix, N = length(psi_end) = length(psi_start) = length(s_vec) = length(s_vec_left).
 """
 function capillary_endpoint_map(psi_end::AbstractVector{<:Real}, psi_start::AbstractVector{<:Real},
                                  s_vec::AbstractVector{<:Complex}, s_vec_left::AbstractVector{<:Complex})
-    return psi_end * transpose(s_vec) .- psi_start * transpose(s_vec_left)
+    return psi_end * transpose(s_vec) .+ psi_start * transpose(s_vec_left)
 end
 
 end

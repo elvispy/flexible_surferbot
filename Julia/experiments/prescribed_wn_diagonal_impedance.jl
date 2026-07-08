@@ -62,8 +62,19 @@ Bumped from 1 → 2 when the postprocess Bernoulli sign convention was corrected
 automatically bypassed because their SHA-1 key no longer matches.
 Bumped from 2 → 3 to add domain-end radiation amplitudes `a_vec` (η at x=+ℓ
 per prescribed mode, Ψ-basis) to the slim payload. Needed for LH asymmetry.
+Bumped from 3 → 4 to add capillary edge slopes `s_vec`/`s_vec_left`
+(η'(±L/2^±) per prescribed mode, Ψ-basis) to the slim payload. Needed to
+assemble the capillary endpoint map C̄^σ (paper eq:matrix_component_app),
+previously omitted from the modal ROM.
+Bumped from 4 → 5: `edge_slopes`'s right-edge extraction was missing the sign
+flip that the validated Fix 2 edge condition in assemble_flexible_system
+applies (S12 coefficient is -Lambda/We at the right edge vs +Lambda/We at the
+left, using the mirror-image stencils DxFree[1,:] / DxFree[end,:]). Without
+it, s_vec/s_vec_left coupled opposite-parity modes in the capillary endpoint
+map instead of same-parity ones. v4 cache entries have the wrong sign on
+s_vec and must not be reused.
 """
-const PRESSURE_CONVENTION_VERSION = 3
+const PRESSURE_CONVENTION_VERSION = 5
 
 function operator_signature(params::Surferbot.FlexibleParams; num_modes_basis::Int=DEFAULT_NUM_MODES_BASIS)
     derived = derive_params(params)
@@ -295,12 +306,55 @@ function reconstruct_dynamic_fields(params::Surferbot.FlexibleParams, derived, p
     )
 end
 
+"""
+    edge_slopes(params, assembled, phi_z_flat)
+
+Exterior free-surface slopes η'(±L/2^±) just outside the raft edges, computed
+from the same one-sided FD stencils (`idxLeftFreeSurf`/`idxRightFreeSurf`,
+`getNonCompactFDmatrix`) that `assemble_flexible_system` uses to impose the
+capillary shear boundary condition on φ_z (Surferbot.jl, Fix 2 edge rows).
+Reusing that exact stencil guarantees the same discretization as the
+validated full-PDE edge condition (dimensional analogue of paper
+eq:capillary_boundary_stiffness_app / eqn:shear-edge-harm).
+
+`phi_z_flat` is the flat (length NP) φ_z solution vector for one prescribed
+mode. Returns (s_plus, s_minus) = (η'(L/2^+), η'(-L/2^-)), dimensionless
+slopes (scale-invariant: identical whether evaluated in dimensional or
+bar-nondimensional coordinates).
+"""
+function edge_slopes(params::Surferbot.FlexibleParams, assembled, phi_z_flat::AbstractVector{<:Complex})
+    idxL = assembled.indices.idxLeftFreeSurf
+    idxR = assembled.indices.idxRightFreeSurf
+    ooa = params.ooa
+    DxL = getNonCompactFDmatrix(length(idxL), 1.0, 1, ooa)
+    DxR = getNonCompactFDmatrix(length(idxR), 1.0, 1, ooa)
+
+    dphiz_dx_left  = (DxL[end, :]' * ComplexF64.(phi_z_flat[idxL])) / assembled.derived.dx
+    # BUG FIX: the right-edge extraction needs the SAME minus sign that the
+    # validated "Fix 2" edge condition in assemble_flexible_system applies
+    # (S12[CC[end],R] = (-Lambda/We) .* DxFree[1,:], vs +Lambda/We at the left
+    # with the mirror-image DxFree[end,:]). This function's own docstring cites
+    # that code as the precedent for reusing this exact stencil pair, but the
+    # accompanying sign was dropped. Proof this was missing: without it,
+    # s_vec/s_vec_left fed into the capillary endpoint map coupled
+    # opposite-parity modes instead of same-parity ones, and symmetric forcing
+    # at xM=0 produced a spurious nonzero antisymmetric response instead of
+    # exactly zero.
+    dphiz_dx_right = -(DxR[1, :]'  * ComplexF64.(phi_z_flat[idxR])) / assembled.derived.dx
+
+    conv = 1 / (im * params.omega * assembled.derived.t_c)   # same φ_z → η conversion as eta_adim
+    s_minus = ComplexF64(conv * dphiz_dx_left)    # η'(-L/2^-)
+    s_plus  = ComplexF64(conv * dphiz_dx_right)   # η'(L/2^+)
+    return s_plus, s_minus
+end
+
 function prescribed_column_payload(params::Surferbot.FlexibleParams, assembled, basis_ctx, mode_label::Int)
     target = prescribed_target(basis_ctx, params, assembled.derived, mode_label)
     reduced = build_reduced_system(assembled, target.phi_z_target)
     phi, phi_z = solve_prescribed_mode(assembled, reduced, target.phi_z_target)
     fields = reconstruct_dynamic_fields(params, assembled.derived, phi, phi_z)
     p_modal = project_modal_pressure(basis_ctx, assembled.derived.d, fields.p_dyn)
+    s_plus, s_minus = edge_slopes(params, assembled, vec(phi_z))
 
     other_idx = setdiff(1:length(p_modal), [target.column_index])
     offdiag_ratio = norm(p_modal[other_idx]) / max(abs(p_modal[target.column_index]), eps())
@@ -324,6 +378,8 @@ function prescribed_column_payload(params::Surferbot.FlexibleParams, assembled, 
         system_diagnostics = reduced.diagnostics,
         a_n       = ComplexF64(fields.eta[end]),
         a_n_left  = ComplexF64(fields.eta[1]),
+        s_n       = s_plus,
+        s_n_left  = s_minus,
     )
 end
 
@@ -388,6 +444,8 @@ function empirical_modal_pressure_map(
     offdiag_ratio = Float64[payload.offdiag_ratio for payload in column_payloads]
     a_vec_raw      = ComplexF64[payload.a_n      for payload in column_payloads]
     a_vec_left_raw = ComplexF64[payload.a_n_left for payload in column_payloads]
+    s_vec_raw      = ComplexF64[payload.s_n      for payload in column_payloads]
+    s_vec_left_raw = ComplexF64[payload.s_n_left for payload in column_payloads]
 
     result = (
         params = params_snapshot(params),
@@ -412,6 +470,8 @@ function empirical_modal_pressure_map(
         offdiag_ratio = offdiag_ratio,
         a_vec_raw      = collect(ComplexF64.(a_vec_raw)),
         a_vec_left_raw = collect(ComplexF64.(a_vec_left_raw)),
+        s_vec_raw      = collect(ComplexF64.(s_vec_raw)),
+        s_vec_left_raw = collect(ComplexF64.(s_vec_left_raw)),
         columns = keep_columns ? column_payloads : NamedTuple[],
     )
 
@@ -433,6 +493,10 @@ function slim_modal_pressure_map(result; cache_version::Int=1)
     T = transforms.raw_from_psi                                   # real N×N
     a_vec      = ComplexF64.(transpose(T) * result.a_vec_raw)
     a_vec_left = ComplexF64.(transpose(T) * result.a_vec_left_raw)
+    # s_vec: η'(±L/2^±) per mode — same linear-functional transform as a_vec,
+    # since η'(edge) = (s^Φ)ᵌ q^Φ is covariant under the same q basis change.
+    s_vec      = ComplexF64.(transpose(T) * result.s_vec_raw)
+    s_vec_left = ComplexF64.(transpose(T) * result.s_vec_left_raw)
     return (
         cache_version = cache_version,
         params = result.params,
@@ -461,6 +525,8 @@ function slim_modal_pressure_map(result; cache_version::Int=1)
         offdiag_ratio_raw = collect(Float64.(result.offdiag_ratio)),
         a_vec      = collect(ComplexF64.(a_vec)),
         a_vec_left = collect(ComplexF64.(a_vec_left)),
+        s_vec      = collect(ComplexF64.(s_vec)),
+        s_vec_left = collect(ComplexF64.(s_vec_left)),
     )
 end
 
@@ -490,6 +556,8 @@ function zero_modal_pressure_map(params::Surferbot.FlexibleParams; num_modes_bas
         offdiag_ratio = zeros(Float64, length(indices)),
         a_vec_raw      = zeros(ComplexF64, length(indices)),
         a_vec_left_raw = zeros(ComplexF64, length(indices)),
+        s_vec_raw      = zeros(ComplexF64, length(indices)),
+        s_vec_left_raw = zeros(ComplexF64, length(indices)),
     )
     return slim_modal_pressure_map(raw_result)
 end
