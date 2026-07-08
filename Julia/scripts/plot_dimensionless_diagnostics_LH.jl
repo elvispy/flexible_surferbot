@@ -144,12 +144,13 @@ function theoretical_modal_context(params; output_dir::AbstractString)
         c_hydro      = derived.d * fparams.rho * fparams.g,
         F0           = fparams.motor_inertia * fparams.omega^2,
         forcing_width = fparams.forcing_width,
-        # Capillary endpoint map C^σ_mn = d·σ·(W_m(L/2) s_n^+ + W_m(-L/2) s_n^-),
-        # dimensional analogue of paper eq:Ksigma_linear_map_app (Λ/We absorbed
-        # into the explicit d·σ prefactor, matching how c_hydro absorbs ΛΓ/Fr²).
+        # Capillary endpoint map (Λ/We absorbed into the explicit d·σ prefactor,
+        # matching how c_hydro absorbs ΛΓ/Fr²) -- see Surferbot.capillary_endpoint_map
+        # for the sign-convention proof (a past `+` here silently broke the
+        # A(xM=0)=0 symmetry a physically symmetric problem must have).
         C_sigma      = derived.d * fparams.sigma .*
-                        (Psi[end, :] * transpose(ComplexF64.(payload.s_vec)) .+
-                         Psi[1,   :] * transpose(ComplexF64.(payload.s_vec_left))),
+                        capillary_endpoint_map(Psi[end, :], Psi[1, :],
+                            ComplexF64.(payload.s_vec), ComplexF64.(payload.s_vec_left)),
     )
 end
 

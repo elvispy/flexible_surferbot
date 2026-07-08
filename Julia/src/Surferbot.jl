@@ -34,7 +34,8 @@ using .Modal: ModalDecomposition,
               weighted_mgs,
               find_filtered_minima,
               dedup_resonance_runs,
-              cluster_branches
+              cluster_branches,
+              capillary_endpoint_map
 using .Migration: matlab_motor_position_ei_sources,
                   load_motor_position_ei_export,
                   artifact_from_motor_position_ei_export
@@ -81,6 +82,7 @@ export FlexibleParams,
        find_filtered_minima,
        dedup_resonance_runs,
        cluster_branches,
+       capillary_endpoint_map,
        SweepSummary,
        SweepArtifact,
        apply_parameter_overrides,

@@ -15,7 +15,8 @@ export ModalDecomposition,
        weighted_mgs,
        find_filtered_minima,
        dedup_resonance_runs,
-       cluster_branches
+       cluster_branches,
+       capillary_endpoint_map
 
 """
     ModalDecomposition
@@ -762,6 +763,34 @@ function cluster_branches(logK_pts, xM_pts; resonance_n_pts::Int=20)
         push!(lk_out, NaN); push!(xm_out, NaN)
     end
     return lk_out, xm_out, resonance_lks
+end
+
+"""
+    capillary_endpoint_map(psi_end, psi_start, s_vec, s_vec_left)
+
+Capillary endpoint coupling matrix `C^σ_mn = ψ_end[m]·s_vec[n] - ψ_start[m]·s_vec_left[n]`
+(dimensional analogue of paper eq:Ksigma_linear_map_app, before the `d·σ`
+prefactor; multiply the result by that prefactor at the call site).
+
+The second term is SUBTRACTED, not added: `s_vec`/`s_vec_left` are
+slope/derivative quantities, which pick up an extra sign flip under
+reflection relative to a position quantity like `psi_end`/`psi_start`
+(`d(-x)/dx = -1`). This is required for `C^σ` to be exactly parity-block-
+diagonal (couple only same-parity modes) given that `psi_start[m] =
+(-1)^m·psi_end[m]` and `s_vec_left[n] = (-1)^(n+1)·s_vec[n]` individually hold
+(both verified against the free-free mode basis's own parity). Getting this
+sign wrong silently breaks the C1 symmetry a physically symmetric problem
+must have (e.g. forcing exactly at the raft's center must produce an exactly
+antisymmetric-mode-free response) without erroring — the previous `+` sign
+coupled opposite-parity modes and made that antisymmetric response spuriously
+nonzero.
+
+# Returns
+`N×N` matrix, N = length(psi_end) = length(psi_start) = length(s_vec) = length(s_vec_left).
+"""
+function capillary_endpoint_map(psi_end::AbstractVector{<:Real}, psi_start::AbstractVector{<:Real},
+                                 s_vec::AbstractVector{<:Complex}, s_vec_left::AbstractVector{<:Complex})
+    return psi_end * transpose(s_vec) .- psi_start * transpose(s_vec_left)
 end
 
 end
