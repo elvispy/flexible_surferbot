@@ -32,7 +32,7 @@ const ROW_SPECS = [
 ]
 
 const COL_SPECS = [
-    ColSpec("CSV", nothing),
+    ColSpec("Full Sweep", nothing),
     ColSpec("N = 8", 8),
     ColSpec("N = 4", 4),
 ]
@@ -214,22 +214,22 @@ function main()
 
     CairoMakie.with_theme(CairoMakie.theme_latexfonts()) do
         fig = CairoMakie.Figure(size = (940, 760), backgroundcolor = :white,
-            fontsize = 12, figure_padding = (3, 6, 3, 3))
+            fontsize = 20, figure_padding = (2, 1, 2, 2))
         last_hm = nothing
         panel_axes = Matrix{CairoMakie.Axis}(undef, length(ROW_SPECS), length(COL_SPECS))
         for c in eachindex(COL_SPECS)
             CairoMakie.Label(fig[1, c + 2], COL_SPECS[c].title,
-                fontsize = 15, tellwidth = false)
+                fontsize = 22, tellwidth = false)
         end
-        CairoMakie.Label(fig[2:4, 1], L"x_M/L", rotation = pi / 2,
-            fontsize = 14, tellheight = false)
         for r in eachindex(ROW_SPECS)
-            CairoMakie.Label(fig[r + 1, 2], ROW_SPECS[r].title, rotation = pi / 2,
-                fontsize = 13, tellheight = false)
+            CairoMakie.Label(fig[r + 1, 1], ROW_SPECS[r].title, rotation = pi / 2,
+                fontsize = 20, tellheight = false)
+            CairoMakie.Label(fig[r + 1, 2], L"x_M/L", rotation = pi / 2,
+                fontsize = 22, tellheight = false)
             for c in eachindex(COL_SPECS)
                 ax = CairoMakie.Axis(fig[r + 1, c + 2],
-                    xticklabelsize = 11, yticklabelsize = 11,
-                    xlabelsize = 13, ylabelsize = 13,
+                    xticklabelsize = 18, yticklabelsize = 18,
+                    xlabelsize = 22, ylabelsize = 22,
                     xminorticksvisible = true, xminorgridvisible = false,
                     yminorgridvisible = false)
                 panel_axes[r, c] = ax
@@ -246,13 +246,13 @@ function main()
             r > 1 && CairoMakie.linkxaxes!(panel_axes[1, c], panel_axes[r, c])
         end
         CairoMakie.Colorbar(fig[2:4, 6], last_hm, label = L"\alpha",
-            labelsize = 13, ticklabelsize = 11, width = 15)
-        CairoMakie.colgap!(fig.layout, 4)
-        CairoMakie.rowgap!(fig.layout, 10)
-        CairoMakie.colsize!(fig.layout, 1, CairoMakie.Relative(0.018))
-        CairoMakie.colsize!(fig.layout, 2, CairoMakie.Relative(0.045))
-        CairoMakie.colsize!(fig.layout, 6, CairoMakie.Relative(0.04))
-        CairoMakie.rowsize!(fig.layout, 1, CairoMakie.Relative(0.05))
+            labelsize = 22, ticklabelsize = 18, width = 18)
+        CairoMakie.colgap!(fig.layout, 5)
+        CairoMakie.rowgap!(fig.layout, 18)
+        CairoMakie.colsize!(fig.layout, 1, CairoMakie.Fixed(40))
+        CairoMakie.colsize!(fig.layout, 2, CairoMakie.Fixed(35))
+        CairoMakie.colsize!(fig.layout, 6, CairoMakie.Fixed(42))
+        CairoMakie.rowsize!(fig.layout, 1, CairoMakie.Fixed(34))
 
         out = joinpath(OUTPUT_DIR, "figures", "plot_fig10_modal_maps_3x3.pdf")
         mkpath(dirname(out))
