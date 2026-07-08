@@ -52,6 +52,14 @@ const TERM_TOL    = 0.08   # max xM gap to consider a root "continued"
 
 const RESONANCE_ALPHA_CUTOFF  = 0.04  # 10th-percentile of |α_LH| across xM < this → resonance column
 const RESONANCE_N_PTS         = 20   # number of evenly-spaced xM points to emit per resonance column
+# A low alpha-quantile alone is not sufficient: in the smooth high-κ asymptotic
+# regime it can dip below RESONANCE_ALPHA_CUTOFF without any actual near-singular
+# amplification (verified: |q| there is *below* the typical baseline, not above
+# it). A genuine resonance amplifies the dominant-parity response; require the
+# column's mean(max(|S|,|A|)) to exceed this multiple of the across-grid median
+# to be accepted as a real resonance. Confirmed resonances measure 6-32x this
+# baseline; the false-positive case measured 0.28x — wide margin either way.
+const RESONANCE_AMP_FACTOR    = 2.0
 
 const CURVE_NAMES  = ["S", "A", "eta_1", "eta_end"]
 
@@ -370,6 +378,7 @@ function get_roots_theoretical_LH(artifact, condition_name; output_dir::Abstract
     # Resonance thresholds were calibrated on the coarse grid; re-running on the
     # fine grid introduces spurious stripes at new κ values near true resonances.
     res_candidates = Tuple{Int,Float64}[]
+    col_amp = fill(NaN, length(EI_coarse))
     if condition_name in ("S", "A")
         logEI_coarse = log10.(EI_coarse)
         for (iei, EI) in enumerate(EI_coarse)
@@ -383,6 +392,7 @@ function get_roots_theoretical_LH(artifact, condition_name; output_dir::Abstract
                 push!(abs_eta_1, abs(diag.eta_LH_1))
                 push!(abs_eta_end, abs(diag.eta_LH_end))
             end
+            col_amp[iei] = max(mean(absS), mean(absA))
             alpha_col = @. -(abs_eta_1^2 - abs_eta_end^2) /
                             (abs_eta_1^2 + abs_eta_end^2 + eps())
             q_val = quantile(abs.(alpha_col), 0.15)
@@ -393,6 +403,15 @@ function get_roots_theoretical_LH(artifact, condition_name; output_dir::Abstract
                 push!(res_candidates, (iei, q_val))
             end
         end
+    end
+
+    # Amplitude guard: a low alpha-quantile alone can occur in the smooth
+    # high-κ regime without any real near-singular amplification (see
+    # RESONANCE_AMP_FACTOR). Require genuine amplification relative to the
+    # across-grid baseline before accepting a candidate as a real resonance.
+    if !isempty(res_candidates)
+        baseline = median(filter(isfinite, col_amp))
+        filter!(c -> col_amp[c[1]] > RESONANCE_AMP_FACTOR * baseline, res_candidates)
     end
 
     # Deduplicate resonance candidates via the shared Surferbot helper: without
@@ -467,9 +486,13 @@ function build_LH_plot(artifact, csv_path, output_dir; xlim_min::Float64)
     XLIMS = (xlim_min, max_logK_data)
     YLIMS = (0.0, 0.5)
 
-    # 57 evenly-spaced logK values, extended 0.1 units left of xlim_min so resonances
-    # near the left edge are not missed.
-    scatter_logK = collect(range(xlim_min - 0.1, max_logK_data; length=57))
+    # 181 (not 57): the coarse grid missed narrow resonances entirely (no
+    # scatter_logK column landed inside their width) and under-sampled branches
+    # approaching a resonance into a jagged, spurious-looking wiggle. Safe now
+    # that find_filtered_minima interpolates and resonance stripes are deduped
+    # by run (Surferbot.dedup_resonance_runs) -- neither problem re-appears at
+    # higher density.
+    scatter_logK = collect(range(xlim_min - 0.1, max_logK_data; length=181))
     EI_scatter   = 10 .^ (scatter_logK .+ shift)
 
     results = Dict{String, NamedTuple}()
@@ -488,6 +511,7 @@ function build_LH_plot(artifact, csv_path, output_dir; xlim_min::Float64)
     beam_sync_ctx   = theoretical_modal_context(params; output_dir=output_dir)
     xM_sync         = collect(range(0.0, 0.49; length=401))
     sync_candidates = Dict{String, Vector{Tuple{Int,Float64}}}("S"=>[], "A"=>[])
+    sync_amp        = fill(NaN, length(EI_scatter))
     for (iei, EI) in enumerate(EI_scatter)
         scatter_logK[iei] < xlim_min && continue
         absS=Float64[]; absA=Float64[]; abs1=Float64[]; abse=Float64[]
@@ -497,6 +521,7 @@ function build_LH_plot(artifact, csv_path, output_dir; xlim_min::Float64)
             push!(absS, abs(d.S)); push!(absA, abs(d.A))
             push!(abs1, abs(d.eta_beam_1)); push!(abse, abs(d.eta_beam_end))
         end
+        sync_amp[iei] = max(mean(absS), mean(absA))
         alpha_col   = @. -(abs1^2 - abse^2) / (abs1^2 + abse^2 + eps())
         is_odd      = mean(absS) < mean(absA)
         resonance_q = is_odd ? 0.20 : 0.15
@@ -504,6 +529,13 @@ function build_LH_plot(artifact, csv_path, output_dir; xlim_min::Float64)
         q_val < RESONANCE_ALPHA_CUTOFF || continue
         cond = is_odd ? "S" : "A"
         push!(sync_candidates[cond], (iei, q_val))
+    end
+    # Amplitude guard (see RESONANCE_AMP_FACTOR): reject candidates that dip
+    # below the alpha-quantile cutoff without genuine amplification.
+    let baseline = median(filter(isfinite, sync_amp))
+        for cond in ("S", "A")
+            filter!(c -> sync_amp[c[1]] > RESONANCE_AMP_FACTOR * baseline, sync_candidates[cond])
+        end
     end
     res_xM_sync = collect(range(xM_sync[1], xM_sync[end]; length=RESONANCE_N_PTS))
     for cond in ("S", "A")
@@ -676,6 +708,7 @@ function get_roots_theoretical_beam(EI_list::AbstractVector{Float64}, condition_
     end
 
     # ── Coarse-grid resonance detection (original EI spacing, no spurious hits) ─
+    col_amp = fill(NaN, length(EI_coarse))
     if condition_name in ("S", "A")
         logEI_coarse = log10.(EI_coarse)
         is_coupled   = Float64(theory_ctx.params.d) > 0.0
@@ -690,6 +723,7 @@ function get_roots_theoretical_beam(EI_list::AbstractVector{Float64}, condition_
                 push!(abs_eta_1, abs(diag.eta_beam_1))
                 push!(abs_eta_end, abs(diag.eta_beam_end))
             end
+            col_amp[iei] = max(mean(absS), mean(absA))
             alpha_col = @. -(abs_eta_1^2 - abs_eta_end^2) /
                             (abs_eta_1^2 + abs_eta_end^2 + eps())
             is_odd_resonance = mean(absS) < mean(absA)
@@ -702,6 +736,13 @@ function get_roots_theoretical_beam(EI_list::AbstractVector{Float64}, condition_
                 end
             end
         end
+    end
+
+    # Amplitude guard (see RESONANCE_AMP_FACTOR): reject candidates that dip
+    # below the alpha-quantile cutoff without genuine amplification.
+    if !isempty(res_candidates)
+        baseline = median(filter(isfinite, col_amp))
+        filter!(c -> col_amp[c[1]] > RESONANCE_AMP_FACTOR * baseline, res_candidates)
     end
 
     # Deduplicate resonance candidates via the shared Surferbot helper. This
@@ -758,9 +799,8 @@ function build_beam_end_plot(artifact, csv_path, output_dir; xlim_min::Float64)
     XLIMS = (xlim_min, max_logK_data)
     YLIMS = (0.0, 0.5)
 
-    # 57 evenly-spaced logK values across the full visible range — extend 0.1 units
-    # left of xlim_min so resonances sitting just inside the left edge are not missed.
-    scatter_logK = collect(range(xlim_min - 0.1, max_logK_data; length=57))
+    # 181 (not 57): see build_LH_plot for why.
+    scatter_logK = collect(range(xlim_min - 0.1, max_logK_data; length=181))
     EI_scatter   = 10 .^ (scatter_logK .+ shift)
 
     theory_ctx = theoretical_modal_context(params; output_dir=output_dir)

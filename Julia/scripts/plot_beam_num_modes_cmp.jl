@@ -92,7 +92,10 @@ function make_nm_comparison(artifact, csv_path, output_dir;
 
     XLIMS        = (xlim_min, max_logK)
     YLIMS        = (0.0, 0.5)
-    scatter_logK = collect(range(xlim_min - 0.1, max_logK; length=57))
+    # 181 (not 57): the coarse grid missed narrow resonances entirely and
+    # under-sampled branches approaching them into a jagged/spurious-looking
+    # wiggle; see plot_dimensionless_diagnostics_LH.jl for the same fix.
+    scatter_logK = collect(range(xlim_min - 0.1, max_logK; length=181))
     EI_scatter   = 10 .^ (scatter_logK .+ shift)
 
     okabe_ito    = ["#E69F00", "#56B4E9", "#009E73", "#F0E442",
@@ -100,7 +103,8 @@ function make_nm_comparison(artifact, csv_path, output_dir;
     curve_colors = [okabe_ito[8], okabe_ito[1], okabe_ito[3], okabe_ito[7]]
 
     plt_opts = (
-        xlabel   = L"\log_{10}\,\kappa",
+        xlabel   = L"\kappa",
+        xticks   = kappa_exp_xticks(XLIMS),
         ylabel   = L"x_M / L",
         colormap = :balance,
         clims    = (-1, 1),
