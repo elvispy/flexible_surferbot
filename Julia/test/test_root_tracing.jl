@@ -69,4 +69,67 @@ using Surferbot
         shuffled = [(52, 0.08), (1, 0.02), (51, 0.01), (2, 0.03), (50, 0.09)]
         @test Surferbot.dedup_resonance_runs(shuffled) == deduped2
     end
+
+    @testset "cluster_branches" begin
+        # A genuine crossing root that happens to land at the SAME logK as an
+        # injected resonance stripe must survive as part of the smooth branch,
+        # not be swallowed by the stripe-exclusion filter. Build a smooth branch
+        # 0.10, 0.12, ..., 0.20 across 6 logK columns, with a resonance stripe
+        # (20 points, the default resonance_n_pts) ALSO injected at the middle
+        # logK value (mirroring how a resonance column doubles as both a
+        # detected resonance and an ordinary fine-grid root in production).
+        lks = collect(0.0:1.0:5.0)
+        xms = [0.10, 0.12, 0.14, 0.16, 0.18, 0.20]
+        stripe_lk = lks[3]  # coincides with the genuine root at xms[3] = 0.14
+        stripe_xm = collect(range(0.0, 0.5; length=20))
+        logK_pts = vcat(lks, fill(stripe_lk, 20))
+        xM_pts   = vcat(xms, stripe_xm)
+
+        lk_out, xm_out, res_lks = Surferbot.cluster_branches(logK_pts, xM_pts)
+        @test res_lks == [stripe_lk]
+        # the genuine point at stripe_lk must still be present, in order, with
+        # its real value — not dropped, and not replaced by NaN.
+        idx = findfirst(==(stripe_lk), lk_out)
+        @test idx !== nothing
+        @test xm_out[idx] ≈ 0.14
+        # all 6 points connect into one smooth branch (consecutive xm's are
+        # within the 0.25 connection threshold), so there's no internal NaN gap
+        # — only the single trailing separator.
+        @test count(isnan, xm_out) == 1
+        @test xm_out[1:end-1] ≈ xms
+        @test isnan(xm_out[end])
+
+        # Global-distance greedy matching: three branches at a starting column
+        # (0.0006, 0.211, 0.395) and two targets at the next column (0.207,
+        # 0.394). Order-dependent greedy (ascending xm) would let 0.0006 grab
+        # 0.207 (distance 0.2064) before 0.211 gets a chance, cascading into
+        # a wrong 0.211->0.394 match. The correct pairing is 0.211->0.207
+        # (distance 0.004) and 0.395->0.394 (distance 0.001), leaving 0.0006
+        # unmatched (isolated, dropped as a single-point branch).
+        logK_pts2 = [0.0, 0.0, 0.0, 1.0, 1.0]
+        xM_pts2   = [0.0006, 0.211, 0.395, 0.207, 0.394]
+        lk_out2, xm_out2, res_lks2 = Surferbot.cluster_branches(logK_pts2, xM_pts2)
+        @test isempty(res_lks2)
+        # Reconstruct branches by splitting on NaN separators.
+        branches = Vector{Float64}[]
+        cur = Float64[]
+        for x in xm_out2
+            if isnan(x)
+                isempty(cur) || push!(branches, cur)
+                cur = Float64[]
+            else
+                push!(cur, x)
+            end
+        end
+        # The unmatched 0.0006 branch survives as a length-1 segment (a lone
+        # point flanked by NaNs draws no visible line — that's what "dropped"
+        # means here), while the other two are correctly, tightly paired.
+        @test length(branches) == 3
+        singleton = only(filter(b -> length(b) == 1, branches))
+        @test singleton ≈ [0.0006] atol=1e-6
+        paired = sort(filter(b -> length(b) == 2, branches); by = first)
+        @test length(paired) == 2
+        @test paired[1] ≈ [0.211, 0.207] atol=1e-8
+        @test paired[2] ≈ [0.395, 0.394] atol=1e-8
+    end
 end

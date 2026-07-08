@@ -14,7 +14,8 @@ export ModalDecomposition,
        freefree_mode_shape,
        weighted_mgs,
        find_filtered_minima,
-       dedup_resonance_runs
+       dedup_resonance_runs,
+       cluster_branches
 
 """
     ModalDecomposition
@@ -652,6 +653,115 @@ function print_modal_log(modal::ModalDecomposition)
         ", recon_rel_err=", @sprintf("%.3e", modal.recon_rel_err),
         ", cond(Psi'W Psi)=", @sprintf("%.3e", modal.gram_cond),
     )
+end
+
+"""
+    cluster_branches(logK_pts, xM_pts; resonance_n_pts::Int=20)
+
+Group zero-crossing points sampled on a (logK, xM) grid into connected,
+non-intersecting branches, separating out resonance stripes (columns with
+`>= resonance_n_pts` points at the same `logK`) for separate vline-style
+rendering.
+
+# Returns
+`(lk_out, xm_out, resonance_lks)`: `lk_out`/`xm_out` are the branch points,
+NaN-separated into a single flat path suitable for one `plot!`/`lines!` call;
+`resonance_lks` are the detected resonance `logK` values.
+"""
+function cluster_branches(logK_pts, xM_pts; resonance_n_pts::Int=20)
+    # ── 1. Separate resonance stripes ────────────────────────────────────────
+    # A resonance stripe is injected as exactly resonance_n_pts points at the
+    # evenly-spaced template values below, at whatever logK the resonance sits
+    # at. When that same logK also carries a genuine root from the ordinary
+    # fine-grid pass (it does whenever the scatter grid is reused for both
+    # root-finding and resonance detection), naively excluding "every point at
+    # a logK with >= resonance_n_pts points" throws that genuine point away
+    # too — carving a gap out of what is otherwise a smooth branch and leaving
+    # nearest-neighbour matching to bridge across it however it can. Match the
+    # exact template values instead, so a coincident genuine root survives.
+    res_xM_template = Set(round.(collect(range(0.0, 0.5; length=resonance_n_pts)); digits=9))
+    counts = Dict{Float64,Int}()
+    for lk in logK_pts; counts[lk] = get(counts, lk, 0) + 1; end
+    res_lk_set = Set(lk for (lk,c) in counts if c >= resonance_n_pts)
+
+    # zero-crossing points only
+    xing_lk = Float64[]; xing_xm = Float64[]
+    for (lk, xm) in zip(logK_pts, xM_pts)
+        lk ∈ res_lk_set && round(xm; digits=9) ∈ res_xM_template && continue
+        push!(xing_lk, lk); push!(xing_xm, xm)
+    end
+
+    resonance_lks = sort(collect(res_lk_set))
+    isempty(xing_lk) && return Float64[], Float64[], resonance_lks
+
+    # ── 2. Group by logK column ───────────────────────────────────────────────
+    cols = Dict{Float64, Vector{Float64}}()
+    for (lk, xm) in zip(xing_lk, xing_xm)
+        push!(get!(cols, lk, Float64[]), xm)
+    end
+    unique_lks = sort(collect(keys(cols)))
+    for lk in unique_lks; sort!(cols[lk]); end
+
+    # ── 3. Nearest-neighbour branch assignment ────────────────────────────────
+    # Each branch is a list of (logK, xM) pairs in logK order.
+    branches = [[(unique_lks[1], xm)] for xm in cols[unique_lks[1]]]
+
+    for i in 2:length(unique_lks)
+        lk       = unique_lks[i]
+        new_xms  = copy(cols[lk])
+        matched  = fill(false, length(new_xms))
+
+        # Assign by globally-smallest distance first, not branch-by-branch in
+        # arbitrary order. Processing branches one at a time lets an early
+        # branch "settle" for a mediocre match (still under the 0.25 cutoff)
+        # and steal it from a later branch that would have matched almost
+        # exactly — e.g. three branches at 0.0006/0.211/0.395 and two targets
+        # at 0.207/0.394: branch-order assignment gives 0.0006->0.207
+        # (distance 0.207!) leaving 0.211 to grab 0.394 (distance 0.183),
+        # when the obviously correct pairing is 0.211->0.207 (distance 0.004)
+        # and 0.395->0.394 (distance 0.001). That wrong assignment is exactly
+        # what drew spurious jumps into otherwise-smooth branches.
+        branch_matched = fill(false, length(branches))
+        pairs = Tuple{Int,Int,Float64}[]
+        for (bi, branch) in enumerate(branches)
+            isempty(branch) && continue
+            last_xm = last(branch)[2]
+            isnan(last_xm) && continue
+            for (j, xm) in enumerate(new_xms)
+                d = abs(xm - last_xm)
+                d < 0.25 && push!(pairs, (bi, j, d))
+            end
+        end
+        sort!(pairs; by = p -> p[3])
+        for (bi, j, d) in pairs
+            branch_matched[bi] && continue
+            matched[j] && continue
+            push!(branches[bi], (lk, new_xms[j]))
+            branch_matched[bi] = true
+            matched[j] = true
+        end
+        # any still-alive branch that didn't get a match this column gets a gap
+        for (bi, branch) in enumerate(branches)
+            isempty(branch) && continue
+            last_xm = last(branch)[2]
+            isnan(last_xm) && continue
+            branch_matched[bi] || push!(branch, (NaN, NaN))
+        end
+        # start a new branch for any unmatched root
+        for (j, xm) in enumerate(new_xms)
+            matched[j] || push!(branches, [(lk, xm)])
+        end
+    end
+
+    # ── 4. Flatten branches with NaN separators ───────────────────────────────
+    lk_out = Float64[]; xm_out = Float64[]
+    for branch in branches
+        length(branch) < 2 && continue    # skip isolated single points
+        append!(lk_out, first.(branch))
+        append!(xm_out, last.(branch))
+        push!(lk_out, NaN); push!(xm_out, NaN)
+    end
+    return lk_out, xm_out, resonance_lks
 end
 
 end

@@ -73,74 +73,7 @@ const CURVE_NAMES  = ["S", "A", "eta_1", "eta_end"]
 #      nearest-neighbour matching between consecutive logK columns.
 #   3. Returns each branch as a (lk, xm) pair of sorted vectors, NaN-separated
 #      into a single flat path for a single plot! call.
-function cluster_branches(logK_pts, xM_pts)
-    # ── 1. Separate resonance stripes ────────────────────────────────────────
-    counts = Dict{Float64,Int}()
-    for lk in logK_pts; counts[lk] = get(counts, lk, 0) + 1; end
-    res_lk_set = Set(lk for (lk,c) in counts if c >= RESONANCE_N_PTS)
-
-    # zero-crossing points only
-    xing_lk = Float64[]; xing_xm = Float64[]
-    for (lk, xm) in zip(logK_pts, xM_pts)
-        lk ∈ res_lk_set && continue
-        push!(xing_lk, lk); push!(xing_xm, xm)
-    end
-
-    resonance_lks = sort(collect(res_lk_set))
-    isempty(xing_lk) && return Float64[], Float64[], resonance_lks
-
-    # ── 2. Group by logK column ───────────────────────────────────────────────
-    cols = Dict{Float64, Vector{Float64}}()
-    for (lk, xm) in zip(xing_lk, xing_xm)
-        push!(get!(cols, lk, Float64[]), xm)
-    end
-    unique_lks = sort(collect(keys(cols)))
-    for lk in unique_lks; sort!(cols[lk]); end
-
-    # ── 3. Nearest-neighbour branch assignment ────────────────────────────────
-    # Each branch is a list of (logK, xM) pairs in logK order.
-    branches = [[(unique_lks[1], xm)] for xm in cols[unique_lks[1]]]
-
-    for i in 2:length(unique_lks)
-        lk       = unique_lks[i]
-        new_xms  = copy(cols[lk])
-        matched  = fill(false, length(new_xms))
-
-        for branch in branches
-            isempty(branch) && continue
-            last_xm = last(branch)[2]
-            isnan(last_xm) && continue
-            # find closest unmatched root in the new column
-            best_j, best_d = 0, Inf
-            for (j, xm) in enumerate(new_xms)
-                matched[j] && continue
-                d = abs(xm - last_xm)
-                if d < best_d; best_d = d; best_j = j; end
-            end
-            # connect only if close enough (< half the xM range)
-            if best_j > 0 && best_d < 0.25
-                push!(branch, (lk, new_xms[best_j]))
-                matched[best_j] = true
-            else
-                push!(branch, (NaN, NaN))   # branch gap
-            end
-        end
-        # start a new branch for any unmatched root
-        for (j, xm) in enumerate(new_xms)
-            matched[j] || push!(branches, [(lk, xm)])
-        end
-    end
-
-    # ── 4. Flatten branches with NaN separators ───────────────────────────────
-    lk_out = Float64[]; xm_out = Float64[]
-    for branch in branches
-        length(branch) < 2 && continue    # skip isolated single points
-        append!(lk_out, first.(branch))
-        append!(xm_out, last.(branch))
-        push!(lk_out, NaN); push!(xm_out, NaN)
-    end
-    return lk_out, xm_out, resonance_lks
-end
+# cluster_branches is provided by Surferbot (Julia/src/modal.jl).
 const CURVE_LABELS = [L"|S| = 0", L"|A| = 0",
                       L"|\overline{\eta}(-\bar{\ell})| = 0",
                       L"|\overline{\eta}(\bar{\ell})| = 0"]

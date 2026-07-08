@@ -33,7 +33,8 @@ using .Modal: ModalDecomposition,
               freefree_mode_shape,
               weighted_mgs,
               find_filtered_minima,
-              dedup_resonance_runs
+              dedup_resonance_runs,
+              cluster_branches
 using .Migration: matlab_motor_position_ei_sources,
                   load_motor_position_ei_export,
                   artifact_from_motor_position_ei_export
@@ -79,6 +80,7 @@ export FlexibleParams,
        weighted_mgs,
        find_filtered_minima,
        dedup_resonance_runs,
+       cluster_branches,
        SweepSummary,
        SweepArtifact,
        apply_parameter_overrides,
