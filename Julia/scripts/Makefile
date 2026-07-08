@@ -31,7 +31,7 @@ FIGURES := \
 	$(FIG_DIR)/plot_thrust_beam_and_LH_LH_cbrt.pdf \
 	$(FIG_DIR)/plot_dimensionless_diagnostics_LH_cpl_theo.pdf \
 	$(FIG_DIR)/plot_beam_num_modes_cmp_cpl.pdf \
-	$(FIG_DIR)/plot_fig10_modal_maps_4x3.pdf \
+	$(FIG_DIR)/plot_fig10_modal_maps_3x3.pdf \
 	$(FIG_DIR)/plot_fig4_Aguero2026_1.pdf
 
 MSG ?= regenerate figures
@@ -65,7 +65,7 @@ $(FIG_DIR)/plot_beam_num_modes_cmp_cpl.pdf: plot_beam_num_modes_cmp.jl \
 		$(SWEEP_CPL_JLD2) $(SWEEP_UCPL_JLD2) $(SWEEP_CPL_CSV)
 	$(JULIA) --threads auto $<
 
-$(FIG_DIR)/plot_fig10_modal_maps_4x3.pdf: plot_fig10_modal_maps_4x3.jl \
+$(FIG_DIR)/plot_fig10_modal_maps_3x3.pdf: plot_fig10_modal_maps_3x3.jl \
 		$(SWEEP_CPL_JLD2) $(SWEEP_UCPL_JLD2) $(SWEEP_CPL_CSV) $(SWEEP_UCPL_CSV)
 	$(JULIA) --threads auto $<
 
