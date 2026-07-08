@@ -30,6 +30,14 @@ using Statistics
 using LinearAlgebra
 using Surferbot
 
+# ─── κ axis: integer log10(κ) grid, ticks shown as 10^n (exponentials, not log₁₀κ) ────
+
+function kappa_exp_xticks(xlims)
+    lo, hi = ceil(Int, xlims[1]), floor(Int, xlims[2])
+    ticks  = collect(lo:hi)
+    return (Float64.(ticks), [latexstring(@sprintf("10^{%d}", t)) for t in ticks])
+end
+
 # ─── Load and reshape ────────────────────────────────────────────────────────
 
 function load_delta_grids(csv_path::AbstractString; pref::Float64)
@@ -202,7 +210,8 @@ function render_panel(log10_kappa, xM_axis, delta_grid, fig_title, out_base, bp,
     end
 
     plt_opts = (
-        xlabel             = L"\log_{10}\,\kappa",
+        xlabel             = L"\kappa",
+        xticks             = kappa_exp_xticks(XLIMS),
         ylabel             = L"x_M / L",
         colormap           = cgrad(:RdBu, rev=true),
         clims              = (-clim_val, clim_val),

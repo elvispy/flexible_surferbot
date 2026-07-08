@@ -31,6 +31,13 @@ Output: output/figures/plot_dimensionless_diagnostics_cpl_theo_LH.pdf
 
 using Surferbot, JLD2, Plots, LaTeXStrings, Printf, LinearAlgebra, CSV, DataFrames, Statistics
 
+# κ axis: integer log10(κ) grid, ticks shown as 10^n (exponentials, not log₁₀κ)
+function kappa_exp_xticks(xlims)
+    lo, hi = ceil(Int, xlims[1]), floor(Int, xlims[2])
+    ticks  = collect(lo:hi)
+    return (Float64.(ticks), [latexstring(@sprintf("10^{%d}", t)) for t in ticks])
+end
+
 include(joinpath(@__DIR__, "..", "experiments", "prescribed_wn_diagonal_impedance.jl"))
 const ModalPressureMap = Main.PrescribedWnDiagonalImpedance
 
@@ -202,6 +209,12 @@ function theoretical_modal_context(params; output_dir::AbstractString)
         c_hydro      = derived.d * fparams.rho * fparams.g,
         F0           = fparams.motor_inertia * fparams.omega^2,
         forcing_width = fparams.forcing_width,
+        # Capillary endpoint map C^σ_mn = d·σ·(W_m(L/2) s_n^+ + W_m(-L/2) s_n^-),
+        # dimensional analogue of paper eq:Ksigma_linear_map_app (Λ/We absorbed
+        # into the explicit d·σ prefactor, matching how c_hydro absorbs ΛΓ/Fr²).
+        C_sigma      = derived.d * fparams.sigma .*
+                        (Psi[end, :] * transpose(ComplexF64.(payload.s_vec)) .+
+                         Psi[1,   :] * transpose(ComplexF64.(payload.s_vec_left))),
     )
 end
 
@@ -230,7 +243,7 @@ function solve_theoretical_modal_response(EI, xM_norm, theory_ctx)
     D     = ComplexF64.(EI .* theory_ctx.beta .^ 4
                         .- p.rho_raft * p.omega^2
                         .+ theory_ctx.c_hydro)
-    A_sys = Diagonal(D) - theory_ctx.Z_psi
+    A_sys = Diagonal(D) .- theory_ctx.Z_psi .+ theory_ctx.C_sigma
     return -(A_sys \ ComplexF64.(F_psi))
 end
 
@@ -518,7 +531,8 @@ function build_LH_plot(artifact, csv_path, output_dir; xlim_min::Float64)
     curve_styles = [:solid, :solid, :solid, :solid]
 
     plt_opts = (
-        xlabel  = L"\log_{10}\,\kappa",
+        xlabel  = L"\kappa",
+        xticks  = kappa_exp_xticks(XLIMS),
         ylabel  = L"x_M / L",
         colormap = :balance,
         clims   = (-1, 1),
@@ -826,7 +840,8 @@ function build_beam_end_plot(artifact, csv_path, output_dir; xlim_min::Float64)
     curve_styles = [:solid, :solid, :solid, :solid]
 
     plt_opts = (
-        xlabel  = L"\log_{10}\,\kappa",
+        xlabel  = L"\kappa",
+        xticks  = kappa_exp_xticks(XLIMS),
         ylabel  = L"x_M / L",
         colormap = :balance,
         clims   = (-1, 1),
