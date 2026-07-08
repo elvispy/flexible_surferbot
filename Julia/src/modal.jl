@@ -12,7 +12,9 @@ export ModalDecomposition,
        trapz_weights,
        freefree_betaL_roots,
        freefree_mode_shape,
-       weighted_mgs
+       weighted_mgs,
+       find_filtered_minima,
+       dedup_resonance_runs
 
 """
     ModalDecomposition
@@ -551,6 +553,75 @@ function find_zero_bisection(f, a::Real, b::Real; maxiter::Int=200, atol::Float6
         end
     end
     return (left + right) / 2
+end
+
+"""
+    find_filtered_minima(xgrid, values, ratio; ratio_cutoff::Float64)
+
+Locate local minima of `values` on `xgrid` that also satisfy `ratio[i] <
+ratio_cutoff`, refined to sub-grid accuracy.
+
+`values` is typically `|S(x)|`-type data: the magnitude of a complex quantity
+that crosses zero at each true root. Near a simple zero, `|values|` itself has
+a V-shaped cusp (not smooth), so snapping to the grid point `xgrid[i]` at the
+minimum quantizes the reported root to the grid spacing — this staircases
+visibly whenever nearby calls sample `xgrid` densely (e.g. a branch-tracing
+sweep that locally refines its sampling). `|values|^2` is smooth (locally
+parabolic) near a simple zero, so this fits that parabola through the three
+points bracketing the minimum and returns its vertex instead.
+
+# Returns
+- Vector of interpolated root locations.
+"""
+function find_filtered_minima(xgrid, values, ratio; ratio_cutoff::Float64)
+    roots = Float64[]
+    for i in 2:(length(xgrid) - 1)
+        if values[i] <= values[i-1] && values[i] <= values[i+1] && ratio[i] < ratio_cutoff
+            v0, v1, v2 = values[i-1]^2, values[i]^2, values[i+1]^2
+            denom = v0 - 2v1 + v2
+            h_lo  = Float64(xgrid[i] - xgrid[i-1])
+            h_hi  = Float64(xgrid[i+1] - xgrid[i])
+            delta = abs(denom) > eps(max(v1, 1.0)) ? 0.5 * (v0 - v2) / denom : 0.0
+            delta = clamp(delta, -0.5, 0.5)
+            h     = delta >= 0 ? h_hi : h_lo
+            push!(roots, Float64(xgrid[i]) + delta * h)
+        end
+    end
+    return roots
+end
+
+"""
+    dedup_resonance_runs(candidates::AbstractVector{Tuple{Int,Float64}})
+
+Collapse a list of `(grid_index, score)` candidates — grid columns that each
+individually passed some resonance/threshold test — into one representative
+index per run of *consecutive* grid indices, keeping the minimum-score index
+in each run.
+
+A single physical resonance has some finite width in the scan variable; when
+the grid is dense enough that more than one column falls inside that width,
+each column independently passes the test, and naively keeping all of them
+plots several near-duplicate stripes/markers for what is really one
+resonance. This is the shared fix for that failure mode — callers must not
+re-implement their own ad-hoc grouping, since keeping this logic in one place
+is what prevents it from being fixed in one call site and silently absent in
+another.
+
+`candidates` need not be pre-sorted by index. Returns the deduplicated
+`(grid_index, score)` pairs, sorted by index.
+"""
+function dedup_resonance_runs(candidates::AbstractVector{Tuple{Int,Float64}})
+    isempty(candidates) && return Tuple{Int,Float64}[]
+    sorted = sort(collect(candidates); by = first)
+    groups = Vector{Vector{Tuple{Int,Float64}}}()
+    for cand in sorted
+        if isempty(groups) || cand[1] - groups[end][end][1] > 1
+            push!(groups, [cand])
+        else
+            push!(groups[end], cand)
+        end
+    end
+    return [group[argmin(last.(group))] for group in groups]
 end
 
 """

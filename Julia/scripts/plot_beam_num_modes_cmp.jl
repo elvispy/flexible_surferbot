@@ -49,6 +49,9 @@ function make_beam_ctx_nm(params; output_dir::AbstractString, num_modes::Int)
         c_hydro       = derived.d * fparams.rho * fparams.g,
         F0            = fparams.motor_inertia * fparams.omega^2,
         forcing_width = fparams.forcing_width,
+        C_sigma       = derived.d * fparams.sigma .*
+                          (Psi[end, :] * transpose(ComplexF64.(payload.s_vec)) .+
+                           Psi[1,   :] * transpose(ComplexF64.(payload.s_vec_left))),
     )
 end
 

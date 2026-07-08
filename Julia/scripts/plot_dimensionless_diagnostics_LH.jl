@@ -148,15 +148,9 @@ function coerce_flexible_params(params)
     return Surferbot.FlexibleParams(; pairs...)
 end
 
-function find_filtered_minima(xgrid, values, ratio; ratio_cutoff::Float64)
-    roots = Float64[]
-    for i in 2:(length(xgrid) - 1)
-        if values[i] <= values[i-1] && values[i] <= values[i+1] && ratio[i] < ratio_cutoff
-            push!(roots, Float64(xgrid[i]))
-        end
-    end
-    return roots
-end
+# find_filtered_minima is provided by Surferbot (Julia/src/modal.jl) — interpolates
+# a sub-grid root location instead of snapping to the xgrid point, avoiding a
+# staircase artifact wherever the branch-tracing loop below samples logK densely.
 
 function roots_for_condition(condition_name, xgrid, absS, absA, abs_eta_1, abs_eta_end)
     if condition_name == "S"
@@ -375,6 +369,7 @@ function get_roots_theoretical_LH(artifact, condition_name; output_dir::Abstract
     # ── Coarse-grid pass: resonance detection only (uses original EI spacing) ───
     # Resonance thresholds were calibrated on the coarse grid; re-running on the
     # fine grid introduces spurious stripes at new κ values near true resonances.
+    res_candidates = Tuple{Int,Float64}[]
     if condition_name in ("S", "A")
         logEI_coarse = log10.(EI_coarse)
         for (iei, EI) in enumerate(EI_coarse)
@@ -390,15 +385,26 @@ function get_roots_theoretical_LH(artifact, condition_name; output_dir::Abstract
             end
             alpha_col = @. -(abs_eta_1^2 - abs_eta_end^2) /
                             (abs_eta_1^2 + abs_eta_end^2 + eps())
-            if quantile(abs.(alpha_col), 0.15) < RESONANCE_ALPHA_CUTOFF
-                is_odd_resonance = mean(absS) < mean(absA)
-                if (condition_name == "S" && is_odd_resonance) ||
-                   (condition_name == "A" && !is_odd_resonance)
-                    res_xM = collect(range(0.0, 0.5; length=RESONANCE_N_PTS))
-                    append!(pts_logEI, fill(logEI_coarse[iei], RESONANCE_N_PTS))
-                    append!(pts_xM,    res_xM)
-                end
+            q_val = quantile(abs.(alpha_col), 0.15)
+            q_val < RESONANCE_ALPHA_CUTOFF || continue
+            is_odd_resonance = mean(absS) < mean(absA)
+            if (condition_name == "S" && is_odd_resonance) ||
+               (condition_name == "A" && !is_odd_resonance)
+                push!(res_candidates, (iei, q_val))
             end
+        end
+    end
+
+    # Deduplicate resonance candidates via the shared Surferbot helper: without
+    # this, a dense scatter_logK grid samples several adjacent columns inside one
+    # physical resonance's width, each independently passing the threshold,
+    # producing multiple near-duplicate vertical stripes for a single resonance.
+    if !isempty(res_candidates)
+        logEI_coarse = log10.(EI_coarse)
+        res_xM = collect(range(0.0, 0.5; length=RESONANCE_N_PTS))
+        for (best_iei, _) in dedup_resonance_runs(res_candidates)
+            append!(pts_logEI, fill(logEI_coarse[best_iei], RESONANCE_N_PTS))
+            append!(pts_xM,    res_xM)
         end
     end
 
@@ -501,19 +507,7 @@ function build_LH_plot(artifact, csv_path, output_dir; xlim_min::Float64)
     end
     res_xM_sync = collect(range(xM_sync[1], xM_sync[end]; length=RESONANCE_N_PTS))
     for cond in ("S", "A")
-        cands = sort(sync_candidates[cond]; by = x -> x[1])
-        isempty(cands) && continue
-        groups = Vector{Vector{Tuple{Int,Float64}}}()
-        for cand in cands
-            if isempty(groups) || cand[1] - groups[end][end][1] > 1
-                push!(groups, [cand])
-            else
-                push!(groups[end], cand)
-            end
-        end
-        for group in groups
-            _, best_pos = findmin(x -> x[2], group)
-            best_iei    = group[best_pos][1]
+        for (best_iei, _) in dedup_resonance_runs(sync_candidates[cond])
             logK_val    = scatter_logK[best_iei]
             already_present = any(abs.(results[cond].logK .- logK_val) .< 0.01)
             already_present && continue
@@ -710,26 +704,14 @@ function get_roots_theoretical_beam(EI_list::AbstractVector{Float64}, condition_
         end
     end
 
-    # Deduplicate resonance candidates: group runs of consecutive scatter-grid indices
-    # and emit exactly one stripe per run (at the minimum-quantile index in the run).
-    # This prevents adjacent scatter points that both pass the threshold for the same
+    # Deduplicate resonance candidates via the shared Surferbot helper. This
+    # prevents adjacent scatter points that both pass the threshold for the same
     # physical resonance from generating two stacked vertical stripes.
     if !isempty(res_candidates)
-        sort!(res_candidates; by = x -> x[1])
-        groups = Vector{Vector{Tuple{Int,Float64}}}()
-        for cand in res_candidates
-            if isempty(groups) || cand[1] - groups[end][end][1] > 1
-                push!(groups, [cand])
-            else
-                push!(groups[end], cand)
-            end
-        end
         logEI_coarse    = log10.(EI_coarse)
         res_xM_template = collect(range(0.0, 0.5; length=RESONANCE_N_PTS))
-        for group in groups
-            _, best_pos = findmin(x -> x[2], group)
-            best_iei = group[best_pos][1]
-            best_le  = logEI_coarse[best_iei]
+        for (best_iei, _) in dedup_resonance_runs(res_candidates)
+            best_le = logEI_coarse[best_iei]
             append!(pts_logEI, fill(best_le, RESONANCE_N_PTS))
             append!(pts_xM,    res_xM_template)
             push!(res_logEI, best_le)
