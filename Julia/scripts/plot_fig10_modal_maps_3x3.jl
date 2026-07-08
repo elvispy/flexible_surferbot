@@ -23,11 +23,11 @@ struct ColSpec
 end
 
 const ROW_SPECS = [
-    RowSpec(L"\eta(\pm\ell),\ \mathrm{coupled}",
+    RowSpec(L"\bar{\eta}(\pm\bar{\ell}),\ \Lambda\ne0",
             :coupled, "sweeper_coupled_full_grid.csv", :farfield),
-    RowSpec(L"\eta(\pm 1/2),\ \mathrm{coupled}",
+    RowSpec(L"\bar{\eta}(\pm 1/2),\ \Lambda\ne0",
             :coupled, "sweeper_coupled_full_grid.csv", :beam),
-    RowSpec(L"\eta(\pm 1/2),\ \mathrm{uncoupled}",
+    RowSpec(L"\bar{\eta}(\pm 1/2),\ \Lambda=0",
             :uncoupled, "sweeper_uncoupled_full_grid.csv", :beam),
 ]
 
@@ -230,7 +230,7 @@ function main()
                 ax = CairoMakie.Axis(fig[r + 1, c + 2],
                     xticklabelsize = 18, yticklabelsize = 18,
                     xlabelsize = 22, ylabelsize = 22,
-                    xminorticksvisible = true, xminorgridvisible = false,
+                    xminorticksvisible = false, xminorgridvisible = false,
                     yminorgridvisible = false)
                 panel_axes[r, c] = ax
                 last_hm = draw_panel!(ax, maps[r, c];

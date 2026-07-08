@@ -85,7 +85,7 @@ end
 
 # ── Main figure builder ────────────────────────────────────────────────────────
 function make_nm_comparison(artifact, csv_path, output_dir;
-                             xlim_min::Float64, outname::String)
+                             xlim_min::Float64, outname::String, title_label)
     params = artifact.base_params
     alpha, xM_axis, logEI_axis, shift, max_logK =
         build_beam_alpha(artifact, csv_path; xlim_min=xlim_min)
@@ -106,6 +106,7 @@ function make_nm_comparison(artifact, csv_path, output_dir;
         xlabel   = L"\kappa",
         xticks   = kappa_exp_xticks(XLIMS),
         ylabel   = L"x_M / L",
+        title    = title_label,
         colormap = :balance,
         clims    = (-1, 1),
         levels   = 51,
@@ -162,6 +163,8 @@ function make_nm_comparison(artifact, csv_path, output_dir;
 
     # Dummy entries to explain line-style encoding in the legend
     gray = RGB(0.4, 0.4, 0.4)
+    plot!(p, [NaN], [NaN]; color=gray, linewidth=0.0,
+          label=L"W_n(\bar{x};\beta_n)")
     plot!(p, [NaN], [NaN]; color=gray, linestyle=:solid, linewidth=4.0, label="N = 8")
     plot!(p, [NaN], [NaN]; color=gray, linestyle=:dash,  linewidth=4.0, label="N = 6")
     plot!(p, [NaN], [NaN]; color=gray, linestyle=:dot,   linewidth=4.0, label="N = 4")
@@ -187,11 +190,13 @@ function main()
 
     make_nm_comparison(art_cpl,
         joinpath(output_dir, "csv", "sweeper_coupled_full_grid.csv"),
-        output_dir; xlim_min=-4.0, outname="plot_beam_num_modes_cmp_cpl")
+        output_dir; xlim_min=-4.0, outname="plot_beam_num_modes_cmp_cpl",
+        title_label=L"\Lambda\ne0")
 
     make_nm_comparison(art_ucpl,
         joinpath(output_dir, "csv", "sweeper_uncoupled_full_grid.csv"),
-        output_dir; xlim_min=-4.0, outname="plot_beam_num_modes_cmp_ucpl")
+        output_dir; xlim_min=-4.0, outname="plot_beam_num_modes_cmp_ucpl",
+        title_label=L"\Lambda=0")
 end
 
 if abspath(PROGRAM_FILE) == @__FILE__
