@@ -25,3 +25,6 @@ docs/superpowers
 Julia/output/*_smoke.*
 Julia/output/parts/
 Julia/logs/
+Julia/output/jld2/kappa_snapshots_cache.jld2
+CLAUDE.md
+
