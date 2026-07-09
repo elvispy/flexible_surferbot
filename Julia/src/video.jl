@@ -342,11 +342,13 @@ function plot_frame(record::SurferbotRunRecord, t::Real; omega::Real, x_contact_
         background_color = :white,
         framestyle = :box,
         grid       = false,
-        guidefontsize  = 18,
-        tickfontsize   = 15,
-        titlefontsize  = 16,
-        legendfontsize = 15,
+        guidefontsize  = 29,
+        tickfontsize   = 24,
+        titlefontsize  = 26,
+        legendfontsize = 24,
         fontfamily = "Computer Modern",
+        left_margin    = Base.invokelatest(*, 14, Plots.mm),
+        top_margin     = Base.invokelatest(*, 4, Plots.mm),
     )
 
     # ── Raft coloured by log₁₀(EI): dark = stiff, light grey = compliant ─────
