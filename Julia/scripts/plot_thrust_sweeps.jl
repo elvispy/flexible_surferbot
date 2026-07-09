@@ -450,13 +450,13 @@ function add_dual_axis!(fig, sw, alpha_sw, d, F_T_star; xlabel, xscale=identity,
         limits = ((minimum(sw.x), maximum(sw.x)), ylim),
         alignmode = Makie.Mixed(left = Makie.Protrusion(125), right = Makie.Protrusion(90)))
 
-    Label(fig[1, 1, Makie.Left()], L"F_T/F_T^\ast", rotation = pi/2, fontsize = 29, font = LM_FONT)
+    Label(fig[1, 1, Makie.Left()], L"\text{Normalized thrust}", rotation = pi/2, fontsize = 29, font = LM_FONT)
     l1 = lines!(ax, sw.x[order], yt[order]; color = BLUE, linewidth = 3)
     handles = [l1]
-    labels = [L"\text{Numerics}"]
+    labels = [L"F_T/F_T^\ast"]
     if show_Sxx
         l2 = lines!(ax, sw.x[order], yS[order]; color = RED, linewidth = 3, linestyle = :dash)
-        push!(handles, l2); push!(labels, L"\text{Longuet{-}Higgins}")
+        push!(handles, l2); push!(labels, L"\Delta S_{xx}/F_T^\ast")
     end
     if show_zero
         hlines!(ax, [0.0]; color = (:black, 0.55), linewidth = 1)
@@ -509,13 +509,12 @@ end
 
 function make_single_axis_panel(sw, d, F_T_star; xlabel, outfile,
                                 xscale=identity, xticks=Makie.automatic,
-                                xlims=nothing, ylims=nothing, show_zero=true,
+                                ylims=nothing, show_zero=true,
                                 marker_point=nothing)
     fig = makie_figure()
     yt = sw.thrust .* d ./ F_T_star
     order = sortperm(sw.x)
     ylim = isnothing(ylims) ? panel_limits(yt, yt) : ylims
-    xlim = isnothing(xlims) ? (minimum(sw.x), maximum(sw.x)) : xlims
     
     # Standalone-panel font scale: this panel is embedded at 0.7\textwidth as a
     # single sub-figure (Fig 3c), unlike the other make_sweep_panel outputs of
@@ -533,7 +532,7 @@ function make_single_axis_panel(sw, d, F_T_star; xlabel, outfile,
         ylabelpadding = 24 * FONT_SCALE,
         xticklabelsize = 26 * FONT_SCALE,
         yticklabelsize = 26 * FONT_SCALE,
-        xscale, xticks, limits = (xlim, ylim),
+        xscale, xticks, limits = ((minimum(sw.x), maximum(sw.x)), ylim),
         alignmode = Makie.Mixed(left = Makie.Protrusion(125 * FONT_SCALE), right = Makie.Protrusion(90 * FONT_SCALE)))
 
     lines!(ax, sw.x[order], yt[order]; color = BLUE, linewidth = 3, label = "Numerics")
@@ -585,14 +584,14 @@ function main()
         highlight_x = KAPPA_HIGHLIGHTS,
         legend_position = :rb)
     yt3  = sw3.thrust .* d ./ F_T_star
+    pad3 = 0.08 * (maximum(yt3) - minimum(yt3))
     make_single_axis_panel(sw3, d, F_T_star;
         xlabel = L"Re",
         outfile = joinpath(FIG_DIR, "plot_thrust_sweeps_Re"),
         xscale = log10,
         xticks = (10.0 .^ collect(4:8),
                   [L"10^{4}", L"10^{5}", L"10^{6}", L"10^{7}", L"10^{8}"]),
-        xlims = (1.0e6, maximum(sw3.x)),
-        ylims = (0.98, 1.005),
+        ylims = (minimum(yt3) - pad3, maximum(yt3) + pad3),
         marker_point = (; x = sp_re.Re, y = sp_re.thrust * d / F_T_star),
         show_zero = false)
     make_sweep_panel(sw4, alpha_xM_rigid, d, F_T_star;
