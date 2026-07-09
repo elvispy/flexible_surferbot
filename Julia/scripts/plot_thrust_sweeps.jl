@@ -549,8 +549,6 @@ function make_single_axis_panel(sw, d, F_T_star; xlabel, outfile,
     Makie.rowsize!(fig.layout, 1, Makie.Fixed(355))
     Makie.resize_to_layout!(fig)
 
-    axislegend(ax; position = :rt, labelsize = 26 * FONT_SCALE,
-        backgroundcolor = (:white, 0.86), framecolor = (:black, 0.45))
     save(outfile * ".pdf", fig)
     save(outfile * ".png", fig; px_per_unit = 2)
     println("Saved $outfile.{pdf,png}")
