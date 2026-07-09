@@ -35,6 +35,7 @@ const ALPHA_CACHE_PATH = joinpath(@__DIR__, "..", "output", "jld2", "alpha_sweep
 const GRID_ALPHA_CSV = joinpath(@__DIR__, "..", "output", "csv", "sweeper_coupled_full_grid.csv")
 const FIG_DIR    = joinpath(@__DIR__, "..", "output", "figures")
 const N_SWEEP    = 50
+const RE_REFINE_LOG10 = collect(range(4.55, 4.90; length = 15))
 const NU_WATER   = 1e-6
 const RIGID_INVISCID_OVERRIDES = (nu = 0.0, EI = Inf)
 const BLUE = RGBf(0.10, 0.30, 0.80)
@@ -163,20 +164,25 @@ function run_sweep_kappa(bp)
     return (; x = kappa_vals, thrust = T, Sxx)
 end
 
-function run_sweep_Re(bp)
+function desired_Re_values(bp)
+    L     = Float64(bp.L_raft)
+    omega = Float64(bp.omega)
+    log10_nu = collect(range(log10(NU_WATER / 100), log10(NU_WATER * 100); length = N_SWEEP))
+    base_Re  = (omega * L^2) ./ (10.0 .^ log10_nu)
+    refined_Re = 10.0 .^ RE_REFINE_LOG10
+    return sort(unique(vcat(base_Re, refined_Re)))
+end
+
+function run_sweep_Re(bp, Re_vals = desired_Re_values(bp))
     L     = Float64(bp.L_raft)
     omega = Float64(bp.omega)
     xM    = Float64(bp.motor_position)
-    EI    = Float64(bp.EI)
 
-    log10_nu = collect(range(log10(NU_WATER / 100), log10(NU_WATER * 100); length = N_SWEEP))
-    Re_vals  = (omega * L^2) ./ (10.0 .^ log10_nu)
-
-    T   = Vector{Float64}(undef, N_SWEEP)
-    Sxx = Vector{Float64}(undef, N_SWEEP)
-    println("Sweep 3/4: Reynolds ($N_SWEEP points) …")
-    @threads for i in 1:N_SWEEP
-        nu_i = 10.0^log10_nu[i]
+    T   = Vector{Float64}(undef, length(Re_vals))
+    Sxx = Vector{Float64}(undef, length(Re_vals))
+    println("Sweep 3/4: Reynolds ($(length(Re_vals)) points) …")
+    @threads for i in eachindex(Re_vals)
+        nu_i = omega * L^2 / Re_vals[i]
         Base.acquire(SOLVE_SEM)
         try
             T[i], Sxx[i] = solve_one((EI = Inf, motor_position = xM, nu = nu_i), bp)
@@ -184,10 +190,26 @@ function run_sweep_Re(bp)
             Base.release(SOLVE_SEM)
         end
         lock(PRINT_LOCK) do
-            @printf "  [%2d/%d]  Re=%.2e   T/d=%+.3e   Sxx=%+.3e\n" i N_SWEEP Re_vals[i] T[i] Sxx[i]
+            @printf "  [%2d/%d]  Re=%.2e   T/d=%+.3e   Sxx=%+.3e\n" i length(Re_vals) Re_vals[i] T[i] Sxx[i]
         end
     end
     return (; x = Re_vals, thrust = T, Sxx)
+end
+
+function merge_re_sweeps(existing, new)
+    x = vcat(Float64.(existing.x), Float64.(new.x))
+    thrust = vcat(Float64.(existing.thrust), Float64.(new.thrust))
+    Sxx = vcat(Float64.(existing.Sxx), Float64.(new.Sxx))
+    order = sortperm(x)
+    return (; x = x[order], thrust = thrust[order], Sxx = Sxx[order])
+end
+
+function missing_re_values(existing_x, desired_x)
+    out = Float64[]
+    for x in desired_x
+        any(isapprox(x, y; rtol = 1e-10, atol = 0.0) for y in existing_x) || push!(out, x)
+    end
+    return out
 end
 
 function run_sweep_xM_rigid(bp)
@@ -299,8 +321,16 @@ function load_or_compute(bp)
         d["kap_x"] = sw2.x; d["kap_T"] = sw2.thrust; d["kap_Sxx"] = sw2.Sxx
     end
 
+    desired_re = desired_Re_values(bp)
     if all(k -> haskey(d, k), ["re_x", "re_T", "re_Sxx"])
         sw3 = (; x = d["re_x"], thrust = d["re_T"], Sxx = d["re_Sxx"])
+        missing_re = missing_re_values(sw3.x, desired_re)
+        if !isempty(missing_re)
+            println("Computing $(length(missing_re)) targeted Reynolds refinement points …")
+            sw3 = merge_re_sweeps(sw3, run_sweep_Re(bp, missing_re))
+            GC.gc(); changed = true
+            d["re_x"] = sw3.x; d["re_T"] = sw3.thrust; d["re_Sxx"] = sw3.Sxx
+        end
     else
         sw3 = run_sweep_Re(bp); GC.gc(); changed = true
         d["re_x"] = sw3.x; d["re_T"] = sw3.thrust; d["re_Sxx"] = sw3.Sxx
@@ -479,11 +509,13 @@ end
 
 function make_single_axis_panel(sw, d, F_T_star; xlabel, outfile,
                                 xscale=identity, xticks=Makie.automatic,
-                                ylims=nothing, show_zero=true)
+                                xlims=nothing, ylims=nothing, show_zero=true,
+                                marker_point=nothing)
     fig = makie_figure()
     yt = sw.thrust .* d ./ F_T_star
     order = sortperm(sw.x)
     ylim = isnothing(ylims) ? panel_limits(yt, yt) : ylims
+    xlim = isnothing(xlims) ? (minimum(sw.x), maximum(sw.x)) : xlims
     
     # Standalone-panel font scale: this panel is embedded at 0.7\textwidth as a
     # single sub-figure (Fig 3c), unlike the other make_sweep_panel outputs of
@@ -494,14 +526,22 @@ function make_single_axis_panel(sw, d, F_T_star; xlabel, outfile,
     FONT_SCALE = 1.66
     ax = Axis(fig[1, 1];
         xlabel,
+        ylabel = L"F_T/F_T^\ast",
         xlabelsize = 29 * FONT_SCALE,
+        ylabelsize = 29 * FONT_SCALE,
+        ylabelfont = LM_FONT,
+        ylabelpadding = 24 * FONT_SCALE,
         xticklabelsize = 26 * FONT_SCALE,
         yticklabelsize = 26 * FONT_SCALE,
-        xscale, xticks, limits = ((minimum(sw.x), maximum(sw.x)), ylim),
+        xscale, xticks, limits = (xlim, ylim),
         alignmode = Makie.Mixed(left = Makie.Protrusion(125 * FONT_SCALE), right = Makie.Protrusion(90 * FONT_SCALE)))
 
-    Label(fig[1, 1, Makie.Left()], L"F_T/F_T^\ast", rotation = pi/2, fontsize = 29 * FONT_SCALE, font = LM_FONT)
     lines!(ax, sw.x[order], yt[order]; color = BLUE, linewidth = 3, label = "Numerics")
+    if !isnothing(marker_point)
+        scatter!(ax, [marker_point.x], [marker_point.y];
+            marker = :star5, markersize = 24, color = GOLD,
+            strokecolor = :black, strokewidth = 1.6)
+    end
     if show_zero
         hlines!(ax, [0.0]; color = (:black, 0.55), linewidth = 1)
     end
@@ -545,14 +585,15 @@ function main()
         highlight_x = KAPPA_HIGHLIGHTS,
         legend_position = :rb)
     yt3  = sw3.thrust .* d ./ F_T_star
-    pad3 = 0.08 * (maximum(yt3) - minimum(yt3))
     make_single_axis_panel(sw3, d, F_T_star;
         xlabel = L"Re",
         outfile = joinpath(FIG_DIR, "plot_thrust_sweeps_Re"),
         xscale = log10,
         xticks = (10.0 .^ collect(4:8),
                   [L"10^{4}", L"10^{5}", L"10^{6}", L"10^{7}", L"10^{8}"]),
-        ylims = (minimum(yt3) - pad3, maximum(yt3) + pad3),
+        xlims = (1.0e6, maximum(sw3.x)),
+        ylims = (0.98, 1.005),
+        marker_point = (; x = sp_re.Re, y = sp_re.thrust * d / F_T_star),
         show_zero = false)
     make_sweep_panel(sw4, alpha_xM_rigid, d, F_T_star;
         xlabel = L"x_M/L",
