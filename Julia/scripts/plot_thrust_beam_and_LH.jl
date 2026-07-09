@@ -318,7 +318,7 @@ function main()
     snap_kappas = [1.71103172e-3, 5.43e-3, 5.43e-3, 5.43e-3, 2.22e-2]
     snap_logK   = log10.(snap_kappas)
     snap_xMs    = [xM_sb,  xM_sb,  0.183,  0.272,  xM_sb]
-    snap_labels = [L"Fig.~5\,(a)", L"Figs.~5\,(b),\,6\,(a)", L"Fig.~6\,(b)", L"Fig.~6\,(c)", L"Fig.~5\,(c)"]
+    snap_labels = [L"Fig.~5\,(b)", L"Figs.~5\,(c),\,6\,(b)", L"Fig.~6\,(c)", L"Fig.~6\,(d)", L"Fig.~5\,(d)"]
     println("Rendering LH raw clipped...")
     render_panel(log10_kappa, grids.xM, domain_grid_norm, lh_title,
         joinpath(fig_dir, "plot_thrust_beam_and_LH_LH_cbrt"), bp, shift; mode=:raw_clipped,
