@@ -427,7 +427,7 @@ function makie_figure()
             leftspinevisible = true,
         ),
         Legend = (;
-            labelsize = 26,
+            labelsize = 28,
             framevisible = true,
             patchsize = (55, 23),
         ),

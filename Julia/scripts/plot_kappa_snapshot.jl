@@ -397,7 +397,7 @@ end
 
 function draw_sweep_axis!(figpos, labelpos, sweep; legend_position = :rb,
                            sweep_labelsize = 29, sweep_ticksize = 26,
-                           legend_labelsize = 26, legend_patchsize = (55, 23),
+                           legend_labelsize = 28, legend_patchsize = (55, 23),
                            highlight_colors = fill(MAKIE_GRAY, length(sweep.highlights)),
                            highlight_linewidths = fill(1.5, length(sweep.highlights)))
     # sweep_labelsize/sweep_ticksize override the column-panel theme defaults
