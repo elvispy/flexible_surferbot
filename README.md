@@ -90,9 +90,14 @@ Coverage includes the system assembly, modal decomposition, resonance root
 tracing, MATLAB-parity checks, and physics invariants such as zero net
 thrust under symmetric forcing.
 
-## Ground truth
+## API
 
-The paper draft is canonical for the Julia solver; the MATLAB reference
-follows Benham et al. (2024). Where MATLAB and Julia are expected to agree,
-parity is judged by the L2 norm of the free-surface elevation η, not by
-whether a scalar diagnostic such as thrust happens to match.
+| Function | Signature | Use |
+|---|---|---|
+| `FlexibleParams` | `FlexibleParams(; kwargs...)` | Define a simulation: raft length, motor position, flexural rigidity (scalar, or a per-node vector for a graded/multi-material beam), forcing frequency, fluid properties, domain size, grid resolution. |
+| `flexible_solver` | `flexible_solver(params) -> FlexibleResult` | Assemble and solve the coupled beam/free-surface system for one parameter set. |
+| `render_surferbot_run` | `render_surferbot_run(result; outdir, basename, fps, duration_periods) -> (mp4=.., json=..)` | Render a `FlexibleResult` as an MP4 with a JSON provenance sidecar. |
+| `beam_edge_metrics`, `beam_asymmetry` | `beam_edge_metrics(result)`, `beam_asymmetry(eta_left, eta_right)` | Surface elevation at each raft/domain edge, and the left-right wake asymmetry built from it. |
+| `sweep_parameters` | `sweep_parameters(base_params, grid; solver, beam_metrics_fn, save_path) -> SweepArtifact` | Run `solver` over every combination of a NamedTuple parameter grid. |
+| `save_sweep`, `load_sweep` | `save_sweep(path, artifact)`, `load_sweep(path) -> SweepArtifact` | Persist or reload a sweep as JLD2. |
+| `derive_params` | `derive_params(params) -> NamedTuple` | Nondimensional groups and grid choices (resolution, domain length) the solver derives from `params`. |
