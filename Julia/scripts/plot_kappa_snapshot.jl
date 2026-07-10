@@ -463,7 +463,7 @@ function draw_sweep_axis!(figpos, labelpos, sweep; legend_position = :rb,
     return ax
 end
 
-function draw_wave_axis!(ax, result; ylim, show_ylabel, title, F_T_ratio)
+function draw_wave_axis!(ax, result; ylim, show_ylabel, title, F_T_ratio, F_T_raw)
     x_cm, contact, eta_um, motor_x_cm = phase_and_profile(result)
     motor_idx = argmin(abs.(x_cm .- motor_x_cm))
     CM.lines!(ax, x_cm, eta_um; color = MAKIE_BLUE, linewidth = 1.8)
@@ -481,7 +481,16 @@ function draw_wave_axis!(ax, result; ylim, show_ylabel, title, F_T_ratio)
     # region directly below the raft, well inside -ylim, is empty. Placed below
     # (not above) the raft: the tikz panel-tag overlay in main.tex ((b)-(g))
     # sits right above this row, so an above-raft placement collided with it.
-    dir = sign(F_T_ratio)
+    #
+    # Direction MUST come from the raw (unnormalized) thrust, not sign(F_T_ratio):
+    # F_T_ratio = F_T_raw/F_T_star, and F_T_star (the rigid-inviscid reference)
+    # can itself be negative depending on which side its own reference motor
+    # position sits on, which would silently flip the displayed ratio's sign
+    # relative to the true physical push direction. Verified against the
+    # Fig 3b validated case (motor left of centre -> raw thrust positive,
+    # pushes right, away from the bigger left-side wave, matching ordinary
+    # recoil) that sign(F_T_raw) is the physically meaningful one.
+    dir = sign(F_T_raw)
     arrow_y = -0.45 * ylim
     label_y = -0.58 * ylim
     CM.arrows2d!(ax, [-dir * 1.1], [arrow_y], [dir * 2.2], [0.0];
@@ -547,7 +556,8 @@ function make_snapshot_grid(fig_dir; kind::Symbol, op_indices, filename, column_
             leftspinecolor = col, rightspinecolor = col,
             topspinecolor = col, bottomspinecolor = col, spinewidth = sw)
         F_T_ratio = results[j].thrust / sweep.F_T_star
-        draw_wave_axis!(axw, results[j]; ylim, show_ylabel = (j == 1), title = column_titles[j], F_T_ratio)
+        draw_wave_axis!(axw, results[j]; ylim, show_ylabel = (j == 1), title = column_titles[j],
+            F_T_ratio, F_T_raw = results[j].thrust)
         axm = CM.Axis(fig[3, j]; yscale = log10,
             leftspinecolor = col, rightspinecolor = col,
             topspinecolor = col, bottomspinecolor = col, spinewidth = sw)
