@@ -478,28 +478,26 @@ function draw_wave_axis!(ax, result; ylim, show_ylabel, title, F_T_ratio)
 
     # The raft sits at |x|<2.5 with much smaller amplitude than the free-surface
     # ripples beyond it (which approach +-ylim near the domain edges), so the
-    # region directly above the raft, well below ylim, is empty -- place the
-    # arrow+label there rather than near the top of the axis where the ripples
-    # of the outer columns can reach.
+    # region directly below the raft, well inside -ylim, is empty. Placed below
+    # (not above) the raft: the tikz panel-tag overlay in main.tex ((b)-(g))
+    # sits right above this row, so an above-raft placement collided with it.
     dir = sign(F_T_ratio)
-    arrow_y = 0.45 * ylim
-    label_y = 0.72 * ylim
+    arrow_y = -0.45 * ylim
+    label_y = -0.75 * ylim
     CM.arrows2d!(ax, [-dir * 1.1], [arrow_y], [dir * 2.2], [0.0];
-        shaftcolor = :black, tipcolor = :black, shaftwidth = 2.5, tipwidth = 14, tiplength = 14)
+        shaftcolor = :black, tipcolor = :black, shaftwidth = 3.0, tipwidth = 18, tiplength = 18)
     CM.text!(ax, 0.0, label_y;
         text = LaTeXString(@sprintf("\$F_T/F_T^\\ast = %.1f\$", F_T_ratio)),
-        align = (:center, :bottom), fontsize = 15, color = :black)
+        align = (:center, :top), fontsize = 20, color = :black)
 end
 
 function draw_modal_axis!(ax, modal; ylims, show_ylabel)
     mode_energy = abs2.(modal.q)
-    mode_energy = max.(mode_energy, ylims[1])
     CM.barplot!(ax, modal.n, mode_energy;
-        color = MAKIE_BLUE, strokecolor = MAKIE_BLUE, fillto = ylims[1])
+        color = MAKIE_BLUE, strokecolor = MAKIE_BLUE, fillto = 0.0)
     ax.xlabel = L"n"
     ax.ylabel = show_ylabel ? L"|q_n|^2" : ""
     ax.xticks = modal.n
-    ax.yticks = CM.LogTicks(CM.WilkinsonTicks(4))
     CM.ylims!(ax, ylims...)
 end
 
@@ -524,6 +522,14 @@ function wave_ylim(results)
     return ceil(ylim / 500) * 500
 end
 
+function modal_energy_linear_ylim(modals)
+    maxe = 0.0
+    for modal in modals
+        maxe = max(maxe, maximum(abs2.(modal.q)))
+    end
+    return (0.0, 1.15 * maxe)
+end
+
 function make_snapshot_grid(fig_dir; kind::Symbol, op_indices, filename, column_titles)
     setup_lm_mathfonts()
     makie_snapshot_theme!()
@@ -531,7 +537,7 @@ function make_snapshot_grid(fig_dir; kind::Symbol, op_indices, filename, column_
     ops = all_ops[op_indices]
     results, modals = solve_snapshot_ops(ops)
     ylim = wave_ylim(results)
-    modal_energy_ylims = (1e-14, 1e-8)
+    modal_energy_ylims = modal_energy_linear_ylim(modals)
     sweep = load_sweep_cache_for_grid(kind)
 
     fig = CM.Figure(size = (1500, 995), backgroundcolor = :white)
@@ -548,7 +554,7 @@ function make_snapshot_grid(fig_dir; kind::Symbol, op_indices, filename, column_
             topspinecolor = col, bottomspinecolor = col, spinewidth = sw)
         F_T_ratio = results[j].thrust / sweep.F_T_star
         draw_wave_axis!(axw, results[j]; ylim, show_ylabel = (j == 1), title = column_titles[j], F_T_ratio)
-        axm = CM.Axis(fig[3, j]; yscale = log10,
+        axm = CM.Axis(fig[3, j];
             leftspinecolor = col, rightspinecolor = col,
             topspinecolor = col, bottomspinecolor = col, spinewidth = sw)
         draw_modal_axis!(axm, modals[j]; ylims = modal_energy_ylims, show_ylabel = (j == 1))
