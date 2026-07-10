@@ -25,7 +25,7 @@ SWEEP_UCPL_CSV  := $(CSV_DIR)/sweeper_uncoupled_full_grid.csv
 # ── One primary output per script (running the script produces all siblings) ─
 FIGURES := \
 	$(FIG_DIR)/plot_thrust_sweeps_xM.pdf \
-	$(FIG_DIR)/plot_kappa_snapshot_1.71e-03.pdf \
+	$(FIG_DIR)/plot_kappa_snapshot_1.95e-03.pdf \
 	$(FIG_DIR)/plot_kappa_snapshot_grid_flexibility.pdf \
 	$(FIG_DIR)/plot_kappa_snapshot_grid_motor_position.pdf \
 	$(FIG_DIR)/plot_thrust_beam_and_LH_LH_cbrt.pdf \
@@ -45,7 +45,7 @@ $(FIG_DIR)/plot_thrust_sweeps_xM.pdf: plot_thrust_sweeps.jl \
 		$(THRUST_CACHE) $(ALPHA_CACHE) $(SWEEP_CPL_CSV)
 	$(JULIA) --threads auto $<
 
-$(FIG_DIR)/plot_kappa_snapshot_1.71e-03.pdf: plot_kappa_snapshot.jl
+$(FIG_DIR)/plot_kappa_snapshot_1.95e-03.pdf: plot_kappa_snapshot.jl
 	$(JULIA) $< --paper-snapshots
 
 $(FIG_DIR)/plot_kappa_snapshot_grid_flexibility.pdf: plot_kappa_snapshot.jl \
