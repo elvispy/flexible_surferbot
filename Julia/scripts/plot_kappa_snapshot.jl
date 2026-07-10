@@ -107,7 +107,10 @@ end
 const THRUST_CACHE_PATH = joinpath(@__DIR__, "..", "output", "jld2", "thrust_sweeps.jld2")
 const ALPHA_CACHE_PATH = joinpath(@__DIR__, "..", "output", "jld2", "alpha_sweep_kappa_farfield.jld2")
 const GRID_ALPHA_CSV = joinpath(@__DIR__, "..", "output", "csv", "sweeper_coupled_full_grid.csv")
-const KAPPA_HIGHLIGHTS = [1.71103172e-3, 5.43e-3, 2.22e-2]
+# First and third values chosen as local minima of F_T/F_T^* in the kappa
+# sweep at the SurferBot forcing position (very negative thrust), not the
+# resonance peaks -- see chat: original 1.71103172e-3/2.22e-2 sat on peaks.
+const KAPPA_HIGHLIGHTS = [1.949845e-3, 5.43e-3, 1.698244e-2]
 const XM_HIGHLIGHTS = [0.12, 0.183, 0.272]
 const SNAPSHOT_CACHE_PATH = joinpath(@__DIR__, "..", "output", "jld2", "kappa_snapshots_cache.jld2")
 
@@ -124,11 +127,11 @@ function paper_snapshot_ops()
     xM_sb    = abs(Float64(bp.motor_position)) / Float64(bp.L_raft)
 
     ops = [
-        (kappa=1.71103172e-3, xM=xM_sb,  file_xM=nothing, label="(a)"),
+        (kappa=1.949845e-3, xM=xM_sb,  file_xM=nothing, label="(a)"),
         (kappa=5.43e-3, xM=xM_sb,  file_xM=nothing, label="(b)"),
         (kappa=5.43e-3, xM=0.183,  file_xM=0.183,   label="(c)"),
         (kappa=5.43e-3, xM=0.272,  file_xM=0.272,   label="(d)"),
-        (kappa=2.22e-2, xM=xM_sb,  file_xM=nothing, label="(e)"),
+        (kappa=1.698244e-2, xM=xM_sb,  file_xM=nothing, label="(e)"),
     ]
     return bp, EI_scale, xM_sb, ops
 end
@@ -542,9 +545,9 @@ function main_snapshot_grids(fig_dir)
         kind = :kappa,
         op_indices = [1, 2, 5],
         filename = "plot_kappa_snapshot_grid_flexibility",
-        column_titles = [L"\kappa=1.71\times10^{-3}",
+        column_titles = [L"\kappa=1.95\times10^{-3}",
                          L"\kappa=5.43\times10^{-3}",
-                         L"\kappa=2.22\times10^{-2}"])
+                         L"\kappa=1.70\times10^{-2}"])
     make_snapshot_grid(fig_dir;
         kind = :xM,
         op_indices = [2, 3, 4],

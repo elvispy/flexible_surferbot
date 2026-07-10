@@ -74,7 +74,7 @@ function setup_lm_mathfonts()
     catch
     end
 end
-const KAPPA_HIGHLIGHTS = [1.71103172e-3, 5.43e-3, 2.22e-2]
+const KAPPA_HIGHLIGHTS = [1.949845e-3, 5.43e-3, 1.698244e-2]
 
 # ─── Per-solve extraction ─────────────────────────────────────────────────────
 function compute_Sxx(result)

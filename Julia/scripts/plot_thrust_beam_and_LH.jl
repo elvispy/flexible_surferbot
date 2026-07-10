@@ -315,7 +315,7 @@ function main()
     xM_sb     = abs(Float64(bp.motor_position)) / Float64(bp.L_raft)
     # Five operating points matching the kappa_snapshot_5panel figure:
     #   (a)-(b)-(e)  surferbot xM; (c) α≈0 at κ=5.43e-3; (d) |α|≈1 at κ=5.43e-3
-    snap_kappas = [1.71103172e-3, 5.43e-3, 5.43e-3, 5.43e-3, 2.22e-2]
+    snap_kappas = [1.949845e-3, 5.43e-3, 5.43e-3, 5.43e-3, 1.698244e-2]
     snap_logK   = log10.(snap_kappas)
     snap_xMs    = [xM_sb,  xM_sb,  0.183,  0.272,  xM_sb]
     snap_labels = [L"Fig.~5\,(b)", L"Figs.~5\,(c),\,6\,(b)", L"Fig.~6\,(c)", L"Fig.~6\,(d)", L"Fig.~5\,(d)"]
