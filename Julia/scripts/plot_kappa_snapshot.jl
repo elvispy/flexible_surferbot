@@ -377,7 +377,7 @@ function load_sweep_cache_for_grid(kind::Symbol)
                 xscale = log10,
                 xticks = (10.0 .^ collect(-4:1),
                           [L"10^{-4}", L"10^{-3}", L"10^{-2}", L"10^{-1}", L"10^{0}", L"10^{1}"]),
-                highlights = KAPPA_HIGHLIGHTS)
+                highlights = KAPPA_HIGHLIGHTS, F_T_star = scale)
     elseif kind == :xM
         alpha_xM = load_motor_alpha_from_csv(bp; target_kappa = 5.43e-3)
         return (; x = d["xM_x"], y = d["xM_T"] .* depth ./ scale,
@@ -386,7 +386,7 @@ function load_sweep_cache_for_grid(kind::Symbol)
                 xlabel = L"x_M/L",
                 xscale = identity,
                 xticks = 0.0:0.1:0.5,
-                highlights = XM_HIGHLIGHTS)
+                highlights = XM_HIGHLIGHTS, F_T_star = scale)
     else
         error("Unknown sweep kind: $kind")
     end
@@ -463,18 +463,32 @@ function draw_sweep_axis!(figpos, labelpos, sweep; legend_position = :rb,
     return ax
 end
 
-function draw_wave_axis!(ax, result; ylim, show_ylabel, title)
+function draw_wave_axis!(ax, result; ylim, show_ylabel, title, F_T_ratio)
     x_cm, contact, eta_um, motor_x_cm = phase_and_profile(result)
     motor_idx = argmin(abs.(x_cm .- motor_x_cm))
     CM.lines!(ax, x_cm, eta_um; color = MAKIE_BLUE, linewidth = 1.8)
     CM.lines!(ax, x_cm[contact], eta_um[contact]; color = :black, linewidth = 3.0)
     CM.scatter!(ax, [x_cm[motor_idx]], [eta_um[motor_idx]];
-        color = MAKIE_LOAD, strokecolor = MAKIE_LOAD, markersize = 10)
+        color = MAKIE_LOAD, strokecolor = MAKIE_LOAD, markersize = 15)
     ax.title = title
     ax.xlabel = L"x\;(\mathrm{cm})"
     ax.ylabel = show_ylabel ? L"h\;(\mu\mathrm{m})" : ""
     CM.xlims!(ax, -5, 5)
     CM.ylims!(ax, -ylim, ylim)
+
+    # The raft sits at |x|<2.5 with much smaller amplitude than the free-surface
+    # ripples beyond it (which approach +-ylim near the domain edges), so the
+    # region directly above the raft, well below ylim, is empty -- place the
+    # arrow+label there rather than near the top of the axis where the ripples
+    # of the outer columns can reach.
+    dir = sign(F_T_ratio)
+    arrow_y = 0.45 * ylim
+    label_y = 0.72 * ylim
+    CM.arrows2d!(ax, [-dir * 1.1], [arrow_y], [dir * 2.2], [0.0];
+        shaftcolor = :black, tipcolor = :black, shaftwidth = 2.5, tipwidth = 14, tiplength = 14)
+    CM.text!(ax, 0.0, label_y;
+        text = LaTeXString(@sprintf("\$F_T/F_T^\\ast = %.1f\$", F_T_ratio)),
+        align = (:center, :bottom), fontsize = 15, color = :black)
 end
 
 function draw_modal_axis!(ax, modal; ylims, show_ylabel)
@@ -532,7 +546,8 @@ function make_snapshot_grid(fig_dir; kind::Symbol, op_indices, filename, column_
             title = column_titles[j], titlecolor = col,
             leftspinecolor = col, rightspinecolor = col,
             topspinecolor = col, bottomspinecolor = col, spinewidth = sw)
-        draw_wave_axis!(axw, results[j]; ylim, show_ylabel = (j == 1), title = column_titles[j])
+        F_T_ratio = results[j].thrust / sweep.F_T_star
+        draw_wave_axis!(axw, results[j]; ylim, show_ylabel = (j == 1), title = column_titles[j], F_T_ratio)
         axm = CM.Axis(fig[3, j]; yscale = log10,
             leftspinecolor = col, rightspinecolor = col,
             topspinecolor = col, bottomspinecolor = col, spinewidth = sw)

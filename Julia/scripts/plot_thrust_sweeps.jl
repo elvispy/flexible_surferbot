@@ -35,7 +35,12 @@ const ALPHA_CACHE_PATH = joinpath(@__DIR__, "..", "output", "jld2", "alpha_sweep
 const GRID_ALPHA_CSV = joinpath(@__DIR__, "..", "output", "csv", "sweeper_coupled_full_grid.csv")
 const FIG_DIR    = joinpath(@__DIR__, "..", "output", "figures")
 const N_SWEEP    = 50
-const RE_REFINE_LOG10 = collect(range(4.55, 4.90; length = 15))
+const RE_REFINE_LOG10 = sort(unique(vcat(
+    collect(range(4.55, 4.90; length = 15)),
+    collect(4.690:0.005:4.740),
+    collect(4.711:0.001:4.714),
+    [4.71325, 4.7135, 4.71375, 4.7145],
+)))
 const NU_WATER   = 1e-6
 const RIGID_INVISCID_OVERRIDES = (nu = 0.0, EI = Inf)
 const BLUE = RGBf(0.10, 0.30, 0.80)
