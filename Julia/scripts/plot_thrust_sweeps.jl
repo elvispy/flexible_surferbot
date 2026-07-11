@@ -573,7 +573,7 @@ function make_single_axis_panel(sw, d, F_T_star; xlabel, outfile,
             marker = :star5, markersize = 24, color = GOLD,
             strokecolor = :black, strokewidth = 1.6)
         push!(handles, s1)
-        push!(labels, "SurferBot operating point")
+        push!(labels, "SurferBot")
     end
     if show_zero
         hlines!(ax, [0.0]; color = (:black, 0.55), linewidth = 1)

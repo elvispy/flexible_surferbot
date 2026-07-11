@@ -19,7 +19,7 @@ using LaTeXStrings
 
 const FIG1_FREE_SURFACE = "#1A4DCC"
 const FIG1_RAFT = "#000000"
-const FIG1_MOTOR = "#D62728"
+const FIG1_MOTOR = RGB(0.66, 0.43, 0.05)
 
 function main()
     fig_dir = joinpath(@__DIR__, "..", "output", "figures")
