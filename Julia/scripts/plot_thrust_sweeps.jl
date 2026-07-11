@@ -401,6 +401,31 @@ function load_motor_alpha_from_csv(bp; target_kappa)
     return (; x = Float64.(rows.xM_over_L[order]), alpha = Float64.(rows.alpha[order]))
 end
 
+function mirror_odd_sweep(sw)
+    order = sortperm(sw.x)
+    x = Float64.(sw.x[order])
+    thrust = Float64.(sw.thrust[order])
+    Sxx = Float64.(sw.Sxx[order])
+    first_zero = findfirst(isapprox(0.0; atol = 1e-12), x)
+    isnothing(first_zero) && error("Rigid motor-position sweep must include x_M/L=0 to mirror about the raft centre")
+    neg = reverse(first_zero + 1:length(x))
+    return (;
+        x = vcat(-x[neg], x[first_zero:end]),
+        thrust = vcat(-thrust[neg], thrust[first_zero:end]),
+        Sxx = vcat(-Sxx[neg], Sxx[first_zero:end]),
+    )
+end
+
+function mirror_odd_alpha(sw)
+    order = sortperm(sw.x)
+    x = Float64.(sw.x[order])
+    alpha = Float64.(sw.alpha[order])
+    first_zero = findfirst(isapprox(0.0; atol = 1e-12), x)
+    isnothing(first_zero) && error("Rigid alpha sweep must include x_M/L=0 to mirror about the raft centre")
+    neg = reverse(first_zero + 1:length(x))
+    return (; x = vcat(-x[neg], x[first_zero:end]), alpha = vcat(-alpha[neg], alpha[first_zero:end]))
+end
+
 function panel_limits(y1, y2; include_zero=true)
     vals = vcat(y1, y2)
     if include_zero
@@ -567,7 +592,8 @@ function main()
     alpha_kappa = load_alpha_sweep()
     alpha_kappa_sw = (; x = alpha_kappa.kappa, alpha = alpha_kappa.alpha)
     alpha_xM = load_motor_alpha_from_csv(bp; target_kappa = XM_SWEEP_KAPPA)
-    alpha_xM_rigid = load_motor_alpha_from_csv(bp; target_kappa = nothing)
+    alpha_xM_rigid = mirror_odd_alpha(load_motor_alpha_from_csv(bp; target_kappa = nothing))
+    sw4_plot = mirror_odd_sweep(sw4)
 
     d     = Float64(bp.d)
     @printf "Using F_T^* = %+.6e N from rigid-inviscid Surferbot reference\n" F_T_star
@@ -597,7 +623,7 @@ function main()
         ylims = (minimum(yt3) - pad3, maximum(yt3) + pad3),
         marker_point = (; x = sp_re.Re, y = sp_re.thrust * d / F_T_star),
         show_zero = false)
-    make_sweep_panel(sw4, alpha_xM_rigid, d, F_T_star;
+    make_sweep_panel(sw4_plot, alpha_xM_rigid, d, F_T_star;
         xlabel = L"x_M/L",
         outfile = joinpath(FIG_DIR, "plot_thrust_sweeps_xM_rigid"),
         highlight_x = Float64[],
