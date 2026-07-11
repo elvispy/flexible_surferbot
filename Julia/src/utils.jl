@@ -192,15 +192,18 @@ The relation includes gravity, surface tension, and kinematic viscosity.
 - `rho`: Fluid density.
 - `k0`: Initial guess for wavenumber (default: 1.0).
 - `num_steps`: Iterations for Newton refinement (default: 500).
+- `deep`: If `true`, solve the H-independent deep-water limit (tanh(kH) -> 1)
+  directly instead of using `H`. Cheaper and exact, since it needs no depth
+  at all; used to get a depth-independent reference wavenumber.
 
 # Returns
 - The complex wavenumber `k`.
 """
 function dispersion_k(omega::T, g::T, H::T, nu::T, sigma::T, rho::T;
                       k0=Complex{T}(min(omega^2 / g, (rho * omega^2 / sigma)^(T(1)/3))),
-                      num_steps=500) where {T<:Real}
+                      num_steps=500, deep::Bool=false) where {T<:Real}
     function dispersion_eq(k)
-        tanh_kH = tanh(k * H)
+        tanh_kH = deep ? one(k) : tanh(k * H)
         lhs = k * tanh_kH * g
         rhs = (-sigma / rho) * k^3 * tanh_kH + omega^2 - 4im * nu * omega * k^2
         return lhs - rhs

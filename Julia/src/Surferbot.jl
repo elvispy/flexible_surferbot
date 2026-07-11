@@ -217,16 +217,24 @@ function derive_params(params::FlexibleParams{T}) where {T<:Real}
         Lambda = d / params.L_raft,
     )
 
-    current_depth = isnothing(params.domain_depth) ? T(2.5) * params.g / params.omega^2 : params.domain_depth
-    k = dispersion_k(params.omega, params.g, current_depth, params.nu, params.sigma, params.rho)
-    
-    if isnothing(params.domain_depth)
-        while isnan(k) || tanh(real(k) * current_depth) < T(0.99)
-            current_depth *= T(1.05)
-            k = dispersion_k(params.omega, params.g, current_depth, params.nu, params.sigma, params.rho)
-        end
+    domain_depth = if isnothing(params.domain_depth)
+        # Closed-form "deep enough" depth: solve the H-independent deep-water
+        # dispersion relation once for k_deep, then invert tanh(kr*depth) =
+        # 0.99 directly. This replaces a discrete current_depth *= 1.05
+        # search ladder whose stopping point was a genuine staircase function
+        # of nu (hence of Re): small continuous changes in nu shifted kr just
+        # enough to change the *number* of 1.05x steps needed, so domain_depth
+        # (and the derived vertical grid count M) used to jump discontinuously
+        # at isolated Re values, producing an unresolvable kink in F_T(Re)
+        # that no amount of Re-sweep refinement could smooth out. The
+        # closed-form depth below is a continuous function of nu, and is also
+        # cheap: one deep-water solve instead of up to ~60 finite-depth solves.
+        k_deep = dispersion_k(params.omega, params.g, one(params.g), params.nu, params.sigma, params.rho; deep=true)
+        atanh(T(0.99)) / real(k_deep)
+    else
+        params.domain_depth
     end
-    domain_depth = current_depth
+    k = dispersion_k(params.omega, params.g, domain_depth, params.nu, params.sigma, params.rho)
 
     res = 80
     k_real = real(k)
