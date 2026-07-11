@@ -549,10 +549,9 @@ function make_single_axis_panel(sw, d, F_T_star; xlabel, outfile,
     # Standalone-panel font scale: this panel is embedded at 0.7\textwidth as a
     # single sub-figure (Fig 3c), unlike the other make_sweep_panel outputs of
     # this script (embedded at full \textwidth), so it needs larger absolute
-    # font sizes to print at the same size as neighbouring panels. Factor
-    # measured directly from the compiled PDF: panel-b tick digit height
-    # (4.98pt) / panel-c tick digit height (3.0pt) = 1.66.
-    FONT_SCALE = 1.66
+    # font sizes to print at the same size as neighbouring panels. Value
+    # tuned by comparing tick-digit height against Fig 3b in the compiled PDF.
+    FONT_SCALE = 2.5
     ax = Axis(fig[1, 1];
         xlabel,
         ylabel = L"F_T/F_T^\ast",
