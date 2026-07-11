@@ -19,6 +19,7 @@ using LaTeXStrings
 
 const FIG1_FREE_SURFACE = "#1A4DCC"
 const FIG1_RAFT = "#000000"
+const FIG1_MOTOR = "#D62728"
 
 function main()
     fig_dir = joinpath(@__DIR__, "..", "output", "figures")
@@ -79,6 +80,11 @@ function main()
     )
     plot!(p, x_cm[contact], eta_um[contact];
         color = FIG1_RAFT, linewidth = 5.6, label = false)
+
+    motor_x_cm = params.motor_position * 1e2
+    motor_idx  = argmin(abs.(x_cm .- motor_x_cm))
+    scatter!(p, [x_cm[motor_idx]], [eta_um[motor_idx]];
+        color = FIG1_MOTOR, markerstrokecolor = FIG1_MOTOR, markersize = 11, label = false)
 
     fname = joinpath(fig_dir, "plot_fig4_Aguero2026_1.pdf")
     savefig(p, fname)
