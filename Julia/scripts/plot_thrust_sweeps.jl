@@ -80,6 +80,7 @@ function setup_lm_mathfonts()
     end
 end
 const KAPPA_HIGHLIGHTS = [2.1209508879201904e-3, 5.43e-3, 1.698244e-2]
+const RIGID_XM_VALUES = collect(range(-0.48, 0.48; length = 2 * N_SWEEP - 1))
 
 # ─── Per-solve extraction ─────────────────────────────────────────────────────
 function compute_Sxx(result)
@@ -96,6 +97,15 @@ function solve_one(bp_overrides, bp)
     res = Surferbot.flexible_solver(p)
     d   = Float64(res.metadata.args.d)
     return res.thrust / d, compute_Sxx(res)
+end
+
+function solve_one_with_alpha(bp_overrides, bp)
+    p   = Surferbot.Sweep.apply_parameter_overrides(bp, bp_overrides)
+    res = Surferbot.flexible_solver(p)
+    d   = Float64(res.metadata.args.d)
+    m   = Surferbot.Analysis.beam_edge_metrics(res)
+    alpha = Surferbot.Analysis.beam_asymmetry(m.eta_left_domain, m.eta_right_domain)
+    return res.thrust / d, compute_Sxx(res), alpha
 end
 
 function solve_alpha(bp_overrides, bp)
@@ -135,7 +145,7 @@ function run_sweep_xM(bp)
             Base.release(SOLVE_SEM)
         end
         lock(PRINT_LOCK) do
-            @printf "  [%2d/%d]  xM/L=%.3f   T/d=%+.3e   Sxx=%+.3e\n" i N_SWEEP xM_norm T[i] Sxx[i]
+            @printf "  [%2d/%d]  xM/L=%.3f   T/d=%+.3e   Sxx=%+.3e\n" i length(xs) xM_norm T[i] Sxx[i]
         end
     end
     return (; x = xs, thrust = T, Sxx)
@@ -209,6 +219,15 @@ function merge_re_sweeps(existing, new)
     return (; x = x[order], thrust = thrust[order], Sxx = Sxx[order])
 end
 
+function merge_rigid_xM_sweeps(existing, new)
+    x = vcat(Float64.(existing.x), Float64.(new.x))
+    thrust = vcat(Float64.(existing.thrust), Float64.(new.thrust))
+    Sxx = vcat(Float64.(existing.Sxx), Float64.(new.Sxx))
+    alpha = vcat(Float64.(existing.alpha), Float64.(new.alpha))
+    order = sortperm(x)
+    return (; x = x[order], thrust = thrust[order], Sxx = Sxx[order], alpha = alpha[order])
+end
+
 function missing_re_values(existing_x, desired_x)
     out = Float64[]
     for x in desired_x
@@ -217,25 +236,30 @@ function missing_re_values(existing_x, desired_x)
     return out
 end
 
-function run_sweep_xM_rigid(bp)
+function same_grid(existing_x, desired_x)
+    length(existing_x) == length(desired_x) || return false
+    return all(isapprox(Float64(x), Float64(y); rtol = 1e-10, atol = 1e-12) for (x, y) in zip(existing_x, desired_x))
+end
+
+function run_sweep_xM_rigid(bp, xs = RIGID_XM_VALUES)
     L     = Float64(bp.L_raft)
-    xs    = collect(range(0.0, 0.48; length = N_SWEEP))
-    T     = Vector{Float64}(undef, N_SWEEP)
-    Sxx   = Vector{Float64}(undef, N_SWEEP)
-    println("Sweep 4/4: motor position rigid EI=Inf ($N_SWEEP points) …")
-    @threads for i in 1:N_SWEEP
+    T     = Vector{Float64}(undef, length(xs))
+    Sxx   = Vector{Float64}(undef, length(xs))
+    alpha = Vector{Float64}(undef, length(xs))
+    println("Sweep 4/4: motor position rigid EI=Inf ($(length(xs)) points) …")
+    @threads for i in eachindex(xs)
         xM_norm = xs[i]
         Base.acquire(SOLVE_SEM)
         try
-            T[i], Sxx[i] = solve_one((motor_position = xM_norm * L, nu = 0.0, EI = Inf), bp)
+            T[i], Sxx[i], alpha[i] = solve_one_with_alpha((motor_position = xM_norm * L, nu = 0.0, EI = Inf), bp)
         finally
             Base.release(SOLVE_SEM)
         end
         lock(PRINT_LOCK) do
-            @printf "  [%2d/%d]  xM/L=%.3f   T/d=%+.3e   Sxx=%+.3e\n" i N_SWEEP xM_norm T[i] Sxx[i]
+            @printf "  [%2d/%d]  xM/L=%.3f   T/d=%+.3e   Sxx=%+.3e   α=%+.4f\n" i length(xs) xM_norm T[i] Sxx[i] alpha[i]
         end
     end
-    return (; x = xs, thrust = T, Sxx)
+    return (; x = xs, thrust = T, Sxx, alpha)
 end
 
 function run_alpha_xM(bp)
@@ -255,31 +279,12 @@ function run_alpha_xM(bp)
             Base.release(SOLVE_SEM)
         end
         lock(PRINT_LOCK) do
-            @printf "  [%2d/%d]  xM/L=%.3f   α=%+.4f\n" i N_SWEEP xM_norm alpha[i]
+            @printf "  [%2d/%d]  xM/L=%.3f   α=%+.4f\n" i length(xs) xM_norm alpha[i]
         end
     end
     return (; x = xs, alpha)
 end
 
-function run_alpha_xM_rigid(bp)
-    L = Float64(bp.L_raft)
-    xs = collect(range(0.0, 0.48; length = N_SWEEP))
-    alpha = Vector{Float64}(undef, N_SWEEP)
-    println("Alpha sweep: rigid motor position ($N_SWEEP points) …")
-    @threads for i in 1:N_SWEEP
-        xM_norm = xs[i]
-        Base.acquire(SOLVE_SEM)
-        try
-            alpha[i] = solve_alpha((motor_position = xM_norm * L, nu = 0.0, EI = Inf), bp)
-        finally
-            Base.release(SOLVE_SEM)
-        end
-        lock(PRINT_LOCK) do
-            @printf "  [%2d/%d]  xM/L=%.3f   α=%+.4f\n" i N_SWEEP xM_norm alpha[i]
-        end
-    end
-    return (; x = xs, alpha)
-end
 
 # ─── Surferbot operating point ────────────────────────────────────────────────
 function surferbot_point(bp; nu = 0.0)
@@ -302,6 +307,7 @@ function save_cache(sw1, sw2, sw3, sw4, sp, F_T_star, sp_re)
         "kap_x",      sw2.x,  "kap_T",       sw2.thrust, "kap_Sxx",      sw2.Sxx,
         "re_x",       sw3.x,  "re_T",        sw3.thrust, "re_Sxx",       sw3.Sxx,
         "xM_rig_x",   sw4.x,  "xM_rig_T",    sw4.thrust, "xM_rig_Sxx",   sw4.Sxx,
+        "xM_rig_alpha", sw4.alpha,
         "sp_xM", sp.xM_norm, "sp_kap", sp.kappa, "sp_Re", sp.Re,
         "sp_T",  sp.thrust,  "sp_Sxx", sp.Sxx,
         "F_T_star", F_T_star,
@@ -365,10 +371,20 @@ function load_or_compute(bp)
     end
 
     if all(k -> haskey(d, k), ["xM_rig_x", "xM_rig_T", "xM_rig_Sxx"])
-        sw4 = (; x = d["xM_rig_x"], thrust = d["xM_rig_T"], Sxx = d["xM_rig_Sxx"])
+        haskey(d, "xM_rig_alpha") || error("Rigid motor-position cache lacks alpha values. Regenerate the rigid motor-position sweep.")
+        sw4 = (; x = d["xM_rig_x"], thrust = d["xM_rig_T"], Sxx = d["xM_rig_Sxx"], alpha = d["xM_rig_alpha"])
+        missing_xM = missing_re_values(sw4.x, RIGID_XM_VALUES)
+        if !isempty(missing_xM)
+            println("Computing $(length(missing_xM)) missing rigid motor-position points …")
+            sw4 = merge_rigid_xM_sweeps(sw4, run_sweep_xM_rigid(bp, missing_xM))
+            GC.gc(); changed = true
+            d["xM_rig_x"] = sw4.x; d["xM_rig_T"] = sw4.thrust; d["xM_rig_Sxx"] = sw4.Sxx
+            d["xM_rig_alpha"] = sw4.alpha
+        end
     else
         sw4 = run_sweep_xM_rigid(bp); GC.gc(); changed = true
         d["xM_rig_x"] = sw4.x; d["xM_rig_T"] = sw4.thrust; d["xM_rig_Sxx"] = sw4.Sxx
+        d["xM_rig_alpha"] = sw4.alpha
     end
 
     if changed
@@ -401,30 +417,6 @@ function load_motor_alpha_from_csv(bp; target_kappa)
     return (; x = Float64.(rows.xM_over_L[order]), alpha = Float64.(rows.alpha[order]))
 end
 
-function mirror_odd_sweep(sw)
-    order = sortperm(sw.x)
-    x = Float64.(sw.x[order])
-    thrust = Float64.(sw.thrust[order])
-    Sxx = Float64.(sw.Sxx[order])
-    first_zero = findfirst(isapprox(0.0; atol = 1e-12), x)
-    isnothing(first_zero) && error("Rigid motor-position sweep must include x_M/L=0 to mirror about the raft centre")
-    neg = reverse(first_zero + 1:length(x))
-    return (;
-        x = vcat(-x[neg], x[first_zero:end]),
-        thrust = vcat(-thrust[neg], thrust[first_zero:end]),
-        Sxx = vcat(-Sxx[neg], Sxx[first_zero:end]),
-    )
-end
-
-function mirror_odd_alpha(sw)
-    order = sortperm(sw.x)
-    x = Float64.(sw.x[order])
-    alpha = Float64.(sw.alpha[order])
-    first_zero = findfirst(isapprox(0.0; atol = 1e-12), x)
-    isnothing(first_zero) && error("Rigid alpha sweep must include x_M/L=0 to mirror about the raft centre")
-    neg = reverse(first_zero + 1:length(x))
-    return (; x = vcat(-x[neg], x[first_zero:end]), alpha = vcat(-alpha[neg], alpha[first_zero:end]))
-end
 
 function panel_limits(y1, y2; include_zero=true)
     vals = vcat(y1, y2)
@@ -594,8 +586,7 @@ function main()
     alpha_kappa = load_alpha_sweep()
     alpha_kappa_sw = (; x = alpha_kappa.kappa, alpha = alpha_kappa.alpha)
     alpha_xM = load_motor_alpha_from_csv(bp; target_kappa = XM_SWEEP_KAPPA)
-    alpha_xM_rigid = mirror_odd_alpha(load_motor_alpha_from_csv(bp; target_kappa = nothing))
-    sw4_plot = mirror_odd_sweep(sw4)
+    alpha_xM_rigid = (; x = sw4.x, alpha = sw4.alpha)
 
     d     = Float64(bp.d)
     @printf "Using F_T^* = %+.6e N from rigid-inviscid Surferbot reference\n" F_T_star
@@ -625,7 +616,7 @@ function main()
         ylims = (minimum(yt3) - pad3, maximum(yt3) + pad3),
         marker_point = (; x = sp_re.Re, y = sp_re.thrust * d / F_T_star),
         show_zero = false)
-    make_sweep_panel(sw4_plot, alpha_xM_rigid, d, F_T_star;
+    make_sweep_panel(sw4, alpha_xM_rigid, d, F_T_star;
         xlabel = L"x_M/L",
         outfile = joinpath(FIG_DIR, "plot_thrust_sweeps_xM_rigid"),
         highlight_x = Float64[],
