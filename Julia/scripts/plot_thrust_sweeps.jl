@@ -564,23 +564,18 @@ function make_single_axis_panel(sw, d, F_T_star; xlabel, outfile,
         xscale, xticks, limits = ((minimum(sw.x), maximum(sw.x)), ylim),
         alignmode = Makie.Mixed(left = Makie.Protrusion(125 * FONT_SCALE), right = Makie.Protrusion(90 * FONT_SCALE)))
 
-    l1 = lines!(ax, sw.x[order], yt[order]; color = BLUE, linewidth = 3)
-    handles = Any[l1]
-    labels = Any[L"F_T/F_T^\ast"]
+    lines!(ax, sw.x[order], yt[order]; color = BLUE, linewidth = 3)
     if !isnothing(marker_point)
         s1 = scatter!(ax, [marker_point.x], [marker_point.y];
-            marker = :star5, markersize = 24, color = GOLD,
+            marker = :star5, markersize = 40, color = GOLD,
             strokecolor = :black, strokewidth = 1.6)
-        push!(handles, s1)
-        push!(labels, "SurferBot")
+        axislegend(ax, [s1], ["SurferBot"]; position = :rt,
+            labelsize = 22 * FONT_SCALE,
+            backgroundcolor = (:white, 0.86), framecolor = (:black, 0.45))
     end
     if show_zero
         hlines!(ax, [0.0]; color = (:black, 0.55), linewidth = 1)
     end
-
-    axislegend(ax, handles, labels; position = :rt,
-        labelsize = 22 * FONT_SCALE,
-        backgroundcolor = (:white, 0.86), framecolor = (:black, 0.45))
 
     Makie.colsize!(fig.layout, 1, Makie.Fixed(1285))
     Makie.rowsize!(fig.layout, 1, Makie.Fixed(355))
