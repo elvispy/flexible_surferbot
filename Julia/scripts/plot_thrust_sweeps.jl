@@ -459,17 +459,19 @@ end
 
 function add_dual_axis!(fig, sw, alpha_sw, d, F_T_star; xlabel, xscale=identity,
                         xticks=Makie.automatic, ylims=nothing, show_Sxx=true,
-                        show_zero=true, highlight_x=Float64[], legend_position=:rb)
+                        show_zero=true, highlight_x=Float64[], legend_position=:rb,
+                        xlims=nothing)
     yt = sw.thrust .* d ./ F_T_star
     yS = sw.Sxx .* d ./ F_T_star
     ylim = isnothing(ylims) ? panel_limits(yt, show_Sxx ? yS : yt) : ylims
+    xlim = isnothing(xlims) ? (minimum(sw.x), maximum(sw.x)) : xlims
     order = sortperm(sw.x)
     alpha_order = sortperm(alpha_sw.x)
 
     ax = Axis(fig[1, 1];
         xlabel,
         xscale, xticks, ytickformat = x -> [@sprintf("%.0f", v) for v in x],
-        limits = ((minimum(sw.x), maximum(sw.x)), ylim),
+        limits = (xlim, ylim),
         alignmode = Makie.Mixed(left = Makie.Protrusion(125), right = Makie.Protrusion(90)))
 
     Label(fig[1, 1, Makie.Left()], L"\text{Normalized thrust}", rotation = pi/2, fontsize = 29, font = LM_FONT)
@@ -498,7 +500,7 @@ function add_dual_axis!(fig, sw, alpha_sw, d, F_T_star; xlabel, xscale=identity,
         xgridvisible = false,
         ygridvisible = false,
         backgroundcolor = :transparent,
-        limits = ((minimum(sw.x), maximum(sw.x)), (-1.1, 1.1)),
+        limits = (xlim, (-1.1, 1.1)),
         ytickformat = vals -> [@sprintf("%.1f", v) for v in vals],
         alignmode = Makie.Mixed(right = Makie.Protrusion(90)))
     hidespines!(axr, :l, :b, :t)
@@ -519,10 +521,10 @@ function make_sweep_panel(sw, alpha_sw, d, F_T_star; xlabel, outfile,
                           xscale=identity, xticks=Makie.automatic,
                           ylims=nothing, show_Sxx=true, show_zero=true,
                           highlight_x=Float64[], legend_position=:rb,
-                          grid_style=false)
+                          grid_style=false, xlims=nothing)
     fig = makie_figure()
     add_dual_axis!(fig, sw, alpha_sw, d, F_T_star; xlabel, xscale, xticks,
-        ylims, show_Sxx, show_zero, highlight_x, legend_position)
+        ylims, show_Sxx, show_zero, highlight_x, legend_position, xlims)
     Makie.resize_to_layout!(fig)
     save(outfile * ".pdf", fig)
     save(outfile * ".png", fig; px_per_unit = 2)
@@ -619,6 +621,9 @@ function main()
     make_sweep_panel(sw4, alpha_xM_rigid, d, F_T_star;
         xlabel = L"x_M/L",
         outfile = joinpath(FIG_DIR, "plot_thrust_sweeps_xM_rigid"),
+        xticks = ([-0.5, -0.25, 0.0, 0.25, 0.5],
+                  [L"-0.5", L"-0.25", L"0", L"0.25", L"0.5"]),
+        xlims = (-0.5, 0.5),
         highlight_x = Float64[],
         grid_style = true)
 end
