@@ -20,8 +20,8 @@ Compute thrust, drift speed, input power, and surface fields from the harmonic s
 - A tuple `(U, power, thrust, eta, p, max_curvature, wave_steepness)`.
 """
 function calculate_surferbot_outputs(args, phi, phi_z, getNonCompactFDmatrix, getNonCompactFDmatrix2D)
-    N = args.N
-    M = args.M
+    Nx = args.Nx
+    Nz = args.Nz
     dx_adim = args.dx / args.L_c
     dz_adim = args.dz / args.L_c
     F_c = args.m_c * args.L_c / args.t_c^2

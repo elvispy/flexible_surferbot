@@ -16,11 +16,11 @@ using Surferbot
     @test derived.domain_depth > 0.0
     @test derived.k isa Complex
     @test derived.n isa Int
-    @test derived.M isa Int
-    @test derived.N isa Int
-    @test length(derived.x) == derived.N
-    @test length(derived.z) == derived.M
-    @test count(derived.x_contact) + count(derived.x_free) == derived.N - 2
+    @test derived.Nz isa Int
+    @test derived.Nx isa Int
+    @test length(derived.x) == derived.Nx
+    @test length(derived.z) == derived.Nz
+    @test count(derived.x_contact) + count(derived.x_free) == derived.Nx - 2
     x_contact = derived.x[derived.x_contact]
     dx_contact = diff(x_contact)
     weights = vcat(0.5 * dx_contact[1], 0.5 .* (dx_contact[1:(end - 1)] .+ dx_contact[2:end]), 0.5 * dx_contact[end])

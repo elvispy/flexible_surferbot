@@ -13,7 +13,7 @@ const BASE = FlexibleParams(
     rho_raft = 0.052,
     domain_depth = 0.5,
     n = 41,
-    M = 30,
+    Nz = 30,
     motor_inertia = 0.13e-3 * 2.5e-3,
     bc = :radiative,
     omega = 2π * 10,
@@ -28,7 +28,7 @@ const NB = Surferbot.derive_params(BASE).nb_contact
         sigma = 0.0, rho = 1000.0, nu = 1e-6, g = 9.81,
         L_raft = 0.05, motor_position = 0.01, d = 0.025,
         EI = fill(1e-4, NB),
-        rho_raft = 0.052, domain_depth = 0.5, n = 41, M = 30,
+        rho_raft = 0.052, domain_depth = 0.5, n = 41, Nz = 30,
         motor_inertia = 0.13e-3 * 2.5e-3, bc = :radiative, omega = 2π * 10,
     )
     result_vec = flexible_solver(params_vec)
@@ -41,7 +41,7 @@ const NB = Surferbot.derive_params(BASE).nb_contact
         sigma = 0.0, rho = 1000.0, nu = 1e-6, g = 9.81,
         L_raft = 0.05, motor_position = 0.01, d = 0.025,
         EI = EI_graded,
-        rho_raft = 0.052, domain_depth = 0.5, n = 41, M = 30,
+        rho_raft = 0.052, domain_depth = 0.5, n = 41, Nz = 30,
         motor_inertia = 0.13e-3 * 2.5e-3, bc = :radiative, omega = 2π * 10,
     )
     result_graded = flexible_solver(params_graded)
@@ -53,7 +53,7 @@ const NB = Surferbot.derive_params(BASE).nb_contact
         sigma = 0.0, rho = 1000.0, nu = 1e-6, g = 9.81,
         L_raft = 0.05, motor_position = 0.01, d = 0.025,
         EI = [1e-4, 2e-4],
-        rho_raft = 0.052, domain_depth = 0.5, n = 41, M = 30,
+        rho_raft = 0.052, domain_depth = 0.5, n = 41, Nz = 30,
         motor_inertia = 0.13e-3 * 2.5e-3, bc = :radiative, omega = 2π * 10,
     )
     @test_throws AssertionError flexible_solver(params_bad)
@@ -69,7 +69,7 @@ end
         sigma = 0.0, rho = 1000.0, nu = 1e-6, g = 9.81,
         L_raft = 0.05, motor_position = 0.01, d = 0.025,
         EI = 1e-4, rho_raft = fill(0.052, NB),
-        domain_depth = 0.5, n = 41, M = 30,
+        domain_depth = 0.5, n = 41, Nz = 30,
         motor_inertia = 0.13e-3 * 2.5e-3, bc = :radiative, omega = 2π * 10,
     )
     result_vec = flexible_solver(params_vec)
@@ -82,7 +82,7 @@ end
         sigma = 0.0, rho = 1000.0, nu = 1e-6, g = 9.81,
         L_raft = 0.05, motor_position = 0.01, d = 0.025,
         EI = 1e-4, rho_raft = rho_graded,
-        domain_depth = 0.5, n = 41, M = 30,
+        domain_depth = 0.5, n = 41, Nz = 30,
         motor_inertia = 0.13e-3 * 2.5e-3, bc = :radiative, omega = 2π * 10,
     )
     result_graded = flexible_solver(params_graded)
@@ -94,7 +94,7 @@ end
         sigma = 0.0, rho = 1000.0, nu = 1e-6, g = 9.81,
         L_raft = 0.05, motor_position = 0.01, d = 0.025,
         EI = 1e-4, rho_raft = [0.04, 0.06],
-        domain_depth = 0.5, n = 41, M = 30,
+        domain_depth = 0.5, n = 41, Nz = 30,
         motor_inertia = 0.13e-3 * 2.5e-3, bc = :radiative, omega = 2π * 10,
     )
     @test_throws AssertionError flexible_solver(params_bad)
@@ -109,7 +109,7 @@ end
         sigma = 72.2e-3, rho = 1000.0, nu = 1e-6, g = 9.81,
         L_raft = 0.05, motor_position = 0.01, d = 0.025,
         EI = EI_partial, rho_raft = 0.052,
-        domain_depth = 0.5, n = 41, M = 30,
+        domain_depth = 0.5, n = 41, Nz = 30,
         motor_inertia = 0.13e-3 * 2.5e-3, bc = :radiative, omega = 2π * 10,
     )
     result_partial = flexible_solver(params_partial)

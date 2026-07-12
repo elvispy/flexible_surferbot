@@ -9,7 +9,7 @@ const ModalPressureMap = Main.PrescribedWnDiagonalImpedance
 @testset "modal pressure map cache" begin
     params = FlexibleParams(
         n = 31,
-        M = 10,
+        Nz = 10,
         domain_depth = 0.05,
         L_domain = 0.15,
         d = 0.03,
@@ -41,7 +41,7 @@ const ModalPressureMap = Main.PrescribedWnDiagonalImpedance
 
     uncoupled = FlexibleParams(
         n = 31,
-        M = 10,
+        Nz = 10,
         domain_depth = 0.05,
         L_domain = 0.15,
         d = 0.0,

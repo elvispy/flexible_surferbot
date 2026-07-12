@@ -157,7 +157,7 @@ function theta_to_params(theta::AbstractVector{<:Real}, base_params::FlexiblePar
         L_domain = isnothing(base_params.L_domain) ? nothing : T(base_params.L_domain),
         domain_depth = isnothing(base_params.domain_depth) ? nothing : T(base_params.domain_depth),
         n = base_params.n,
-        M = base_params.M,
+        Nz = base_params.Nz,
         ooa = base_params.ooa,
         motor_inertia = T(base_params.motor_inertia),
         motor_force = isnothing(base_params.motor_force) ? nothing : T(base_params.motor_force),
@@ -196,8 +196,8 @@ function build_output_args(derived, params)
         x_contact = derived.x_contact,
         x = derived.x .* derived.L_c,
         loads = derived.loads .* derived.F_c ./ derived.L_c,
-        N = derived.N,
-        M = derived.M,
+        Nx = derived.Nx,
+        Nz = derived.Nz,
         dx = derived.dx .* derived.L_c,
         dz = derived.dz .* derived.L_c,
         t_c = derived.t_c,
@@ -214,9 +214,9 @@ end
 Split the stacked state vector into potential and its derivative matrices.
 """
 function split_state(solution::AbstractVector, derived)
-    NP = derived.N * derived.M
-    phi = reshape(solution[1:NP], derived.M, derived.N)
-    phi_z = reshape(solution[(NP + 1):(2 * NP)], derived.M, derived.N)
+    NP = derived.Nx * derived.Nz
+    phi = reshape(solution[1:NP], derived.Nz, derived.Nx)
+    phi_z = reshape(solution[(NP + 1):(2 * NP)], derived.Nz, derived.Nx)
     return phi, phi_z
 end
 
@@ -282,7 +282,7 @@ function evaluate_primal(theta::AbstractVector{<:Real}, base_params::FlexiblePar
     params = theta_to_params(theta, base_params)
     system = Surferbot.assemble_flexible_system(params)
     full_solution = Surferbot.solve_tensor_system(system.A, system.b)
-    NP = system.derived.N * system.derived.M
+    NP = system.derived.Nx * system.derived.Nz
     state = full_solution[1:(2 * NP)]
     outputs = evaluate_from_state(state, system.derived, params, config)
     return (

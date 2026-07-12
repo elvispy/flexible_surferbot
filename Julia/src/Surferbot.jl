@@ -122,7 +122,7 @@ Physical, geometric, and numerical parameters for the flexible Surferbot solver.
 - `L_domain`: Length of the fluid domain.
 - `domain_depth`: Depth of the fluid domain.
 - `n`: Number of grid points on the raft.
-- `M`: Number of grid points in the vertical direction.
+- `Nz`: Number of grid points in the vertical direction.
 - `ooa`: Order of accuracy for finite differences.
 - `motor_inertia`: Inertia of the actuator motor.
 - `motor_force`: Specified forcing amplitude.
@@ -143,7 +143,7 @@ Base.@kwdef struct FlexibleParams{T<:Real}
     L_domain::Union{Nothing, T} = nothing
     domain_depth::Union{Nothing, T} = nothing
     n::Union{Nothing, Int} = nothing
-    M::Union{Nothing, Int} = nothing
+    Nz::Union{Nothing, Int} = nothing
     ooa::Int = 4
     motor_inertia::T = 0.13e-3 * 2.5e-3
     motor_force::Union{Nothing, T} = nothing
@@ -224,7 +224,7 @@ function derive_params(params::FlexibleParams{T}) where {T<:Real}
         # search ladder whose stopping point was a genuine staircase function
         # of nu (hence of Re): small continuous changes in nu shifted kr just
         # enough to change the *number* of 1.05x steps needed, so domain_depth
-        # (and the derived vertical grid count M) used to jump discontinuously
+        # (and the derived vertical grid count Nz) used to jump discontinuously
         # at isolated Re values, producing an unresolvable kink in F_T(Re)
         # that no amount of Re-sweep refinement could smooth out. The
         # closed-form depth below is a continuous function of nu, and is also
@@ -245,20 +245,20 @@ function derive_params(params::FlexibleParams{T}) where {T<:Real}
         params.n
     end
 
-    M = isnothing(params.M) ? ceil(Int, res * k_real * domain_depth) : params.M
+    Nz = isnothing(params.Nz) ? ceil(Int, res * k_real * domain_depth) : params.Nz
     L_domain = if isnothing(params.L_domain)
         min(3 * params.L_raft, round(20 * 2 * pi / k_real + params.L_raft; sigdigits=2))
     else
         params.L_domain
     end
 
-    N = round(Int, (n - 1) * L_domain / params.L_raft) + 1
-    L_domain_adim = T(N / n)
+    Nx = round(Int, (n - 1) * L_domain / params.L_raft) + 1
+    L_domain_adim = T(Nx / n)
 
-    x = collect(range(-L_domain_adim / 2, stop = L_domain_adim / 2, length = N))
+    x = collect(range(-L_domain_adim / 2, stop = L_domain_adim / 2, length = Nx))
     dx = x[2] - x[1]
 
-    z = collect(range(-domain_depth, stop = 0.0, length = M)) ./ L_c
+    z = collect(range(-domain_depth, stop = 0.0, length = Nz)) ./ L_c
     dz = abs(z[2] - z[1])
 
     x_contact = abs.(x) .<= params.L_raft / (2 * L_c)
@@ -293,9 +293,9 @@ function derive_params(params::FlexibleParams{T}) where {T<:Real}
         domain_depth = domain_depth,
         k = k,
         n = n,
-        M = M,
+        Nz = Nz,
         L_domain = L_domain,
-        N = N,
+        Nx = Nx,
         x = x,
         z = z,
         dx = dx,
@@ -322,7 +322,7 @@ Assemble the coupled fluid-raft linear system.
 """
 function assemble_flexible_system(params::FlexibleParams{T}) where {T<:Real}
     derived = derive_params(params)
-    NP = derived.N * derived.M
+    NP = derived.Nx * derived.Nz
     nb_contact = derived.nb_contact
     system_size = 2 * NP + nb_contact
     BCtype = String(derived.params.bc)
@@ -334,18 +334,18 @@ function assemble_flexible_system(params::FlexibleParams{T}) where {T<:Real}
     I_NP = sparse(T(1) * I, NP, NP)
     I_CC = sparse(T(1) * I, nb_contact, nb_contact)
 
-    topMask = falses(derived.M, derived.N)
+    topMask = falses(derived.Nz, derived.Nx)
     topMask[end, 2:(end - 1)] .= true
-    freeMask = repeat(reshape(derived.x_free, 1, derived.N), derived.M, 1) .& topMask
-    contactMask = repeat(reshape(derived.x_contact, 1, derived.N), derived.M, 1) .& topMask
+    freeMask = repeat(reshape(derived.x_free, 1, derived.Nx), derived.Nz, 1) .& topMask
+    contactMask = repeat(reshape(derived.x_contact, 1, derived.Nx), derived.Nz, 1) .& topMask
 
-    bottomMask = falses(derived.M, derived.N)
+    bottomMask = falses(derived.Nz, derived.Nx)
     bottomMask[1, 2:(end - 1)] .= true
-    rightEdgeMask = falses(derived.M, derived.N)
+    rightEdgeMask = falses(derived.Nz, derived.Nx)
     rightEdgeMask[:, end] .= true
-    leftEdgeMask = falses(derived.M, derived.N)
+    leftEdgeMask = falses(derived.Nz, derived.Nx)
     leftEdgeMask[:, 1] .= true
-    bulkMask = falses(derived.M, derived.N)
+    bulkMask = falses(derived.Nz, derived.Nx)
     bulkMask[2:(end - 1), 2:(end - 1)] .= true
 
     idxFreeSurf = findall(vec(freeMask))
@@ -358,7 +358,7 @@ function assemble_flexible_system(params::FlexibleParams{T}) where {T<:Real}
     half_free = length(idxFreeSurf) ÷ 2
     first_contact = first(idxContact)
     last_contact = last(idxContact)
-    idxLeftFreeSurf = vcat(derived.M, idxFreeSurf[1:half_free], first_contact)
+    idxLeftFreeSurf = vcat(derived.Nz, idxFreeSurf[1:half_free], first_contact)
     idxRightFreeSurf = vcat(last_contact, idxFreeSurf[(half_free + 1):end], NP)
     nbLeft = length(idxLeftFreeSurf)
 
@@ -418,8 +418,8 @@ function assemble_flexible_system(params::FlexibleParams{T}) where {T<:Real}
     S33[1, 1] = 1
     S33[end, end] = 1
 
-    Dx, Dz = getNonCompactFDmatrix2D(derived.N, derived.M, T(1.0), T(1.0), 1, derived.params.ooa)
-    Dxx, Dzz = getNonCompactFDmatrix2D(derived.N, derived.M, T(1.0), T(1.0), 2, derived.params.ooa)
+    Dx, Dz = getNonCompactFDmatrix2D(derived.Nx, derived.Nz, T(1.0), T(1.0), 1, derived.params.ooa)
+    Dxx, Dzz = getNonCompactFDmatrix2D(derived.Nx, derived.Nz, T(1.0), T(1.0), 2, derived.params.ooa)
     ratio_sq = (derived.dx / derived.dz)^2
     S11[idxBulk, :] = Dxx[idxBulk, :] + Dzz[idxBulk, :] * ratio_sq
     S12[idxBottom, :] = I_NP[idxBottom, :]
@@ -487,11 +487,11 @@ Solve the coupled flexible Surferbot problem.
 function flexible_solver(params::FlexibleParams{T}; return_system::Bool=false) where {T<:Real}
     system = assemble_flexible_system(params)
     solution = solve_tensor_system(system.A, system.b)
-    NP = system.derived.N * system.derived.M
+    NP = system.derived.Nx * system.derived.Nz
     solution = solution[1:(2 * NP)]
 
-    phi = reshape(solution[1:NP], system.derived.M, system.derived.N)
-    phi_z = reshape(solution[(NP + 1):(2 * NP)], system.derived.M, system.derived.N)
+    phi = reshape(solution[1:NP], system.derived.Nz, system.derived.Nx)
+    phi_z = reshape(solution[(NP + 1):(2 * NP)], system.derived.Nz, system.derived.Nx)
 
     x = system.derived.x .* system.derived.L_c
     z = system.derived.z .* system.derived.L_c
@@ -511,8 +511,8 @@ function flexible_solver(params::FlexibleParams{T}; return_system::Bool=false) w
         x = x,
         loads = system.derived.loads .* system.derived.F_c ./ system.derived.L_c,
         motor_position = params.motor_position,
-        N = system.derived.N,
-        M = system.derived.M,
+        Nx = system.derived.Nx,
+        Nz = system.derived.Nz,
         dx = system.derived.dx .* system.derived.L_c,
         dz = system.derived.dz .* system.derived.L_c,
         t_c = system.derived.t_c,

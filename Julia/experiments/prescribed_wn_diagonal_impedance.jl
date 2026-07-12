@@ -90,7 +90,7 @@ function operator_signature(params::Surferbot.FlexibleParams; num_modes_basis::I
         domain_depth = derived.domain_depth,
         L_domain = derived.L_domain,
         n = derived.n,
-        M = derived.M,
+        Nz = derived.Nz,
         ooa = params.ooa,
         bc = params.bc,
         num_modes_basis = num_modes_basis,
@@ -147,8 +147,8 @@ function build_surface_args(params::Surferbot.FlexibleParams, derived)
         x = derived.x .* derived.L_c,
         loads = derived.loads .* derived.F_c ./ derived.L_c,
         motor_position = params.motor_position,
-        N = derived.N,
-        M = derived.M,
+        Nx = derived.Nx,
+        Nz = derived.Nz,
         dx = derived.dx .* derived.L_c,
         dz = derived.dz .* derived.L_c,
         t_c = derived.t_c,
@@ -237,7 +237,7 @@ function prescribed_target(basis_ctx, params::Surferbot.FlexibleParams, derived,
 end
 
 function build_reduced_system(assembled, phi_z_target::AbstractVector{<:Complex})
-    NP = assembled.derived.N * assembled.derived.M
+    NP = assembled.derived.Nx * assembled.derived.Nz
     idx_contact = assembled.indices.idxContact
     length(idx_contact) == length(phi_z_target) || error("Contact target length mismatch.")
 
@@ -272,14 +272,14 @@ function build_reduced_system(assembled, phi_z_target::AbstractVector{<:Complex}
 end
 
 function solve_prescribed_mode(assembled, reduced, phi_z_target::AbstractVector{<:Complex})
-    NP = assembled.derived.N * assembled.derived.M
+    NP = assembled.derived.Nx * assembled.derived.Nz
     solution = solve_tensor_system(reduced.A, reduced.b)
     full_solution = zeros(ComplexF64, 2 * NP)
     full_solution[reduced.kept_cols] = solution
     full_solution[reduced.prescribed_cols] = ComplexF64.(phi_z_target)
 
-    phi = reshape(full_solution[1:NP], assembled.derived.M, assembled.derived.N)
-    phi_z = reshape(full_solution[(NP + 1):(2 * NP)], assembled.derived.M, assembled.derived.N)
+    phi = reshape(full_solution[1:NP], assembled.derived.Nz, assembled.derived.Nx)
+    phi_z = reshape(full_solution[(NP + 1):(2 * NP)], assembled.derived.Nz, assembled.derived.Nx)
     return phi, phi_z
 end
 

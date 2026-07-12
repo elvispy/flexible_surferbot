@@ -54,7 +54,7 @@ end
             rho_raft = 0.018 * 3.0,
             domain_depth = 0.2,
             n = 41,
-            M = 30,
+            Nz = 30,
             motor_inertia = 0.13e-3 * 2.5e-3,
             bc = :radiative,
             omega = 2 * pi * 10,

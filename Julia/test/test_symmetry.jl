@@ -11,7 +11,7 @@ using Surferbot
     params = FlexibleParams(
         sigma = 0.0, rho = 1000.0, nu = 0.0, g = 9.81,
         L_raft = 0.05, motor_position = 0.0, d = 0.03, L_domain = 0.14,
-        motor_inertia = 0.13e-3 * 2.5e-3, omega = 2π * 40.0, n = 21, M = 15,
+        motor_inertia = 0.13e-3 * 2.5e-3, omega = 2π * 40.0, n = 21, Nz = 15,
     )
     result = flexible_solver(params)
 
@@ -34,7 +34,7 @@ end
     make = pos -> FlexibleParams(
         sigma = 72.2e-3, rho = 1000.0, nu = 1e-6, g = 9.81,
         L_raft = 0.05, motor_position = pos, d = 0.03,
-        motor_inertia = 0.13e-3 * 2.5e-3, omega = 2π * 40.0, n = 21, M = 15,
+        motor_inertia = 0.13e-3 * 2.5e-3, omega = 2π * 40.0, n = 21, Nz = 15,
     )
     r_plus  = flexible_solver(make(+0.010))
     r_minus = flexible_solver(make(-0.010))
@@ -49,7 +49,7 @@ end
     params = FlexibleParams(
         sigma = 72.2e-3, rho = 1000.0, nu = 1e-6, g = 9.81,
         L_raft = 0.05, motor_position = 0.01, d = 0.03,
-        motor_inertia = 0.0, omega = 2π * 40.0, n = 21, M = 15,
+        motor_inertia = 0.0, omega = 2π * 40.0, n = 21, Nz = 15,
     )
     result = flexible_solver(params)
     @test maximum(abs.(result.eta)) < 1e-20

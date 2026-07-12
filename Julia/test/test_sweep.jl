@@ -6,7 +6,7 @@ using Surferbot
         motor_position = 0.01,
         EI = 2.0,
         n = 11,
-        M = 5,
+        Nz = 5,
         domain_depth = 0.1,
         L_domain = 0.15,
     )

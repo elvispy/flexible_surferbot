@@ -30,7 +30,7 @@ using Surferbot
     sol = solve_tensor_system(sys.A, sys.b)
 
     derived = sys.derived
-    NP      = derived.N * derived.M
+    NP      = derived.Nx * derived.Nz
     nb_c    = derived.nb_contact
 
     phi_z_vec = sol[(NP + 1):(2 * NP)]

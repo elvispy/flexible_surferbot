@@ -28,7 +28,7 @@ function main(save_dir::AbstractString=joinpath(@__DIR__, "..", "output"))
         domain_depth = 0.2,
         L_domain = 0.3,
         n = 41,
-        M = 30,
+        Nz = 30,
     )
 
     grid = (

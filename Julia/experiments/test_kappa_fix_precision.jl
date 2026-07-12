@@ -40,7 +40,7 @@ function run()
     idxC   = sys.indices.idxContact
 
     derived = sys.derived
-    NP      = derived.N * derived.M
+    NP      = derived.Nx * derived.Nz
     nb_c    = derived.nb_contact
 
     # Reconstruct old edge rows: divide by i to undo i·DxRaft → DxRaft

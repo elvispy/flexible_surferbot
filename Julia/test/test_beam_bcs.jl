@@ -9,11 +9,11 @@ using Surferbot
         params = FlexibleParams(
             EI = EI, sigma = 72.2e-3, nu = 1e-6, omega = 2π * 40.0,
             rho = 1000.0, g = 9.81, L_raft = 0.05, motor_position = 0.01,
-            d = 0.03, motor_inertia = 0.13e-3 * 2.5e-3, n = 21, M = 15,
+            d = 0.03, motor_inertia = 0.13e-3 * 2.5e-3, n = 21, Nz = 15,
         )
         sys = assemble_flexible_system(params)
         sol = solve_tensor_system(sys.A, sys.b)
-        NP    = sys.derived.N * sys.derived.M
+        NP    = sys.derived.Nx * sys.derived.Nz
         nb_c  = sys.derived.nb_contact
         M_vec = sol[(2NP + 1):(2NP + nb_c)]
         M_scale = maximum(abs.(M_vec)) + eps()

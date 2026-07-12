@@ -18,7 +18,7 @@ using Printf
 
 function make_old_system(sys)
     d   = sys.derived
-    NP  = d.N * d.M
+    NP  = d.Nx * d.Nz
     nb_c = d.nb_contact
     Re    = Float64(d.nd_groups.Re)
     Lambda = Float64(d.nd_groups.Lambda)
@@ -62,8 +62,8 @@ end
 # ─── extract eta from solution vector ────────────────────────────────────────
 
 function extract_eta(x, derived)
-    NP = derived.N * derived.M
-    phi_z = reshape(x[(NP+1):(2*NP)], derived.M, derived.N)
+    NP = derived.Nx * derived.Nz
+    phi_z = reshape(x[(NP+1):(2*NP)], derived.Nz, derived.Nx)
     omega = Float64(derived.params.omega)
     t_c   = Float64(derived.t_c)
     return (1.0 / (im * omega * t_c)) .* vec(phi_z[end, :])
