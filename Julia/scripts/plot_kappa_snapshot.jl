@@ -502,13 +502,11 @@ end
 
 function draw_modal_axis!(ax, modal; ylims, show_ylabel)
     mode_energy = abs.(modal.q)
-    mode_energy = max.(mode_energy, ylims[1])
     CM.barplot!(ax, modal.n, mode_energy;
         color = MAKIE_BLUE, strokecolor = MAKIE_BLUE, fillto = ylims[1])
     ax.xlabel = L"n"
     ax.ylabel = show_ylabel ? L"|q_n|" : ""
     ax.xticks = modal.n
-    ax.yticks = CM.LogTicks(CM.WilkinsonTicks(4))
     CM.ylims!(ax, ylims...)
 end
 
@@ -533,14 +531,14 @@ function wave_ylim(results)
     return ceil(ylim / 500) * 500
 end
 
-function make_snapshot_grid(fig_dir; kind::Symbol, op_indices, filename, column_titles)
+function make_snapshot_grid(fig_dir; kind::Symbol, op_indices, filename, column_titles,
+                            modal_energy_ylims = (0.0, 5e-5))
     setup_lm_mathfonts()
     makie_snapshot_theme!()
     _, _, _, all_ops = paper_snapshot_ops()
     ops = all_ops[op_indices]
     results, modals = solve_snapshot_ops(ops)
     ylim = wave_ylim(results)
-    modal_energy_ylims = (1e-7, 1e-4)
     sweep = load_sweep_cache_for_grid(kind)
 
     fig = CM.Figure(size = (1500, 995), backgroundcolor = :white)
@@ -558,7 +556,7 @@ function make_snapshot_grid(fig_dir; kind::Symbol, op_indices, filename, column_
         F_T_ratio = results[j].thrust / sweep.F_T_star
         draw_wave_axis!(axw, results[j]; ylim, show_ylabel = (j == 1), title = column_titles[j],
             F_T_ratio, F_T_raw = results[j].thrust)
-        axm = CM.Axis(fig[3, j]; yscale = log10,
+        axm = CM.Axis(fig[3, j];
             leftspinecolor = col, rightspinecolor = col,
             topspinecolor = col, bottomspinecolor = col, spinewidth = sw)
         draw_modal_axis!(axm, modals[j]; ylims = modal_energy_ylims, show_ylabel = (j == 1))
@@ -587,7 +585,8 @@ function main_snapshot_grids(fig_dir)
         filename = "plot_kappa_snapshot_grid_motor_position",
         column_titles = [L"x_M/L=0.12",
                          L"x_M/L=0.183",
-                         L"x_M/L=0.272"])
+                         L"x_M/L=0.272"],
+        modal_energy_ylims = (0.0, 3e-6))
 end
 
 # ─── Main ─────────────────────────────────────────────────────────────────────
