@@ -478,8 +478,8 @@ function add_dual_axis!(fig, sw, alpha_sw, d, F_T_star; xlabel, xscale=identity,
                         xticks=Makie.automatic, ylims=nothing, show_Sxx=true,
                         show_zero=true, highlight_x=Float64[], legend_position=:rb,
                         xlims=nothing)
-    yt = sw.thrust .* d ./ F_T_star
-    yS = sw.Sxx .* d ./ F_T_star
+    yt = sw.thrust .* d ./ abs(F_T_star)
+    yS = sw.Sxx .* d ./ abs(F_T_star)
     ylim = isnothing(ylims) ? panel_limits(yt, show_Sxx ? yS : yt) : ylims
     xlim = isnothing(xlims) ? (minimum(sw.x), maximum(sw.x)) : xlims
     order = sortperm(sw.x)
@@ -553,7 +553,7 @@ function make_single_axis_panel(sw, d, F_T_star; xlabel, outfile,
                                 ylims=nothing, show_zero=true,
                                 marker_point=nothing)
     fig = makie_figure()
-    yt = sw.thrust .* d ./ F_T_star
+    yt = sw.thrust .* d ./ abs(F_T_star)
     order = sortperm(sw.x)
     ylim = isnothing(ylims) ? panel_limits(yt, yt) : ylims
     
@@ -624,7 +624,7 @@ function main()
         ylims = (-32.0, 32.0),
         highlight_x = KAPPA_HIGHLIGHTS,
         legend_position = :rb)
-    yt3  = sw3.thrust .* d ./ F_T_star
+    yt3  = sw3.thrust .* d ./ abs(F_T_star)
     pad3 = 0.08 * (maximum(yt3) - minimum(yt3))
     make_single_axis_panel(sw3, d, F_T_star;
         xlabel = L"Re",
@@ -633,7 +633,7 @@ function main()
         xticks = (10.0 .^ collect(4:8),
                   [L"10^{4}", L"10^{5}", L"10^{6}", L"10^{7}", L"10^{8}"]),
         ylims = (minimum(yt3) - pad3, maximum(yt3) + pad3),
-        marker_point = (; x = sp_re.Re, y = sp_re.thrust * d / F_T_star),
+        marker_point = (; x = sp_re.Re, y = sp_re.thrust * d / abs(F_T_star)),
         show_zero = false)
     make_sweep_panel(sw4, alpha_xM_rigid, d, F_T_star;
         xlabel = L"x_M/L",
