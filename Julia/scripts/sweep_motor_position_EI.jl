@@ -35,7 +35,7 @@ end
 
 function format_row(params, res, modal)
     metrics = Surferbot.Analysis.beam_edge_metrics(res)
-    alpha = Surferbot.Analysis.beam_asymmetry(metrics.eta_left_beam, metrics.eta_right_beam)
+    alpha = Surferbot.Analysis.beam_asymmetry(metrics.eta_left_domain, metrics.eta_right_domain)
 
     row_data = [
         log10(params.EI),
