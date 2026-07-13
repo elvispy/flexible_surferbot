@@ -212,7 +212,7 @@ end
 # ─── Two-panel snapshot figure (original single-snapshot mode) ────────────────
 
 function common_modal_energy_limits(modals; decades=6.0)
-    all_energy = reduce(vcat, (abs2.(modal.q) for modal in modals))
+    all_energy = reduce(vcat, (abs.(modal.q) for modal in modals))
     positive = all_energy[all_energy .> 0]
     isempty(positive) && return (10.0^(-decades), 1.0)
 
@@ -227,13 +227,13 @@ function make_figure(result, modal, kappa_val, fig_dir; xM_norm=nothing,
                      modal_energy_ylims=nothing)
     p1 = make_wave_panel(result)
 
-    mode_energy = abs2.(modal.q)
+    mode_energy = abs.(modal.q)
     ylims = isnothing(modal_energy_ylims) ? common_modal_energy_limits([modal]) : modal_energy_ylims
     mode_energy = max.(mode_energy, ylims[1])
     p2  = bar(modal.n, mode_energy;
         xticks        = modal.n,
         xlabel        = L"n",
-        ylabel        = L"|q_n|^2",
+        ylabel        = L"|q_n|",
         label         = false,
         fillcolor     = :steelblue,
         linecolor     = :steelblue,
@@ -501,12 +501,12 @@ function draw_wave_axis!(ax, result; ylim, show_ylabel, title, F_T_ratio, F_T_ra
 end
 
 function draw_modal_axis!(ax, modal; ylims, show_ylabel)
-    mode_energy = abs2.(modal.q)
+    mode_energy = abs.(modal.q)
     mode_energy = max.(mode_energy, ylims[1])
     CM.barplot!(ax, modal.n, mode_energy;
         color = MAKIE_BLUE, strokecolor = MAKIE_BLUE, fillto = ylims[1])
     ax.xlabel = L"n"
-    ax.ylabel = show_ylabel ? L"|q_n|^2" : ""
+    ax.ylabel = show_ylabel ? L"|q_n|" : ""
     ax.xticks = modal.n
     ax.yticks = CM.LogTicks(CM.WilkinsonTicks(4))
     CM.ylims!(ax, ylims...)
@@ -540,7 +540,7 @@ function make_snapshot_grid(fig_dir; kind::Symbol, op_indices, filename, column_
     ops = all_ops[op_indices]
     results, modals = solve_snapshot_ops(ops)
     ylim = wave_ylim(results)
-    modal_energy_ylims = (1e-14, 1e-8)
+    modal_energy_ylims = (1e-7, 1e-4)
     sweep = load_sweep_cache_for_grid(kind)
 
     fig = CM.Figure(size = (1500, 995), backgroundcolor = :white)
