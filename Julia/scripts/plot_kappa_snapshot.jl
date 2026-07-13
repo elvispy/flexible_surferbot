@@ -532,7 +532,7 @@ function wave_ylim(results)
 end
 
 function make_snapshot_grid(fig_dir; kind::Symbol, op_indices, filename, column_titles,
-                            modal_energy_ylims = (0.0, 5e-5))
+                            modal_energy_ylims = (0.0, 2e-5))
     setup_lm_mathfonts()
     makie_snapshot_theme!()
     _, _, _, all_ops = paper_snapshot_ops()
