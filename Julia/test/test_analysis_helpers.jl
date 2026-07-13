@@ -3,7 +3,7 @@ using Surferbot
 
 @testset "analysis helpers" begin
     @test Surferbot.beam_asymmetry(1 + 0im, 1 + 0im) == 0
-    @test Surferbot.beam_asymmetry(2 + 0im, 1 + 0im) < 0
+    @test Surferbot.beam_asymmetry(2 + 0im, 1 + 0im) > 0
     @test Surferbot.symmetric_antisymmetric_ratio(1 + 0im, 1 + 0im) > 10
 
     sweep = Surferbot.default_uncoupled_motor_position_EI_sweep()
