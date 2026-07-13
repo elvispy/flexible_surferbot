@@ -10,17 +10,29 @@ export beam_asymmetry,
 """
     beam_asymmetry(eta_left, eta_right)
 
-Calculate the beam-end asymmetry factor.
+Radiation asymmetry factor `alpha` (real, in [-1, 1]).
 
-The asymmetry factor is defined as:
-`alpha_beam = -( |eta_left|^2 - |eta_right|^2 ) / ( |eta_left|^2 + |eta_right|^2 )`
+SIGN CONVENTION (matches the paper, Sec. 2.6):
+
+    alpha = ( |eta_left|^2 - |eta_right|^2 ) / ( |eta_left|^2 + |eta_right|^2 )
+
+where `eta_left` = eta(-l) is the LEFT (-x) boundary amplitude and `eta_right` =
+eta(+l) the RIGHT (+x) one. The left-minus-right ordering makes `alpha` carry the
+SAME sign as the propulsive thrust: a body recoils opposite to the momentum it
+radiates, so radiating more toward -x propels it toward +x. Hence
+  - alpha > 0  <=>  F_T > 0  (thrust in +x);
+  - alpha = +1 when eta_right = 0 (all radiation to the left);
+  - alpha = -1 when eta_left  = 0 (all radiation to the right).
+Equivalently `alpha = DeltaS_xx / (pref * (|eta_left|^2 + |eta_right|^2))`; see
+`compute_Sxx` for `DeltaS_xx` and `calculate_surferbot_outputs` for `F_T`, which
+use the same convention.
 
 # Arguments
-- `eta_left`: Complex amplitude at the left end of the beam.
-- `eta_right`: Complex amplitude at the right end of the beam.
+- `eta_left`:  complex amplitude at the left (-l) boundary.
+- `eta_right`: complex amplitude at the right (+l) boundary.
 
 # Returns
-- The calculated asymmetry factor (Real).
+- The asymmetry factor (Real), same sign as the +x thrust.
 """
 function beam_asymmetry(eta_left, eta_right)
     denom = abs2(eta_left) + abs2(eta_right)

@@ -83,6 +83,23 @@ const KAPPA_HIGHLIGHTS = [2.1209508879201904e-3, 5.43e-3, 1.698244e-2]
 const RIGID_XM_VALUES = collect(range(-0.48, 0.48; length = 2 * N_SWEEP - 1))
 
 # ─── Per-solve extraction ─────────────────────────────────────────────────────
+"""
+    compute_Sxx(result) -> Float64
+
+Far-field radiation-stress thrust measure `DeltaS_xx` (2D, force per unit width).
+
+SIGN CONVENTION (matches the paper, Sec. 2.6):
+
+    DeltaS_xx = (rho*g/4 + 3*sigma*k^2/4) * ( |eta_left|^2 - |eta_right|^2 )
+
+with `eta_left` = eta(-l) the LEFT (-x) domain-edge amplitude and `eta_right` =
+eta(+l) the RIGHT one. By momentum balance this equals the mean horizontal thrust
+on the raft, `F_T = DeltaS_xx`, positive in +x. The left-minus-right ordering
+encodes recoil: the raft is propelled opposite to its stronger radiation. Note
+this is MINUS the Longuet-Higgins radiation-stress difference (which is the force
+needed to hold the raft fixed, not the thrust). Same sign as `beam_asymmetry`
+(`alpha`) and the `calculate_surferbot_outputs` thrust.
+"""
 function compute_Sxx(result)
     args = result.metadata.args
     k    = Float64(real(args.k))
