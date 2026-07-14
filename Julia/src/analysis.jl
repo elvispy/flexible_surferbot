@@ -36,7 +36,7 @@ use the same convention.
 """
 function beam_asymmetry(eta_left, eta_right)
     denom = abs2(eta_left) + abs2(eta_right)
-    return -(abs2(eta_left) - abs2(eta_right)) / denom
+    return (abs2(eta_left) - abs2(eta_right)) / denom
 end
 
 """
