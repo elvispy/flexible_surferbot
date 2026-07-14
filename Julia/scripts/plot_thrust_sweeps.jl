@@ -28,19 +28,13 @@ using DataFrames
 using Base.Threads: @threads, ReentrantLock
 
 const PRINT_LOCK   = ReentrantLock()
-const MAX_WORKERS  = min(Threads.nthreads(), 4)
+const MAX_WORKERS  = min(Threads.nthreads(), 8)
 const SOLVE_SEM    = Base.Semaphore(MAX_WORKERS)
 const CACHE_PATH   = joinpath(@__DIR__, "..", "output", "jld2", "thrust_sweeps.jld2")
 const ALPHA_CACHE_PATH = joinpath(@__DIR__, "..", "output", "jld2", "alpha_sweep_kappa_farfield.jld2")
 const GRID_ALPHA_CSV = joinpath(@__DIR__, "..", "output", "csv", "sweeper_coupled_full_grid.csv")
 const FIG_DIR    = joinpath(@__DIR__, "..", "output", "figures")
 const N_SWEEP    = 50
-const RE_REFINE_LOG10 = sort(unique(vcat(
-    collect(range(4.55, 4.90; length = 15)),
-    collect(4.690:0.005:4.740),
-    collect(4.711:0.001:4.714),
-    [4.71325, 4.7135, 4.71375, 4.7145],
-)))
 const NU_WATER   = 1e-6
 const RIGID_INVISCID_OVERRIDES = (nu = 0.0, EI = Inf)
 const BLUE = RGBf(0.10, 0.30, 0.80)
@@ -60,7 +54,7 @@ const GRAY = RGBf(0.25, 0.25, 0.25)
 # glyphs of the tick labels/legend text most of these figures show).
 const CMU_DIR = "/usr/local/texlive/2025/texmf-dist/fonts/opentype/public/cm-unicode"
 const LM_FONT = joinpath(CMU_DIR, "cmunrm.otf")
-const XM_HIGHLIGHTS = [0.12, 0.183, 0.272]
+const XM_HIGHLIGHTS = [-0.12, -0.183, -0.272]
 
 function setup_lm_mathfonts()
     MTE_ID = Base.PkgId(Base.UUID("0a4f8689-d25c-4efe-a92b-7142dfc1aa53"), "MathTeXEngine")
@@ -149,7 +143,7 @@ function run_sweep_xM(bp)
     rho_R    = Float64(bp.rho_raft)
     omega    = Float64(bp.omega)
     EI_xM    = XM_SWEEP_KAPPA * rho_R * L^4 * omega^2
-    xs = collect(range(0.0, 0.48; length = N_SWEEP))
+    xs = collect(range(-0.48, 0.0; length = N_SWEEP))
     T   = Vector{Float64}(undef, N_SWEEP)
     Sxx = Vector{Float64}(undef, N_SWEEP)
     println("Sweep 1/4: motor position ($N_SWEEP points) …")
@@ -201,8 +195,7 @@ function desired_Re_values(bp)
     omega = Float64(bp.omega)
     log10_nu = collect(range(log10(NU_WATER / 100), log10(NU_WATER * 100); length = N_SWEEP))
     base_Re  = (omega * L^2) ./ (10.0 .^ log10_nu)
-    refined_Re = 10.0 .^ RE_REFINE_LOG10
-    return sort(unique(vcat(base_Re, refined_Re)))
+    return sort(unique(base_Re))
 end
 
 function run_sweep_Re(bp, Re_vals = desired_Re_values(bp))
@@ -284,7 +277,7 @@ function run_alpha_xM(bp)
     rho_R    = Float64(bp.rho_raft)
     omega    = Float64(bp.omega)
     EI_xM    = XM_SWEEP_KAPPA * rho_R * L^4 * omega^2
-    xs = collect(range(0.0, 0.48; length = N_SWEEP))
+    xs = collect(range(-0.48, 0.0; length = N_SWEEP))
     alpha = Vector{Float64}(undef, N_SWEEP)
     println("Alpha sweep: flexible motor position ($N_SWEEP points) …")
     @threads for i in 1:N_SWEEP

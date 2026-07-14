@@ -72,6 +72,33 @@ end
     @test r_left_end.thrust  > 0   # pushes RIGHT, away from the motor
 end
 
+@testset "Real SurferBot reference point: motor 0.6cm left of center gives positive thrust" begin
+    # Regression test for the motor-position sign/magnitude bug audited against
+    # the real device (raft 5cm x 3cm, motor 0.6cm LEFT of center). Multiple
+    # hardcoded reference points in analysis.jl/Surferbot.jl/plot_fig4_Aguero2026.jl
+    # previously disagreed with each other and with this real spec (some had the
+    # right magnitude but wrong sign, one had the right sign but half the
+    # magnitude). This pins the exact real value directly: it must reproduce the
+    # bigger-wave-on-the-left / positive-thrust behavior validated against the
+    # Rhee et al. 2022 SurferBot wavefield in Fig 3b.
+    params = FlexibleParams(
+        sigma = 72.2e-3, rho = 1000.0, nu = 0.0, g = 9.81,
+        L_raft = 0.05, d = 0.03, EI = Inf,
+        motor_position = -0.006, motor_inertia = 0.13e-3 * 2.5e-3,
+        omega = 2π * 80.0, n = 21, Nz = 15,
+    )
+    result = flexible_solver(params)
+    @info "Real SurferBot reference (xM=-0.006): thrust=$(result.thrust)"
+    @test result.thrust > 0
+
+    # The three canonical in-repo defaults must all match this sign/magnitude.
+    @test Surferbot.FlexibleParams().motor_position ≈ -0.006
+    bp_coupled = Surferbot.Analysis.default_coupled_motor_position_EI_sweep().base_params
+    bp_uncoupled = Surferbot.Analysis.default_uncoupled_motor_position_EI_sweep().base_params
+    @test bp_coupled.motor_position ≈ -0.006
+    @test bp_uncoupled.motor_position ≈ -0.006
+end
+
 @testset "alpha and F_T share sign (the bug this guards against)" begin
     # A previous bug had `beam_asymmetry` return the opposite sign from the
     # (independently, near-field-derived) thrust -- every internal
