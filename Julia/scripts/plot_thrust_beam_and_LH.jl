@@ -7,7 +7,15 @@ Two heatmaps on the (log₁₀κ, xM/L) plane per coupling case:
   2. LH    — Δ|η|²/L²  at the computational-domain ends  (Longuet-Higgins proxy)
              (eta_{1,end}_domain columns)
 
-Δ|η|² = |η_end|² − |η_1|²  (right minus left; same sign convention as α).
+Δ|η|² = |η_end|² − |η_1|²  (right minus left) for BOTH panels, as stored raw
+in `beam_grid`/`domain_grid`. This is the OPPOSITE sign convention from α and
+F_T (which use left minus right, per the paper's corrected eq:alpha_def_app).
+The paper-embedded LH panel corrects for this: `domain_grid_norm` negates
+`domain_grid` before scaling to F_T/F_T* (see load_delta_grids/the F_T^*
+conversion below), so what's actually plotted there is F_T-sign-consistent.
+The (non-paper) beam panel is plotted directly from the raw, un-negated
+`beam_grid` and is therefore still right-minus-left -- opposite the LH
+panel's plotted convention, and opposite α.
 
 Two colour variants for the LH panel:
   :signed_log — signed-log₁₀ scale (kept for reference)
@@ -67,6 +75,11 @@ function load_delta_grids(csv_path::AbstractString; pref::Float64)
         ηEb = complex(row.eta_end_beam_re,  row.eta_end_beam_im)
         η1d = complex(row.eta_1_domain_re,  row.eta_1_domain_im)
         ηEd = complex(row.eta_end_domain_re, row.eta_end_domain_im)
+        # Both grids are right-minus-left here (opposite the left-minus-right
+        # convention now used by alpha/F_T). The caller negates domain_grid
+        # before plotting it as F_T/F_T* (see the ft_scale conversion below);
+        # beam_grid is plotted as-is (non-paper figure), so it stays
+        # right-minus-left -- see the module docstring above.
         beam_grid[i, j]   = (abs2(ηEb) - abs2(η1b)) / L^2
         domain_grid[i, j] = pref * (abs2(ηEd) - abs2(η1d)) / (rho_raft * L * omega^2)
     end

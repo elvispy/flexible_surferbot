@@ -327,6 +327,10 @@ function get_roots_theoretical_LH(artifact, condition_name; output_dir::Abstract
                 push!(abs_eta_end, abs(diag.eta_LH_end))
             end
             col_amp[iei] = max(mean(absS), mean(absA))
+            # This still uses the pre-fix right-minus-left sign convention
+            # (opposite Surferbot.Analysis.beam_asymmetry's corrected formula)
+            # -- harmless here because only abs(alpha_col) is used below for a
+            # magnitude-only resonance threshold, which is sign-invariant.
             alpha_col = @. -(abs_eta_1^2 - abs_eta_end^2) /
                             (abs_eta_1^2 + abs_eta_end^2 + eps())
             q_val = quantile(abs.(alpha_col), 0.15)
@@ -456,6 +460,8 @@ function build_LH_plot(artifact, csv_path, output_dir; xlim_min::Float64)
             push!(abs1, abs(d.eta_beam_1)); push!(abse, abs(d.eta_beam_end))
         end
         sync_amp[iei] = max(mean(absS), mean(absA))
+        # Pre-fix right-minus-left convention -- harmless, see the identical
+        # note near the other alpha_col above (only abs(alpha_col) is used).
         alpha_col   = @. -(abs1^2 - abse^2) / (abs1^2 + abse^2 + eps())
         is_odd      = mean(absS) < mean(absA)
         resonance_q = is_odd ? 0.20 : 0.15
@@ -658,6 +664,8 @@ function get_roots_theoretical_beam(EI_list::AbstractVector{Float64}, condition_
                 push!(abs_eta_end, abs(diag.eta_beam_end))
             end
             col_amp[iei] = max(mean(absS), mean(absA))
+            # Pre-fix right-minus-left convention -- harmless, see the identical
+            # note near the first alpha_col above (only abs(alpha_col) is used).
             alpha_col = @. -(abs_eta_1^2 - abs_eta_end^2) /
                             (abs_eta_1^2 + abs_eta_end^2 + eps())
             is_odd_resonance = mean(absS) < mean(absA)
