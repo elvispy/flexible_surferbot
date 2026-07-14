@@ -482,14 +482,17 @@ function draw_wave_axis!(ax, result; ylim, show_ylabel, title, F_T_ratio, F_T_ra
     # (not above) the raft: the tikz panel-tag overlay in main.tex ((b)-(g))
     # sits right above this row, so an above-raft placement collided with it.
     #
-    # Direction MUST come from the raw (unnormalized) thrust, not sign(F_T_ratio):
-    # F_T_ratio = F_T_raw/F_T_star, and F_T_star (the rigid-inviscid reference)
+    # Direction comes from the raw (unnormalized) thrust, not sign(F_T_ratio).
+    # F_T_ratio = F_T_raw/abs(F_T_star): F_T_star (the rigid-inviscid reference)
     # can itself be negative depending on which side its own reference motor
-    # position sits on, which would silently flip the displayed ratio's sign
-    # relative to the true physical push direction. Verified against the
-    # Fig 3b validated case (motor left of centre -> raw thrust positive,
-    # pushes right, away from the bigger left-side wave, matching ordinary
-    # recoil) that sign(F_T_raw) is the physically meaningful one.
+    # position sits on, so dividing by the signed value (rather than its
+    # absolute value) would silently flip the displayed ratio's sign relative
+    # to the true physical push direction -- making the arrow and the printed
+    # F_T/F_T^* value disagree. Verified against the Fig 3b validated case
+    # (motor left of centre -> raw thrust positive, pushes right, away from
+    # the bigger left-side wave, matching ordinary recoil) that sign(F_T_raw)
+    # is the physically meaningful one; dividing by abs(F_T_star) keeps the
+    # displayed ratio's sign consistent with it too.
     dir = sign(F_T_raw)
     arrow_y = -0.45 * ylim
     label_y = -0.58 * ylim
@@ -553,7 +556,7 @@ function make_snapshot_grid(fig_dir; kind::Symbol, op_indices, filename, column_
             title = column_titles[j], titlecolor = col,
             leftspinecolor = col, rightspinecolor = col,
             topspinecolor = col, bottomspinecolor = col, spinewidth = sw)
-        F_T_ratio = results[j].thrust / sweep.F_T_star
+        F_T_ratio = results[j].thrust / abs(sweep.F_T_star)
         draw_wave_axis!(axw, results[j]; ylim, show_ylabel = (j == 1), title = column_titles[j],
             F_T_ratio, F_T_raw = results[j].thrust)
         axm = CM.Axis(fig[3, j];

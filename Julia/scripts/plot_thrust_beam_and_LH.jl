@@ -300,7 +300,7 @@ function main()
     d        = Float64(bp.d)
     ft_scale = d * grids.rho_raft * grids.L * grids.omega^2 / abs(F_T_star)
     @printf "F_T^* = %.4e N  →  domain_grid scale factor = %.4e\n" F_T_star ft_scale
-    domain_grid_norm = grids.domain_grid .* ft_scale
+    domain_grid_norm = -grids.domain_grid .* ft_scale
 
     modal_logK = [log10(5.43e-3)]
 
