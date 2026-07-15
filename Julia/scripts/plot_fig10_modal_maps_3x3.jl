@@ -127,9 +127,9 @@ function csv_alpha_map(csv_path, artifact, spec::RowSpec; xlim_min::Float64)
     for (j, le) in enumerate(logEI), (i, xm) in enumerate(xM)
         alpha[i, j] = lut[(le, xm)]
     end
-    if maximum(xM) < 0.5
-        xM = vcat(xM, [0.5])
-        alpha = vcat(alpha, alpha[end:end, :])
+    if minimum(xM) > -0.5
+        xM = vcat([-0.5], xM)
+        alpha = vcat(alpha[1:1, :], alpha)
     end
     return (; kappa = 10.0 .^ (logEI .- shift), xM, alpha,
             logK = logEI .- shift, xlim = (xlim_min, maximum(logEI) - shift))
@@ -165,15 +165,15 @@ function exp_ticks(log_xlim)
 end
 
 function draw_panel!(ax, data; show_xlabel::Bool, show_yticks::Bool, show_xticks::Bool)
-    hm = CairoMakie.heatmap!(ax, data.kappa, data.xM, data.alpha';
+    hm = CairoMakie.heatmap!(ax, data.xM, data.kappa, data.alpha;
         colormap = :balance, colorrange = (-1, 1))
-    CairoMakie.xlims!(ax, 10.0^data.xlim[1], 10.0^data.xlim[2])
-    CairoMakie.ylims!(ax, 0, 0.5)
-    ax.xscale = log10
+    CairoMakie.xlims!(ax, -0.5, 0)
+    CairoMakie.ylims!(ax, 10.0^data.xlim[1], 10.0^data.xlim[2])
+    ax.yscale = log10
     ticks, labels = exp_ticks(data.xlim)
-    ax.xticks = (ticks, labels)
-    ax.yticks = 0:0.25:0.5
-    ax.xlabel = show_xlabel ? L"\kappa" : ""
+    ax.yticks = (ticks, labels)
+    ax.xticks = -0.5:0.25:0
+    ax.xlabel = show_xlabel ? L"x_M/L" : ""
     if !show_xticks
         CairoMakie.hidexdecorations!(ax; grid = false)
     end
@@ -224,7 +224,7 @@ function main()
         for r in eachindex(ROW_SPECS)
             CairoMakie.Label(fig[r + 1, 1], ROW_SPECS[r].title, rotation = pi / 2,
                 fontsize = 20, tellheight = false)
-            CairoMakie.Label(fig[r + 1, 2], L"x_M/L", rotation = pi / 2,
+            CairoMakie.Label(fig[r + 1, 2], L"\kappa", rotation = pi / 2,
                 fontsize = 22, tellheight = false)
             for c in eachindex(COL_SPECS)
                 ax = CairoMakie.Axis(fig[r + 1, c + 2],

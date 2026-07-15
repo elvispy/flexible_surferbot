@@ -21,10 +21,16 @@ using JLD2
 using Plots
 using LaTeXStrings
 using Printf
+using Base.Threads: @threads, ReentrantLock
 
+const PRINT_LOCK  = ReentrantLock()
+const MAX_WORKERS = min(Threads.nthreads(), 8)
+const SOLVE_SEM   = Base.Semaphore(MAX_WORKERS)
 const CACHE_PATH = joinpath(@__DIR__, "..", "output", "jld2", "alpha_sweep_kappa_farfield.jld2")
 const FIG_DIR    = joinpath(@__DIR__, "..", "output", "figures")
-const N_SWEEP    = 50
+const N_COARSE   = 50
+const REFINE_THRESHOLD  = 0.25  # |Δα| between adjacent coarse points that triggers refinement
+const N_PER_INTERVAL    = 12    # extra points inserted into each flagged interval
 const NU_WATER   = 1e-6
 const RIGID_INVISCID_OVERRIDES = (nu = 0.0, EI = Inf)
 
@@ -38,6 +44,12 @@ function solve_alpha(bp_overrides, bp)
 end
 
 # ─── Sweep ────────────────────────────────────────────────────────────────────
+#
+# Two-pass adaptive grid: a coarse log-uniform pass over the full range, then
+# extra points inserted only inside intervals where α changes sharply between
+# adjacent coarse points (i.e. resonance-driven features), rather than
+# uniformly densifying the whole (mostly smooth) range. Keeps the total point
+# count in the ~50-100 range instead of paying for fine resolution everywhere.
 
 function run_sweep(bp)
     rho_R    = Float64(bp.rho_raft)
@@ -46,15 +58,52 @@ function run_sweep(bp)
     xM       = Float64(bp.motor_position)
     EI_scale = rho_R * L^4 * omega^2
 
-    log10_kappa = collect(range(-4.0, 1.0; length = N_SWEEP))
-    alpha = Vector{Float64}(undef, N_SWEEP)
+    solve_at(lk) = solve_alpha((EI = 10.0^lk * EI_scale, motor_position = xM, nu = 0.0), bp)
 
-    println("Sweeping κ ($N_SWEEP points, ν = 0) …")
-    for (i, lk) in enumerate(log10_kappa)
-        EI_i     = 10.0^lk * EI_scale
-        alpha[i] = solve_alpha((EI = EI_i, motor_position = xM, nu = 0.0), bp)
-        @printf "  [%2d/%d]  log₁₀κ = %+.2f   α = %+.4f\n" i N_SWEEP lk alpha[i]
+    log10_kappa = collect(range(-4.0, 1.0; length = N_COARSE))
+    alpha = Vector{Float64}(undef, N_COARSE)
+
+    println("Sweeping κ ($N_COARSE coarse points, ν = 0, $MAX_WORKERS workers) …")
+    @threads for i in eachindex(log10_kappa)
+        lk = log10_kappa[i]
+        Base.acquire(SOLVE_SEM)
+        try
+            alpha[i] = solve_at(lk)
+        finally
+            Base.release(SOLVE_SEM)
+        end
+        lock(PRINT_LOCK) do
+            @printf "  [%2d/%d]  log₁₀κ = %+.2f   α = %+.4f\n" i N_COARSE lk alpha[i]
+        end
     end
+
+    steep = [i for i in 1:(N_COARSE - 1) if abs(alpha[i + 1] - alpha[i]) > REFINE_THRESHOLD]
+    if !isempty(steep)
+        extra_lk = Float64[]
+        for i in steep
+            append!(extra_lk, range(log10_kappa[i], log10_kappa[i + 1]; length = N_PER_INTERVAL + 2)[2:end-1])
+        end
+        println("Refining $(length(extra_lk)) points across $(length(steep)) steep interval(s), $MAX_WORKERS workers …")
+        extra_alpha = Vector{Float64}(undef, length(extra_lk))
+        @threads for i in eachindex(extra_lk)
+            lk = extra_lk[i]
+            Base.acquire(SOLVE_SEM)
+            try
+                extra_alpha[i] = solve_at(lk)
+            finally
+                Base.release(SOLVE_SEM)
+            end
+            lock(PRINT_LOCK) do
+                @printf "  refine [%2d/%d]  log₁₀κ = %+.4f   α = %+.4f\n" i length(extra_lk) lk extra_alpha[i]
+            end
+        end
+        log10_kappa = vcat(log10_kappa, extra_lk)
+        alpha       = vcat(alpha, extra_alpha)
+        order       = sortperm(log10_kappa)
+        log10_kappa = log10_kappa[order]
+        alpha       = alpha[order]
+    end
+
     return (; log10_kappa, kappa = 10.0 .^ log10_kappa, alpha)
 end
 

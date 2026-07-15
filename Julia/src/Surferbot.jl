@@ -136,7 +136,7 @@ Base.@kwdef struct FlexibleParams{T<:Real}
     nu::T = 1e-6
     g::T = 9.81
     L_raft::T = 0.05
-    motor_position::T = 0.6 / 5 * 0.05
+    motor_position::T = -0.6 / 5 * 0.05
     d::Union{Nothing, T} = 0.03
     EI::Union{T, AbstractVector{T}} = 3.0e9 * 3e-2 * 9e-4^3 / 12
     rho_raft::Union{T, AbstractVector{T}} = 0.052

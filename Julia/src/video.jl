@@ -329,8 +329,8 @@ function plot_frame(record::SurferbotRunRecord, t::Real; omega::Real, x_contact_
         color      = :steelblue4,
         linewidth  = 2.0,
         label      = false,
-        xlabel     = "x  (cm)",
-        ylabel     = "η  (μm)",
+        xlabel     = "Position, x  (cm)",
+        ylabel     = "Elevation, η  (μm)",
         ylim       = (-y_limit, y_limit * 1.45),
         xlim       = (first(x_scaled), last(x_scaled)),
         title      = @sprintf("f = %.1f Hz     t = %.3f s     U = %.3f mm/s",
@@ -347,8 +347,9 @@ function plot_frame(record::SurferbotRunRecord, t::Real; omega::Real, x_contact_
         titlefontsize  = 26,
         legendfontsize = 24,
         fontfamily = "Computer Modern",
-        left_margin    = Base.invokelatest(*, 14, Plots.mm),
+        left_margin    = Base.invokelatest(*, 18, Plots.mm),
         top_margin     = Base.invokelatest(*, 4, Plots.mm),
+        bottom_margin  = Base.invokelatest(*, 18, Plots.mm),
     )
 
     # ── Raft coloured by log₁₀(EI): dark = stiff, light grey = compliant ─────
@@ -384,15 +385,39 @@ function plot_frame(record::SurferbotRunRecord, t::Real; omega::Real, x_contact_
         end
     end
 
-    # ── Motor marker ──────────────────────────────────────────────────────────
-    if show_motor && motor_idx !== nothing
-        Base.invokelatest(Plots.scatter!, p, [x_scaled[motor_idx]], [y[motor_idx]];
-                 marker             = :star5,
-                 markersize          = 18,
-                 color              = :gold,
-                 markerstrokecolor   = :white,
-                 markerstrokewidth   = 1.5,
-                 label              = "Motor")
+    # ── Motor forcing: Re{f̂(x) e^{iωt}}, nondimensionalized, as arrows ────────
+    # Positive f acts downward (paper sign convention), so a positive load is
+    # drawn pointing down (negative dy in this plot's y-up coordinate).
+    if show_motor && !isempty(x_contact_mask) && any(x_contact_mask)
+        loads = maybe_get(record.args, :loads, nothing)
+        L_c   = maybe_get(record.args, :L_c, nothing)
+        m_c   = maybe_get(record.args, :m_c, nothing)
+        t_c   = maybe_get(record.args, :t_c, nothing)
+        if loads !== nothing && L_c !== nothing && m_c !== nothing && t_c !== nothing
+            F_c          = m_c * L_c / t_c^2
+            loads_nondim = loads .* L_c ./ F_c            # real, nondimensional load density
+            f_t          = loads_nondim .* cos(omega * t) # Re{f̂ e^{iωt}}, f̂ real (in-phase forcing)
+            peak         = maximum(abs.(loads_nondim))
+
+            if peak > 0
+                x_raft = x_scaled[x_contact_mask]
+                y_raft = y[x_contact_mask]
+                # Show a handful of evenly-spaced arrows across the visually
+                # significant (>5% of peak) part of the Gaussian load
+                # footprint, rather than one per (dense) solver grid point.
+                sig_idx  = findall(abs.(loads_nondim) .> 0.05 * peak)
+                n_arrows = min(length(sig_idx), 15)
+                pick     = sig_idx[round.(Int, range(1, length(sig_idx); length = n_arrows))]
+                arrow_scale = 0.8 * y_limit / peak
+                dy = -f_t[pick] .* arrow_scale
+
+                Base.invokelatest(Plots.quiver!, p, x_raft[pick], y_raft[pick];
+                         quiver    = (zeros(length(pick)), dy),
+                         color     = :orangered,
+                         linewidth = 3,
+                         label     = "Motor force (Re, nondim.)")
+            end
+        end
     end
 
     return p

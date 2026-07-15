@@ -17,9 +17,9 @@ Two modes:
    One-row figure with panels (a)–(e) covering three κ values and five
    distinct (κ, xM/L) operating points for comparison:
      (a) κ = 1.82e-3,  xM = Surferbot
-     (b) κ = 5.43e-3,  xM = Surferbot
-     (c) κ = 5.43e-3,  xM/L = 0.183  (α ≈ 0)
-     (d) κ = 5.43e-3,  xM/L = 0.272  (|α| ≈ 1)
+     (b) κ = 6.8665e-3,  xM = Surferbot
+     (c) κ = 6.8665e-3,  xM/L = -0.1885  (α ≈ 0)
+     (d) κ = 6.8665e-3,  xM/L = -0.272  (|α| ≈ 1)
      (e) κ = 1.94e-2,  xM = Surferbot
 
 Usage:
@@ -84,14 +84,24 @@ const COLUMN_SPINEWIDTHS = [1.0, 2.0, 3.0]
 # See plot_thrust_sweeps.jl setup_lm_mathfonts() for why this is cm-unicode
 # (true Computer Modern, matching the paper body and STYLE.fontfamily above)
 # rather than "Latin Modern Roman".
-const CMU_DIR = "/usr/local/texlive/2025/texmf-dist/fonts/opentype/public/cm-unicode"
+function _kpsewhich(fname, fallback)
+    p = try
+        strip(read(`kpsewhich $fname`, String))
+    catch
+        ""
+    end
+    isempty(p) ? fallback : p
+end
+const CMU_DIR = dirname(_kpsewhich("cmunrm.otf",
+    "/usr/local/texlive/2025/texmf-dist/fonts/opentype/public/cm-unicode/cmunrm.otf"))
 const LM_FONT = joinpath(CMU_DIR, "cmunrm.otf")
 
 function setup_lm_mathfonts()
     MTE_ID = Base.PkgId(Base.UUID("0a4f8689-d25c-4efe-a92b-7142dfc1aa53"), "MathTeXEngine")
     MTE = get(Base.loaded_modules, MTE_ID, nothing)
     MTE === nothing && return
-    LM_MATH = "/usr/local/texlive/2025/texmf-dist/fonts/opentype/public/lm-math/latinmodern-math.otf"
+    LM_MATH = _kpsewhich("latinmodern-math.otf",
+        "/usr/local/texlive/2025/texmf-dist/fonts/opentype/public/lm-math/latinmodern-math.otf")
     isfile(LM_MATH) || return
     try
         MTE.set_texfont_family!(
@@ -118,8 +128,8 @@ const GRID_ALPHA_CSV = joinpath(@__DIR__, "..", "output", "csv", "sweeper_couple
 # ~-4 on the plotted curve even though the true minimum there is ~-27.
 # kappa=2.1209508879201904e-3 IS an existing sample (F_T/F_T*=-22.1,
 # flanked by +28.4/-10.7), so it shows as a real, visible dip.
-const KAPPA_HIGHLIGHTS = [2.1209508879201904e-3, 5.43e-3, 1.698244e-2]
-const XM_HIGHLIGHTS = [0.12, 0.183, 0.272]
+const KAPPA_HIGHLIGHTS = [2.1209508879201904e-3, 6.8665e-3, 1.698244e-2]
+const XM_HIGHLIGHTS = [-0.12, -0.1885, -0.272]
 const SNAPSHOT_CACHE_PATH = joinpath(@__DIR__, "..", "output", "jld2", "kappa_snapshots_cache.jld2")
 
 const STYLE = (
@@ -132,13 +142,13 @@ const STYLE = (
 function paper_snapshot_ops()
     bp       = Surferbot.Analysis.default_coupled_motor_position_EI_sweep().base_params
     EI_scale = Float64(bp.rho_raft) * Float64(bp.L_raft)^4 * Float64(bp.omega)^2
-    xM_sb    = abs(Float64(bp.motor_position)) / Float64(bp.L_raft)
+    xM_sb    = Float64(bp.motor_position) / Float64(bp.L_raft)
 
     ops = [
         (kappa=2.1209508879201904e-3, xM=xM_sb,  file_xM=nothing, label="(a)"),
-        (kappa=5.43e-3, xM=xM_sb,  file_xM=nothing, label="(b)"),
-        (kappa=5.43e-3, xM=0.183,  file_xM=0.183,   label="(c)"),
-        (kappa=5.43e-3, xM=0.272,  file_xM=0.272,   label="(d)"),
+        (kappa=6.8665e-3, xM=xM_sb,  file_xM=nothing, label="(b)"),
+        (kappa=6.8665e-3, xM=-0.1885,  file_xM=-0.1885,   label="(c)"),
+        (kappa=6.8665e-3, xM=-0.272,  file_xM=-0.272,   label="(d)"),
         (kappa=1.698244e-2, xM=xM_sb,  file_xM=nothing, label="(e)"),
     ]
     return bp, EI_scale, xM_sb, ops
@@ -379,13 +389,13 @@ function load_sweep_cache_for_grid(kind::Symbol)
                           [L"10^{-4}", L"10^{-3}", L"10^{-2}", L"10^{-1}", L"10^{0}", L"10^{1}"]),
                 highlights = KAPPA_HIGHLIGHTS, F_T_star = scale)
     elseif kind == :xM
-        alpha_xM = load_motor_alpha_from_csv(bp; target_kappa = 5.43e-3)
+        alpha_xM = load_motor_alpha_from_csv(bp; target_kappa = 6.8665e-3)
         return (; x = d["xM_x"], y = d["xM_T"] .* depth ./ scale,
                 ylh = d["xM_Sxx"] .* depth ./ scale,
                 alpha_x = alpha_xM.x, alpha = alpha_xM.alpha,
                 xlabel = L"x_M/L",
                 xscale = identity,
-                xticks = 0.0:0.1:0.5,
+                xticks = -0.5:0.1:0.0,
                 highlights = XM_HIGHLIGHTS, F_T_star = scale)
     else
         error("Unknown sweep kind: $kind")
@@ -580,15 +590,15 @@ function main_snapshot_grids(fig_dir)
         op_indices = [1, 2, 5],
         filename = "plot_kappa_snapshot_grid_flexibility",
         column_titles = [L"\kappa=2.12\times10^{-3}",
-                         L"\kappa=5.43\times10^{-3}",
+                         L"\kappa=6.87\times10^{-3}",
                          L"\kappa=1.70\times10^{-2}"])
     make_snapshot_grid(fig_dir;
         kind = :xM,
         op_indices = [2, 3, 4],
         filename = "plot_kappa_snapshot_grid_motor_position",
-        column_titles = [L"x_M/L=0.12",
-                         L"x_M/L=0.183",
-                         L"x_M/L=0.272"],
+        column_titles = [L"x_M/L=-0.12",
+                         L"x_M/L=-0.1885",
+                         L"x_M/L=-0.272"],
         modal_energy_ylims = (0.0, 3e-6))
 end
 

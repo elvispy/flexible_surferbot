@@ -76,9 +76,9 @@ function build_beam_alpha(artifact, csv_path; xlim_min::Float64)
     for (j, le) in enumerate(logEI_axis), (i, xm) in enumerate(xM_axis)
         alpha[i, j] = lut[(le, xm)]
     end
-    if maximum(xM_axis) < 0.5
-        xM_axis = vcat(xM_axis, [0.5])
-        alpha   = vcat(alpha, alpha[end:end, :])
+    if minimum(xM_axis) > -0.5
+        xM_axis = vcat([-0.5], xM_axis)
+        alpha   = vcat(alpha[1:1, :], alpha)
     end
     return alpha, xM_axis, logEI_axis, shift, max_logK
 end
@@ -91,7 +91,7 @@ function make_nm_comparison(artifact, csv_path, output_dir;
         build_beam_alpha(artifact, csv_path; xlim_min=xlim_min)
 
     XLIMS        = (xlim_min, max_logK)
-    YLIMS        = (0.0, 0.5)
+    YLIMS        = (-0.5, 0.0)
     # 181 (not 57): the coarse grid missed narrow resonances entirely and
     # under-sampled branches approaching them into a jagged/spurious-looking
     # wiggle; see plot_dimensionless_diagnostics_LH.jl for the same fix.

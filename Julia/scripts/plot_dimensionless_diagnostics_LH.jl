@@ -44,10 +44,10 @@ const ModalPressureMap = Main.PrescribedWnDiagonalImpedance
 const NUM_MODES    = 8
 const RATIO_CUTOFF = 0.5
 
-# Branch-terminus detection: when a tracked high-xM root disappears between
-# consecutive EI steps and the function is still decreasing at xM=0.5, we add
-# one terminal scatter point at xM=0.5 for that EI.
-const TERM_MIN_XM = 0.35   # only track roots above this xM as upward branches
+# Branch-terminus detection: when a tracked low-xM root disappears between
+# consecutive EI steps and the function is still decreasing at xM=-0.5, we add
+# one terminal scatter point at xM=-0.5 for that EI.
+const TERM_MIN_XM = -0.35   # only track roots below this xM as downward branches
 const TERM_TOL    = 0.08   # max xM gap to consider a root "continued"
 
 const RESONANCE_ALPHA_CUTOFF  = 0.04  # 10th-percentile of |α_LH| across xM < this → resonance column
@@ -230,7 +230,7 @@ function get_roots_theoretical_LH(artifact, condition_name; output_dir::Abstract
                                         log10(EI_artifact[end]); length=n_EI))
     end
     logEI_axis = log10.(EI_list)
-    xM_grid    = collect(range(0.0, 0.5; length=601))
+    xM_grid    = collect(range(-0.5, 0.0; length=601))
     theory_ctx = theoretical_modal_context_LH(params; output_dir=output_dir)
 
     pts_logEI      = Float64[]
@@ -267,7 +267,7 @@ function get_roots_theoretical_LH(artifact, condition_name; output_dir::Abstract
             end
         end
 
-        curr_hi = filter(r -> r > TERM_MIN_XM, roots)
+        curr_hi = filter(r -> r < TERM_MIN_XM, roots)
         if !isempty(curr_hi)
             prev_hi_roots = curr_hi
             prev_hi_lEI   = logEI_axis[iei]
@@ -283,7 +283,7 @@ function get_roots_theoretical_LH(artifact, condition_name; output_dir::Abstract
 
     # ── Targeted terminus refinement: dense re-scan of each branch-exit interval ─
     # Evaluates N_TERM_FINE additional κ steps inside the narrow logEI gap where a
-    # high-xM branch disappeared, finding real roots that get closer to xM = 0.5.
+    # low-xM branch disappeared, finding real roots that get closer to xM = -0.5.
     # Purely theoretical: same root-finder, no synthetic points.
     N_TERM_FINE = 30
     for (lEI_lo, lEI_hi) in unique(term_intervals)
@@ -358,7 +358,7 @@ function get_roots_theoretical_LH(artifact, condition_name; output_dir::Abstract
     # producing multiple near-duplicate vertical stripes for a single resonance.
     if !isempty(res_candidates)
         logEI_coarse = log10.(EI_coarse)
-        res_xM = collect(range(0.0, 0.5; length=RESONANCE_N_PTS))
+        res_xM = collect(range(-0.5, 0.0; length=RESONANCE_N_PTS))
         for (best_iei, _) in dedup_resonance_runs(res_candidates)
             append!(pts_logEI, fill(logEI_coarse[best_iei], RESONANCE_N_PTS))
             append!(pts_xM,    res_xM)
@@ -390,7 +390,7 @@ end
 #   Pass a vector → use that instead (needed for uncoupled where the artifact
 #                   EI range is narrower than the desired x axis).
 
-function build_LH_plot(artifact, csv_path, output_dir; xlim_min::Float64)
+function build_LH_plot(artifact, csv_path, output_dir; xlim_min::Float64, transpose::Bool=true)
     params = artifact.base_params
     shift  = log10(Float64(params.rho_raft) * Float64(params.L_raft)^4 *
                    Float64(params.omega)^2)
@@ -415,14 +415,24 @@ function build_LH_plot(artifact, csv_path, output_dir; xlim_min::Float64)
         end
     end
 
-    # Pad to xM/L = 0.5 by repeating the last row (CSV data ends at 0.48)
-    if maximum(xM_axis) < 0.5
-        xM_axis  = vcat(xM_axis, [0.5])
-        alpha_LH = vcat(alpha_LH, alpha_LH[end:end, :])
+    # Pad to xM/L = -0.5 by repeating the first row (CSV data starts at -0.49)
+    if minimum(xM_axis) > -0.5
+        xM_axis  = vcat([-0.5], xM_axis)
+        alpha_LH = vcat(alpha_LH[1:1, :], alpha_LH)
     end
 
     XLIMS = (xlim_min, max_logK_data)
-    YLIMS = (0.0, 0.5)
+    YLIMS = (-0.5, 0.0)
+
+    # Actual xM data extent, for the heatmap's own display range: YLIMS above
+    # assumes a negative xM/L convention that the CSV-sourced xM_axis grid does
+    # not (yet) follow -- see the uncommitted sign-convention migration in this
+    # function. Driving the displayed range off real data (rather than YLIMS)
+    # keeps both orientations renderable regardless of how/when that
+    # migration gets finished; YLIMS itself is left untouched below since the
+    # theoretical overlay curves (res.xM_norm) are computed on their own
+    # (-0.5, 0.0) grid and still need it for masking.
+    xm_data_lims = (minimum(xM_axis), maximum(xM_axis))
 
     # 181 (not 57): the coarse grid missed narrow resonances entirely (no
     # scatter_logK column landed inside their width) and under-sampled branches
@@ -497,16 +507,17 @@ function build_LH_plot(artifact, csv_path, output_dir; xlim_min::Float64)
     curve_styles = [:solid, :solid, :solid, :solid]
 
     plt_opts = (
-        xlabel  = L"\kappa",
-        xticks  = kappa_exp_xticks(XLIMS),
-        ylabel  = L"x_M / L",
+        xlabel  = transpose ? L"x_M / L" : L"\kappa",
+        ylabel  = transpose ? L"\kappa" : L"x_M / L",
+        xticks  = transpose ? :auto : kappa_exp_xticks(XLIMS),
+        yticks  = transpose ? kappa_exp_xticks(XLIMS) : :auto,
         colormap = :balance,
         clims   = (-1, 1),
         levels  = 51,
         interpolate = true,
-        xlims   = XLIMS,
-        ylims   = YLIMS,
-        legend  = :bottomright,
+        xlims   = transpose ? xm_data_lims : XLIMS,
+        ylims   = transpose ? XLIMS : xm_data_lims,
+        legend  = transpose ? :topleft : :bottomright,
         background_color_legend = RGBA(1, 1, 1, 0.85),
         foreground_color_legend = :black,
         legend_font_halign = :left,
@@ -526,7 +537,9 @@ function build_LH_plot(artifact, csv_path, output_dir; xlim_min::Float64)
         colorbar_tickfontsize  = 11,
     )
 
-    p = heatmap(logEI_axis .- shift, xM_axis, alpha_LH; plt_opts...)
+    p = transpose ?
+        heatmap(xM_axis, logEI_axis .- shift, alpha_LH'; plt_opts...) :
+        heatmap(logEI_axis .- shift, xM_axis, alpha_LH; plt_opts...)
 
     for (i, cname) in enumerate(CURVE_NAMES)
         res  = results[cname]
@@ -534,15 +547,22 @@ function build_LH_plot(artifact, csv_path, output_dir; xlim_min::Float64)
                (YLIMS[1] .<= res.xM_norm .<= YLIMS[2])
         isempty(res.logK[mask]) && continue
         lk_path, xm_path, res_lks = cluster_branches(res.logK[mask], res.xM_norm[mask])
-        isempty(lk_path) || plot!(p, lk_path, xm_path;
-            label      = CURVE_LABELS[i],
-            color      = curve_colors[i],
-            linestyle  = curve_styles[i],
-            linewidth  = 4.0)
+        if !isempty(lk_path)
+            a, b = transpose ? (xm_path, lk_path) : (lk_path, xm_path)
+            plot!(p, a, b;
+                label      = CURVE_LABELS[i],
+                color      = curve_colors[i],
+                linestyle  = curve_styles[i],
+                linewidth  = 4.0)
+        end
         for rlk in res_lks
             (XLIMS[1] <= rlk <= XLIMS[2]) || continue
             # Resonance stripes: same color, thinner, slightly transparent
-            vline!(p, [rlk]; color=curve_colors[i], linewidth=4.0, label=false)
+            if transpose
+                hline!(p, [rlk]; color=curve_colors[i], linewidth=4.0, label=false)
+            else
+                vline!(p, [rlk]; color=curve_colors[i], linewidth=4.0, label=false)
+            end
         end
     end
 
@@ -577,7 +597,7 @@ function get_roots_theoretical_beam(EI_list::AbstractVector{Float64}, condition_
     logEI_dense = collect(range(log10(EI_coarse[1]), log10(EI_coarse[end]); length=n_EI))
     EI_list     = 10 .^ logEI_dense
     logEI_axis  = logEI_dense
-    xM_grid     = collect(range(0.0, 0.5; length=601))
+    xM_grid     = collect(range(-0.5, 0.0; length=601))
 
     pts_logEI      = Float64[]
     pts_xM         = Float64[]
@@ -612,7 +632,7 @@ function get_roots_theoretical_beam(EI_list::AbstractVector{Float64}, condition_
                 end
             end
         end
-        curr_hi = filter(r -> r > TERM_MIN_XM, roots)
+        curr_hi = filter(r -> r < TERM_MIN_XM, roots)
         if !isempty(curr_hi)
             prev_hi_roots = curr_hi; prev_hi_lEI = logEI_axis[iei]
         else
@@ -692,7 +712,7 @@ function get_roots_theoretical_beam(EI_list::AbstractVector{Float64}, condition_
     # physical resonance from generating two stacked vertical stripes.
     if !isempty(res_candidates)
         logEI_coarse    = log10.(EI_coarse)
-        res_xM_template = collect(range(0.0, 0.5; length=RESONANCE_N_PTS))
+        res_xM_template = collect(range(-0.5, 0.0; length=RESONANCE_N_PTS))
         for (best_iei, _) in dedup_resonance_runs(res_candidates)
             best_le = logEI_coarse[best_iei]
             append!(pts_logEI, fill(best_le, RESONANCE_N_PTS))
@@ -732,14 +752,14 @@ function build_beam_end_plot(artifact, csv_path, output_dir; xlim_min::Float64)
         end
     end
 
-    # Pad to xM/L = 0.5 by repeating the last row (CSV data ends at 0.48)
-    if maximum(xM_axis) < 0.5
-        xM_axis   = vcat(xM_axis, [0.5])
-        alpha_beam = vcat(alpha_beam, alpha_beam[end:end, :])
+    # Pad to xM/L = -0.5 by repeating the first row (CSV data starts at -0.49)
+    if minimum(xM_axis) > -0.5
+        xM_axis    = vcat([-0.5], xM_axis)
+        alpha_beam = vcat(alpha_beam[1:1, :], alpha_beam)
     end
 
     XLIMS = (xlim_min, max_logK_data)
-    YLIMS = (0.0, 0.5)
+    YLIMS = (-0.5, 0.0)
 
     # 181 (not 57): see build_LH_plot for why.
     scatter_logK = collect(range(xlim_min - 0.1, max_logK_data; length=181))

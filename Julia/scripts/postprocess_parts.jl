@@ -134,7 +134,7 @@ function main(parts_dir::AbstractString, output_csv::AbstractString; num_modes::
     
     base_params = Surferbot.Analysis.default_coupled_motor_position_EI_sweep().base_params
     nx = 100 
-    motor_position_list = collect(range(0.0, 0.49; length=nx) .* base_params.L_raft)
+    motor_position_list = collect(range(-0.49, 0.0; length=nx) .* base_params.L_raft)
 
     all_rows = Vector{Any}(undef, length(part_files))
     @threads for i in eachindex(part_files)

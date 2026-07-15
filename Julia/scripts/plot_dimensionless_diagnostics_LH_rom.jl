@@ -54,9 +54,9 @@ function build_LH_alpha_rom(theory_ctx, csv_path; xlim_min::Float64)
         alpha_LH[i, j] = Surferbot.Analysis.beam_asymmetry(diag.eta_LH_1, diag.eta_LH_end)
     end
 
-    if maximum(xM_axis) < 0.5
-        xM_axis  = vcat(xM_axis, [0.5])
-        alpha_LH = vcat(alpha_LH, alpha_LH[end:end, :])
+    if minimum(xM_axis) > -0.5
+        xM_axis  = vcat([-0.5], xM_axis)
+        alpha_LH = vcat(alpha_LH[1:1, :], alpha_LH)
     end
 
     return alpha_LH, xM_axis, logEI_axis, shift, max_logK
@@ -68,7 +68,7 @@ function build_LH_rom_plot(artifact, csv_path, output_dir; xlim_min::Float64)
         build_LH_alpha_rom(theory_ctx, csv_path; xlim_min=xlim_min)
 
     XLIMS = (xlim_min, max_logK)
-    YLIMS = (0.0, 0.5)
+    YLIMS = (-0.5, 0.0)
 
     scatter_logK = collect(range(xlim_min - 0.1, max_logK; length=57))
     EI_scatter   = 10 .^ (scatter_logK .+ shift)

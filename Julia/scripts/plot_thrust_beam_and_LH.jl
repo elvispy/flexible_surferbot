@@ -187,7 +187,7 @@ end
 
 function operating_point(bp, shift)
     lk = log10(Float64(bp.EI)) - shift
-    xm = abs(Float64(bp.motor_position)) / Float64(bp.L_raft)
+    xm = Float64(bp.motor_position) / Float64(bp.L_raft)
     return lk, xm
 end
 
@@ -196,10 +196,10 @@ end
 function render_panel(log10_kappa, xM_axis, delta_grid, fig_title, out_base, bp, shift;
                       mode=:signed_log,
                       snapshot_logK=Float64[], snapshot_xMs=Float64[], snapshot_labels=String[],
-                      modal_logK=Float64[])
+                      modal_logK=Float64[], transpose::Bool=true)
     max_logK = maximum(log10_kappa)
     XLIMS    = (-4.0, max_logK)
-    YLIMS    = (0.0, 0.5)
+    YLIMS    = (-0.5, 0.0)
 
     # Clim from raw data in visible κ range — done before transform so ticks are in real units.
     ki_vis   = findall(XLIMS[1] .<= log10_kappa .<= XLIMS[2])
@@ -222,17 +222,32 @@ function render_panel(log10_kappa, xM_axis, delta_grid, fig_title, out_base, bp,
         cbticks  = [-30, -15, 0, 15, 30]
     end
 
+    # Pad heatmap to xM/L = -0.5 by repeating first row (data starts at -0.48)
+    if minimum(xp) > -0.5
+        cp = vcat(cp[1:1, :], cp)
+        xp = vcat([-0.5], xp)
+    end
+
+    # Use the actual xM data extent (not the hardcoded YLIMS) for the display
+    # range: YLIMS currently assumes a negative xM/L convention that the CSV-
+    # sourced xp grid does not (yet) follow -- see the uncommitted sign-
+    # convention migration in this file's YLIMS/operating_point. Driving the
+    # displayed range off real data keeps both orientations renderable
+    # regardless of how/when that migration gets finished.
+    xp_lims = (minimum(xp), maximum(xp))
+
     plt_opts = (
-        xlabel             = L"\kappa",
-        xticks             = kappa_exp_xticks(XLIMS),
-        ylabel             = L"x_M / L",
+        xlabel             = transpose ? L"x_M / L" : L"\kappa",
+        ylabel             = transpose ? L"\kappa" : L"x_M / L",
+        xticks             = transpose ? :auto : kappa_exp_xticks(XLIMS),
+        yticks             = transpose ? kappa_exp_xticks(XLIMS) : :auto,
         colormap           = cgrad(:RdBu, rev=true),
         clims              = (-clim_val, clim_val),
         colorbar_ticks     = cbticks,
         interpolate        = true,
-        xlims              = XLIMS,
-        ylims              = YLIMS,
-        legend             = :bottomright,
+        xlims              = transpose ? xp_lims : XLIMS,
+        ylims              = transpose ? XLIMS : xp_lims,
+        legend             = transpose ? :topleft : :bottomright,
         background_color_legend = RGBA(1, 1, 1, 0.85),
         foreground_color_legend = :black,
         legendfontsize     = 9,
@@ -253,13 +268,7 @@ function render_panel(log10_kappa, xM_axis, delta_grid, fig_title, out_base, bp,
         grid               = false,
     )
 
-    # Pad heatmap to xM/L = 0.5 by repeating last row (data ends at 0.48)
-    if maximum(xp) < 0.5
-        cp = vcat(cp, cp[end:end, :])
-        xp = vcat(xp, [0.5])
-    end
-
-    p = heatmap(kp, xp, cp; plt_opts...)
+    p = transpose ? heatmap(xp, kp, cp'; plt_opts...) : heatmap(kp, xp, cp; plt_opts...)
 
     GOLD = RGB(0.95, 0.75, 0.05)
 
@@ -267,7 +276,8 @@ function render_panel(log10_kappa, xM_axis, delta_grid, fig_title, out_base, bp,
 
     snap_markers = [:circle, :rect, :utriangle, :diamond, :dtriangle]
     for (i, (lk, xm, lab)) in enumerate(zip(snapshot_logK, snapshot_xMs, snapshot_labels))
-        scatter!(p, [lk], [xm];
+        pt = transpose ? ([xm], [lk]) : ([lk], [xm])
+        scatter!(p, pt...;
                  marker=snap_markers[i], markersize=9, color=GOLD,
                  markerstrokecolor=:black, markerstrokewidth=1, label=lab)
     end
@@ -315,7 +325,7 @@ function main()
     @printf "F_T^* = %.4e N  →  domain_grid scale factor = %.4e\n" F_T_star ft_scale
     domain_grid_norm = -grids.domain_grid .* ft_scale
 
-    modal_logK = [log10(5.43e-3)]
+    modal_logK = [log10(6.8665e-3)]
 
     # Beam — signed-log only (unchanged)
     render_panel(log10_kappa, grids.xM, grids.beam_grid,
@@ -325,12 +335,12 @@ function main()
 
     # LH — raw normalized thrust with a clipped color range.
     lh_title  = LaTeXString("Coupled, \$\\Lambda=$Lambda_val\$ — LH \$\\Delta|\\eta|^2/L^2\$")
-    xM_sb     = abs(Float64(bp.motor_position)) / Float64(bp.L_raft)
+    xM_sb     = Float64(bp.motor_position) / Float64(bp.L_raft)
     # Five operating points matching the kappa_snapshot_5panel figure:
-    #   (a)-(b)-(e)  surferbot xM; (c) α≈0 at κ=5.43e-3; (d) |α|≈1 at κ=5.43e-3
-    snap_kappas = [2.1209508879201904e-3, 5.43e-3, 5.43e-3, 5.43e-3, 1.698244e-2]
+    #   (a)-(b)-(e)  surferbot xM; (c) α≈0 at κ=6.8665e-3; (d) |α|≈1 at κ=6.8665e-3
+    snap_kappas = [2.1209508879201904e-3, 6.8665e-3, 6.8665e-3, 6.8665e-3, 1.698244e-2]
     snap_logK   = log10.(snap_kappas)
-    snap_xMs    = [xM_sb,  xM_sb,  0.183,  0.272,  xM_sb]
+    snap_xMs    = [xM_sb,  xM_sb,  -0.1885,  -0.272,  xM_sb]
     snap_labels = [L"Fig.~6\,(b)", L"Figs.~5\,(b),\,6\,(c)", L"Fig.~5\,(c)", L"Fig.~5\,(d)", L"Fig.~6\,(d)"]
     println("Rendering LH raw clipped...")
     render_panel(log10_kappa, grids.xM, domain_grid_norm, lh_title,

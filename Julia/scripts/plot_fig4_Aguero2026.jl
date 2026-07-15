@@ -7,8 +7,10 @@ Rigid-raft validation figure (Fig 4, Aguero 2026):
   Blue: free water surface on either side.
   Black: raft contact region.
 
-EI = Inf  (rigid limit), ν = 1e-6 m²/s (water), motor at −3 mm left of centre.
-motor_inertia doubled (×2.0) vs default to match Benham 2024 amplitude A = 150 µm.
+EI = Inf  (rigid limit), ν = 1e-6 m²/s (water), motor at −6 mm left of centre
+(matches the real SurferBot: raft 5×3 cm, motor 0.6 cm left of center).
+motor_inertia doubled (×2.0) vs default to match Benham 2024 amplitude A = 150 µm
+(re-verify this scale factor still hits A≈150µm at the corrected -6mm position).
 
 Ports MATLAB/utils/plot_one.m to Julia.
 """
@@ -32,7 +34,7 @@ function main()
         nu             = 1e-6,
         g              = 9.81,
         L_raft         = 0.05,
-        motor_position = -0.003,
+        motor_position = -0.006,
         d              = 0.03,
         EI             = Inf,
         rho_raft       = 0.052,

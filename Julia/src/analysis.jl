@@ -95,7 +95,7 @@ function default_coupled_motor_position_EI_sweep()
         nu = 0.0,
         g = 9.81,
         L_raft = L_raft,
-        motor_position = 0.24 * L_raft / 2,
+        motor_position = -(0.24 * L_raft / 2),
         d = 0.03,
         EI = base_EI,
         rho_raft = 0.052,
@@ -109,7 +109,7 @@ function default_coupled_motor_position_EI_sweep()
         omega = 2 * π * 80,
         ooa = 4,
     )
-    motor_position_list = collect((0.00:0.02:0.48) .* L_raft)
+    motor_position_list = collect((-0.48:0.02:0.00) .* L_raft)
     EI_list = base_EI .* 10 .^ collect(range(-3, 1; length=57))
     return (; base_params, motor_position_list, EI_list)
 end
@@ -131,7 +131,7 @@ function default_uncoupled_motor_position_EI_sweep()
         nu = 0.0,
         g = 9.81,
         L_raft = L_raft,
-        motor_position = 0.24 * L_raft / 2,
+        motor_position = -(0.24 * L_raft / 2),
         d = 0.0,
         EI = base_EI,
         rho_raft = 0.052,
@@ -145,7 +145,7 @@ function default_uncoupled_motor_position_EI_sweep()
         omega = 2 * π * 80,
         ooa = 4,
     )
-    motor_position_list = collect((0.00:0.02:0.48) .* L_raft)
+    motor_position_list = collect((-0.48:0.02:0.00) .* L_raft)
     EI_list = base_EI .* 10 .^ collect(range(-3, 1; length=57))
     return (; base_params, motor_position_list, EI_list)
 end
