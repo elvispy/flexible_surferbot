@@ -196,7 +196,7 @@ end
 function render_panel(log10_kappa, xM_axis, delta_grid, fig_title, out_base, bp, shift;
                       mode=:signed_log,
                       snapshot_logK=Float64[], snapshot_xMs=Float64[], snapshot_labels=String[],
-                      modal_logK=Float64[], transpose::Bool=true)
+                      modal_logK=Float64[])
     max_logK = maximum(log10_kappa)
     XLIMS    = (-4.0, max_logK)
     YLIMS    = (-0.5, 0.0)
@@ -222,32 +222,17 @@ function render_panel(log10_kappa, xM_axis, delta_grid, fig_title, out_base, bp,
         cbticks  = [-30, -15, 0, 15, 30]
     end
 
-    # Pad heatmap to xM/L = -0.5 by repeating first row (data starts at -0.48)
-    if minimum(xp) > -0.5
-        cp = vcat(cp[1:1, :], cp)
-        xp = vcat([-0.5], xp)
-    end
-
-    # Use the actual xM data extent (not the hardcoded YLIMS) for the display
-    # range: YLIMS currently assumes a negative xM/L convention that the CSV-
-    # sourced xp grid does not (yet) follow -- see the uncommitted sign-
-    # convention migration in this file's YLIMS/operating_point. Driving the
-    # displayed range off real data keeps both orientations renderable
-    # regardless of how/when that migration gets finished.
-    xp_lims = (minimum(xp), maximum(xp))
-
     plt_opts = (
-        xlabel             = transpose ? L"x_M / L" : L"\kappa",
-        ylabel             = transpose ? L"\kappa" : L"x_M / L",
-        xticks             = transpose ? :auto : kappa_exp_xticks(XLIMS),
-        yticks             = transpose ? kappa_exp_xticks(XLIMS) : :auto,
+        xlabel             = L"x_M / L",
+        ylabel             = L"\kappa",
+        yticks             = kappa_exp_xticks(XLIMS),
         colormap           = cgrad(:RdBu, rev=true),
         clims              = (-clim_val, clim_val),
         colorbar_ticks     = cbticks,
         interpolate        = true,
-        xlims              = transpose ? xp_lims : XLIMS,
-        ylims              = transpose ? XLIMS : xp_lims,
-        legend             = transpose ? :topleft : :bottomright,
+        xlims              = YLIMS,
+        ylims              = XLIMS,
+        legend             = :topleft,
         background_color_legend = RGBA(1, 1, 1, 0.85),
         foreground_color_legend = :black,
         legendfontsize     = 9,
@@ -268,7 +253,13 @@ function render_panel(log10_kappa, xM_axis, delta_grid, fig_title, out_base, bp,
         grid               = false,
     )
 
-    p = transpose ? heatmap(xp, kp, cp'; plt_opts...) : heatmap(kp, xp, cp; plt_opts...)
+    # Pad heatmap to xM/L = -0.5 by repeating first row (data starts at -0.48)
+    if minimum(xp) > -0.5
+        cp = vcat(cp[1:1, :], cp)
+        xp = vcat([-0.5], xp)
+    end
+
+    p = heatmap(xp, kp, cp'; plt_opts...)
 
     GOLD = RGB(0.95, 0.75, 0.05)
 
@@ -276,8 +267,7 @@ function render_panel(log10_kappa, xM_axis, delta_grid, fig_title, out_base, bp,
 
     snap_markers = [:circle, :rect, :utriangle, :diamond, :dtriangle]
     for (i, (lk, xm, lab)) in enumerate(zip(snapshot_logK, snapshot_xMs, snapshot_labels))
-        pt = transpose ? ([xm], [lk]) : ([lk], [xm])
-        scatter!(p, pt...;
+        scatter!(p, [xm], [lk];
                  marker=snap_markers[i], markersize=9, color=GOLD,
                  markerstrokecolor=:black, markerstrokewidth=1, label=lab)
     end

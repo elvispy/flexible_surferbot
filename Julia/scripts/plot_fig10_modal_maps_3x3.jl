@@ -174,6 +174,7 @@ function draw_panel!(ax, data; show_xlabel::Bool, show_yticks::Bool, show_xticks
     ax.yticks = (ticks, labels)
     ax.xticks = -0.5:0.25:0
     ax.xlabel = show_xlabel ? L"x_M/L" : ""
+    ax.ylabel = show_yticks ? L"\kappa" : ""
     if !show_xticks
         CairoMakie.hidexdecorations!(ax; grid = false)
     end
@@ -224,8 +225,8 @@ function main()
         for r in eachindex(ROW_SPECS)
             CairoMakie.Label(fig[r + 1, 1], ROW_SPECS[r].title, rotation = pi / 2,
                 fontsize = 20, tellheight = false)
-            CairoMakie.Label(fig[r + 1, 2], L"\kappa", rotation = pi / 2,
-                fontsize = 22, tellheight = false)
+            # x_M/L is now the per-panel x-axis label (bottom row, via draw_panel!)
+            # rather than a shared per-row side label, since kappa/xM axes are transposed.
             for c in eachindex(COL_SPECS)
                 ax = CairoMakie.Axis(fig[r + 1, c + 2],
                     xticklabelsize = 18, yticklabelsize = 18,
@@ -250,7 +251,7 @@ function main()
         CairoMakie.colgap!(fig.layout, 5)
         CairoMakie.rowgap!(fig.layout, 18)
         CairoMakie.colsize!(fig.layout, 1, CairoMakie.Fixed(40))
-        CairoMakie.colsize!(fig.layout, 2, CairoMakie.Fixed(35))
+        CairoMakie.colsize!(fig.layout, 2, CairoMakie.Fixed(5))
         CairoMakie.colsize!(fig.layout, 6, CairoMakie.Fixed(42))
         CairoMakie.rowsize!(fig.layout, 1, CairoMakie.Fixed(34))
 

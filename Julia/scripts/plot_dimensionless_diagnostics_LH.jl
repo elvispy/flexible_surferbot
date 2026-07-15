@@ -44,10 +44,10 @@ const ModalPressureMap = Main.PrescribedWnDiagonalImpedance
 const NUM_MODES    = 8
 const RATIO_CUTOFF = 0.5
 
-# Branch-terminus detection: when a tracked low-xM root disappears between
-# consecutive EI steps and the function is still decreasing at xM=-0.5, we add
-# one terminal scatter point at xM=-0.5 for that EI.
-const TERM_MIN_XM = -0.35   # only track roots below this xM as downward branches
+# Branch-terminus detection: when a tracked high-xM root disappears between
+# consecutive EI steps and the function is still decreasing at xM=0.5, we add
+# one terminal scatter point at xM=0.5 for that EI.
+const TERM_MIN_XM = -0.35  # only track roots below this xM as upward (raft-end) branches
 const TERM_TOL    = 0.08   # max xM gap to consider a root "continued"
 
 const RESONANCE_ALPHA_CUTOFF  = 0.04  # 10th-percentile of |α_LH| across xM < this → resonance column
@@ -283,7 +283,7 @@ function get_roots_theoretical_LH(artifact, condition_name; output_dir::Abstract
 
     # ── Targeted terminus refinement: dense re-scan of each branch-exit interval ─
     # Evaluates N_TERM_FINE additional κ steps inside the narrow logEI gap where a
-    # low-xM branch disappeared, finding real roots that get closer to xM = -0.5.
+    # high-xM branch disappeared, finding real roots that get closer to xM = -0.5.
     # Purely theoretical: same root-finder, no synthetic points.
     N_TERM_FINE = 30
     for (lEI_lo, lEI_hi) in unique(term_intervals)
@@ -390,7 +390,7 @@ end
 #   Pass a vector → use that instead (needed for uncoupled where the artifact
 #                   EI range is narrower than the desired x axis).
 
-function build_LH_plot(artifact, csv_path, output_dir; xlim_min::Float64, transpose::Bool=true)
+function build_LH_plot(artifact, csv_path, output_dir; xlim_min::Float64)
     params = artifact.base_params
     shift  = log10(Float64(params.rho_raft) * Float64(params.L_raft)^4 *
                    Float64(params.omega)^2)
@@ -415,7 +415,7 @@ function build_LH_plot(artifact, csv_path, output_dir; xlim_min::Float64, transp
         end
     end
 
-    # Pad to xM/L = -0.5 by repeating the first row (CSV data starts at -0.49)
+    # Pad to xM/L = -0.5 by repeating the first row (CSV data starts at -0.48)
     if minimum(xM_axis) > -0.5
         xM_axis  = vcat([-0.5], xM_axis)
         alpha_LH = vcat(alpha_LH[1:1, :], alpha_LH)
@@ -423,16 +423,6 @@ function build_LH_plot(artifact, csv_path, output_dir; xlim_min::Float64, transp
 
     XLIMS = (xlim_min, max_logK_data)
     YLIMS = (-0.5, 0.0)
-
-    # Actual xM data extent, for the heatmap's own display range: YLIMS above
-    # assumes a negative xM/L convention that the CSV-sourced xM_axis grid does
-    # not (yet) follow -- see the uncommitted sign-convention migration in this
-    # function. Driving the displayed range off real data (rather than YLIMS)
-    # keeps both orientations renderable regardless of how/when that
-    # migration gets finished; YLIMS itself is left untouched below since the
-    # theoretical overlay curves (res.xM_norm) are computed on their own
-    # (-0.5, 0.0) grid and still need it for masking.
-    xm_data_lims = (minimum(xM_axis), maximum(xM_axis))
 
     # 181 (not 57): the coarse grid missed narrow resonances entirely (no
     # scatter_logK column landed inside their width) and under-sampled branches
@@ -457,7 +447,7 @@ function build_LH_plot(artifact, csv_path, output_dir; xlim_min::Float64, transp
     # q_val), group consecutive scatter-grid indices into runs, keep the minimum-q
     # index per run, then inject any stripe not already present in the LH results.
     beam_sync_ctx   = theoretical_modal_context(params; output_dir=output_dir)
-    xM_sync         = collect(range(0.0, 0.49; length=401))
+    xM_sync         = collect(range(-0.49, 0.0; length=401))
     sync_candidates = Dict{String, Vector{Tuple{Int,Float64}}}("S"=>[], "A"=>[])
     sync_amp        = fill(NaN, length(EI_scatter))
     for (iei, EI) in enumerate(EI_scatter)
@@ -507,17 +497,16 @@ function build_LH_plot(artifact, csv_path, output_dir; xlim_min::Float64, transp
     curve_styles = [:solid, :solid, :solid, :solid]
 
     plt_opts = (
-        xlabel  = transpose ? L"x_M / L" : L"\kappa",
-        ylabel  = transpose ? L"\kappa" : L"x_M / L",
-        xticks  = transpose ? :auto : kappa_exp_xticks(XLIMS),
-        yticks  = transpose ? kappa_exp_xticks(XLIMS) : :auto,
+        xlabel  = L"x_M / L",
+        ylabel  = L"\kappa",
+        yticks  = kappa_exp_xticks(XLIMS),
         colormap = :balance,
         clims   = (-1, 1),
         levels  = 51,
         interpolate = true,
-        xlims   = transpose ? xm_data_lims : XLIMS,
-        ylims   = transpose ? XLIMS : xm_data_lims,
-        legend  = transpose ? :topleft : :bottomright,
+        xlims   = YLIMS,
+        ylims   = XLIMS,
+        legend  = :topleft,
         background_color_legend = RGBA(1, 1, 1, 0.85),
         foreground_color_legend = :black,
         legend_font_halign = :left,
@@ -537,9 +526,7 @@ function build_LH_plot(artifact, csv_path, output_dir; xlim_min::Float64, transp
         colorbar_tickfontsize  = 11,
     )
 
-    p = transpose ?
-        heatmap(xM_axis, logEI_axis .- shift, alpha_LH'; plt_opts...) :
-        heatmap(logEI_axis .- shift, xM_axis, alpha_LH; plt_opts...)
+    p = heatmap(xM_axis, logEI_axis .- shift, alpha_LH'; plt_opts...)
 
     for (i, cname) in enumerate(CURVE_NAMES)
         res  = results[cname]
@@ -547,22 +534,15 @@ function build_LH_plot(artifact, csv_path, output_dir; xlim_min::Float64, transp
                (YLIMS[1] .<= res.xM_norm .<= YLIMS[2])
         isempty(res.logK[mask]) && continue
         lk_path, xm_path, res_lks = cluster_branches(res.logK[mask], res.xM_norm[mask])
-        if !isempty(lk_path)
-            a, b = transpose ? (xm_path, lk_path) : (lk_path, xm_path)
-            plot!(p, a, b;
-                label      = CURVE_LABELS[i],
-                color      = curve_colors[i],
-                linestyle  = curve_styles[i],
-                linewidth  = 4.0)
-        end
+        isempty(lk_path) || plot!(p, xm_path, lk_path;
+            label      = CURVE_LABELS[i],
+            color      = curve_colors[i],
+            linestyle  = curve_styles[i],
+            linewidth  = 4.0)
         for rlk in res_lks
             (XLIMS[1] <= rlk <= XLIMS[2]) || continue
             # Resonance stripes: same color, thinner, slightly transparent
-            if transpose
-                hline!(p, [rlk]; color=curve_colors[i], linewidth=4.0, label=false)
-            else
-                vline!(p, [rlk]; color=curve_colors[i], linewidth=4.0, label=false)
-            end
+            hline!(p, [rlk]; color=curve_colors[i], linewidth=4.0, label=false)
         end
     end
 
@@ -672,7 +652,7 @@ function get_roots_theoretical_beam(EI_list::AbstractVector{Float64}, condition_
     if condition_name in ("S", "A")
         logEI_coarse = log10.(EI_coarse)
         is_coupled   = Float64(theory_ctx.params.d) > 0.0
-        n_res        = searchsortedlast(xM_grid, 0.49)
+        n_res        = searchsortedfirst(xM_grid, -0.49)
         for (iei, EI) in enumerate(EI_coarse)
             absS = Float64[]; absA = Float64[]
             abs_eta_1 = Float64[]; abs_eta_end = Float64[]
@@ -690,7 +670,7 @@ function get_roots_theoretical_beam(EI_list::AbstractVector{Float64}, condition_
                             (abs_eta_1^2 + abs_eta_end^2 + eps())
             is_odd_resonance = mean(absS) < mean(absA)
             resonance_q = is_odd_resonance ? 0.20 : (is_coupled ? 0.15 : 0.10)
-            q_val = quantile(abs.(alpha_col[1:n_res]), resonance_q)
+            q_val = quantile(abs.(alpha_col[n_res:end]), resonance_q)
             if q_val < RESONANCE_ALPHA_CUTOFF
                 if (condition_name == "S" && is_odd_resonance) ||
                    (condition_name == "A" && !is_odd_resonance)
@@ -752,7 +732,7 @@ function build_beam_end_plot(artifact, csv_path, output_dir; xlim_min::Float64)
         end
     end
 
-    # Pad to xM/L = -0.5 by repeating the first row (CSV data starts at -0.49)
+    # Pad to xM/L = -0.5 by repeating the first row (CSV data starts at -0.48)
     if minimum(xM_axis) > -0.5
         xM_axis    = vcat([-0.5], xM_axis)
         alpha_beam = vcat(alpha_beam[1:1, :], alpha_beam)
@@ -824,16 +804,16 @@ function build_beam_end_plot(artifact, csv_path, output_dir; xlim_min::Float64)
     curve_styles = [:solid, :solid, :solid, :solid]
 
     plt_opts = (
-        xlabel  = L"\kappa",
-        xticks  = kappa_exp_xticks(XLIMS),
-        ylabel  = L"x_M / L",
+        xlabel  = L"x_M / L",
+        ylabel  = L"\kappa",
+        yticks  = kappa_exp_xticks(XLIMS),
         colormap = :balance,
         clims   = (-1, 1),
         levels  = 51,
         interpolate = true,
-        xlims   = XLIMS,
-        ylims   = YLIMS,
-        legend  = :bottomright,
+        xlims   = YLIMS,
+        ylims   = XLIMS,
+        legend  = :topleft,
         background_color_legend = RGBA(1, 1, 1, 0.85),
         foreground_color_legend = :black,
         legend_font_halign = :left,
@@ -853,7 +833,7 @@ function build_beam_end_plot(artifact, csv_path, output_dir; xlim_min::Float64)
         colorbar_tickfontsize  = 11,
     )
 
-    p = heatmap(logEI_axis .- shift, xM_axis, alpha_beam; plt_opts...)
+    p = heatmap(xM_axis, logEI_axis .- shift, alpha_beam'; plt_opts...)
 
     for (i, cname) in enumerate(CURVE_NAMES)
         res  = results[cname]
@@ -861,14 +841,14 @@ function build_beam_end_plot(artifact, csv_path, output_dir; xlim_min::Float64)
                (YLIMS[1] .<= res.xM_norm .<= YLIMS[2])
         isempty(res.logK[mask]) && continue
         lk_path, xm_path, res_lks = cluster_branches(res.logK[mask], res.xM_norm[mask])
-        isempty(lk_path) || plot!(p, lk_path, xm_path;
+        isempty(lk_path) || plot!(p, xm_path, lk_path;
             label      = BEAM_CURVE_LABELS[i],
             color      = curve_colors[i],
             linestyle  = curve_styles[i],
             linewidth  = 4.0)
         for rlk in res_lks
             (XLIMS[1] <= rlk <= XLIMS[2]) || continue
-            vline!(p, [rlk]; color=curve_colors[i], linewidth=4.0, label=false)
+            hline!(p, [rlk]; color=curve_colors[i], linewidth=4.0, label=false)
         end
     end
 
