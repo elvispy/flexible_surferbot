@@ -50,8 +50,43 @@ end
 # adjacent coarse points (i.e. resonance-driven features), rather than
 # uniformly densifying the whole (mostly smooth) range. Keeps the total point
 # count in the ~50-100 range instead of paying for fine resolution everywhere.
+#
+# Lazy/incremental: any log10(kappa) already present in `existing_lk` (to
+# within `rtol`) is reused as-is, never resolved. Only genuinely new points
+# (e.g. from widening the refinement rule) are solved. This matters because
+# individual solves near resonances can take ~1 min instead of ~1 s -- without
+# this, tweaking the refinement logic means re-solving the entire sweep.
 
-function run_sweep(bp)
+function missing_lk(existing_lk, desired_lk; rtol = 1e-10)
+    return [lk for lk in desired_lk if !any(isapprox(lk, e; rtol = rtol, atol = 0.0) for e in existing_lk)]
+end
+
+function solve_missing(existing_lk, existing_alpha, desired_lk, solve_at; label = "")
+    new_lk = missing_lk(existing_lk, desired_lk)
+    if isempty(new_lk)
+        return existing_lk, existing_alpha
+    end
+    println("$(label)Solving $(length(new_lk)) new point(s) of $(length(desired_lk)) desired, $MAX_WORKERS workers …")
+    new_alpha = Vector{Float64}(undef, length(new_lk))
+    @threads for i in eachindex(new_lk)
+        lk = new_lk[i]
+        Base.acquire(SOLVE_SEM)
+        try
+            new_alpha[i] = solve_at(lk)
+        finally
+            Base.release(SOLVE_SEM)
+        end
+        lock(PRINT_LOCK) do
+            @printf "  [%2d/%d]  log₁₀κ = %+.4f   α = %+.4f\n" i length(new_lk) lk new_alpha[i]
+        end
+    end
+    lk_all    = vcat(existing_lk, new_lk)
+    alpha_all = vcat(existing_alpha, new_alpha)
+    order     = sortperm(lk_all)
+    return lk_all[order], alpha_all[order]
+end
+
+function run_sweep(bp; existing_lk = Float64[], existing_alpha = Float64[])
     rho_R    = Float64(bp.rho_raft)
     L        = Float64(bp.L_raft)
     omega    = Float64(bp.omega)
@@ -60,24 +95,13 @@ function run_sweep(bp)
 
     solve_at(lk) = solve_alpha((EI = 10.0^lk * EI_scale, motor_position = xM, nu = 0.0), bp)
 
-    log10_kappa = collect(range(-4.0, 1.0; length = N_COARSE))
-    alpha = Vector{Float64}(undef, N_COARSE)
+    log10_kappa_coarse = collect(range(-4.0, 1.0; length = N_COARSE))
+    println("Coarse pass ($N_COARSE points, ν = 0, $MAX_WORKERS workers) …")
+    lk, alpha = solve_missing(existing_lk, existing_alpha, log10_kappa_coarse, solve_at)
 
-    println("Sweeping κ ($N_COARSE coarse points, ν = 0, $MAX_WORKERS workers) …")
-    @threads for i in eachindex(log10_kappa)
-        lk = log10_kappa[i]
-        Base.acquire(SOLVE_SEM)
-        try
-            alpha[i] = solve_at(lk)
-        finally
-            Base.release(SOLVE_SEM)
-        end
-        lock(PRINT_LOCK) do
-            @printf "  [%2d/%d]  log₁₀κ = %+.2f   α = %+.4f\n" i N_COARSE lk alpha[i]
-        end
-    end
+    coarse_alpha = [alpha[argmin(abs.(lk .- clk))] for clk in log10_kappa_coarse]
 
-    steep_flagged = [i for i in 1:(N_COARSE - 1) if abs(alpha[i + 1] - alpha[i]) > REFINE_THRESHOLD]
+    steep_flagged = [i for i in 1:(N_COARSE - 1) if abs(coarse_alpha[i + 1] - coarse_alpha[i]) > REFINE_THRESHOLD]
     # Also refine the interval immediately following the steep interval that
     # ends just before the third root (kappa ~ 3.64e-4, counting from the
     # kappa~10 end): alpha settles into a local maximum right after that
@@ -87,40 +111,25 @@ function run_sweep(bp)
     # the original coarse spacing -- producing a visible kink there. Only
     # this specific neighbor is added (not a general rule for every steep
     # interval) to avoid pulling in unrelated, expensive-to-solve regions.
-    third_root_interval = findlast(i -> log10_kappa[i] < log10(3.64e-4) < log10_kappa[i + 1], steep_flagged)
+    third_root_interval = findlast(i -> log10_kappa_coarse[i] < log10(3.64e-4) < log10_kappa_coarse[i + 1], steep_flagged)
     steep = if third_root_interval === nothing
         steep_flagged
     else
         i0 = steep_flagged[third_root_interval]
         sort(unique(vcat(steep_flagged, i0 + 1 <= N_COARSE - 1 ? [i0 + 1] : Int[])))
     end
-    if !isempty(steep)
-        extra_lk = Float64[]
-        for i in steep
-            append!(extra_lk, range(log10_kappa[i], log10_kappa[i + 1]; length = N_PER_INTERVAL + 2)[2:end-1])
-        end
-        println("Refining $(length(extra_lk)) points across $(length(steep)) steep interval(s), $MAX_WORKERS workers …")
-        extra_alpha = Vector{Float64}(undef, length(extra_lk))
-        @threads for i in eachindex(extra_lk)
-            lk = extra_lk[i]
-            Base.acquire(SOLVE_SEM)
-            try
-                extra_alpha[i] = solve_at(lk)
-            finally
-                Base.release(SOLVE_SEM)
-            end
-            lock(PRINT_LOCK) do
-                @printf "  refine [%2d/%d]  log₁₀κ = %+.4f   α = %+.4f\n" i length(extra_lk) lk extra_alpha[i]
-            end
-        end
-        log10_kappa = vcat(log10_kappa, extra_lk)
-        alpha       = vcat(alpha, extra_alpha)
-        order       = sortperm(log10_kappa)
-        log10_kappa = log10_kappa[order]
-        alpha       = alpha[order]
+
+    desired_extra_lk = Float64[]
+    for i in steep
+        append!(desired_extra_lk, range(log10_kappa_coarse[i], log10_kappa_coarse[i + 1]; length = N_PER_INTERVAL + 2)[2:end-1])
     end
 
-    return (; log10_kappa, kappa = 10.0 .^ log10_kappa, alpha)
+    if !isempty(desired_extra_lk)
+        println("Refinement covers $(length(desired_extra_lk)) point(s) across $(length(steep)) steep interval(s) …")
+        lk, alpha = solve_missing(lk, alpha, desired_extra_lk, solve_at; label = "  ")
+    end
+
+    return (; log10_kappa = lk, kappa = 10.0 .^ lk, alpha = alpha)
 end
 
 function surferbot_alpha(bp)
