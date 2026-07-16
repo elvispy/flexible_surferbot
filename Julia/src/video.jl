@@ -329,13 +329,13 @@ function plot_frame(record::SurferbotRunRecord, t::Real; omega::Real, x_contact_
         color      = :steelblue4,
         linewidth  = 2.0,
         label      = false,
-        xlabel     = "Position, x  (cm)",
-        ylabel     = "Elevation, η  (μm)",
+        xlabel     = "x  (cm)",
+        ylabel     = "η  (μm)",
         ylim       = (-y_limit, y_limit * 1.45),
         xlim       = (first(x_scaled), last(x_scaled)),
         title      = @sprintf("f = %.1f Hz     t = %.3f s     U = %.3f mm/s",
                                omega / (2π), t, record.U * 1e3),
-        legend     = show_motor ? :topright : false,
+        legend     = false,
         background_color_legend = :white,
         size       = (1400, 520),
         dpi        = 150,
@@ -443,7 +443,7 @@ function plot_frame(record::SurferbotRunRecord, t::Real; omega::Real, x_contact_
                 Base.invokelatest(Plots.plot!, p, shaft_xs, shaft_ys;
                          color     = :orangered,
                          linewidth = 1.5,
-                         label     = "Motor force (Re, nondim.)")
+                         label     = false)
             end
         end
     end
