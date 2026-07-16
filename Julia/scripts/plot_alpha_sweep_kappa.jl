@@ -77,7 +77,23 @@ function run_sweep(bp)
         end
     end
 
-    steep = [i for i in 1:(N_COARSE - 1) if abs(alpha[i + 1] - alpha[i]) > REFINE_THRESHOLD]
+    steep_flagged = [i for i in 1:(N_COARSE - 1) if abs(alpha[i + 1] - alpha[i]) > REFINE_THRESHOLD]
+    # Also refine the interval immediately following the steep interval that
+    # ends just before the third root (kappa ~ 3.64e-4, counting from the
+    # kappa~10 end): alpha settles into a local maximum right after that
+    # root, but its neighboring coarse-point delta falls under
+    # REFINE_THRESHOLD even though the extremum itself sits just past the
+    # flagged interval, right where dense refined spacing abruptly reverts to
+    # the original coarse spacing -- producing a visible kink there. Only
+    # this specific neighbor is added (not a general rule for every steep
+    # interval) to avoid pulling in unrelated, expensive-to-solve regions.
+    third_root_interval = findlast(i -> log10_kappa[i] < log10(3.64e-4) < log10_kappa[i + 1], steep_flagged)
+    steep = if third_root_interval === nothing
+        steep_flagged
+    else
+        i0 = steep_flagged[third_root_interval]
+        sort(unique(vcat(steep_flagged, i0 + 1 <= N_COARSE - 1 ? [i0 + 1] : Int[])))
+    end
     if !isempty(steep)
         extra_lk = Float64[]
         for i in steep
