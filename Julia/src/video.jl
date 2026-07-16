@@ -411,12 +411,38 @@ function plot_frame(record::SurferbotRunRecord, t::Real; omega::Real, x_contact_
                 arrow_scale = 0.8 * y_limit / peak
                 dy = -f_t[pick] .* arrow_scale
 
-                small_arrow = Base.invokelatest(Plots.arrow, :closed, :head, 0.12, 0.08)
-                Base.invokelatest(Plots.quiver!, p, x_raft[pick], y_raft[pick];
-                         quiver    = (zeros(length(pick)), dy),
+                # Drawn manually (shaft + a small filled triangle at the tip)
+                # rather than via quiver!'s built-in arrowheads: GR's quiver
+                # recipe does not honor Plots.arrow()'s headlength/headwidth,
+                # so the heads stay oversized regardless of what's passed.
+                x_span         = last(x_scaled) - first(x_scaled)
+                head_height    = 0.05 * y_limit
+                head_halfwidth = 0.006 * x_span
+
+                shaft_xs = Float64[]
+                shaft_ys = Float64[]
+                for i in eachindex(pick)
+                    x0  = x_raft[pick[i]]
+                    y0  = y_raft[pick[i]]
+                    dyi = dy[i]
+                    s   = dyi >= 0 ? 1.0 : -1.0
+                    actual_head = min(head_height, abs(dyi))
+                    tip_y  = y0 + dyi
+                    base_y = tip_y - s * actual_head
+
+                    append!(shaft_xs, (x0, x0, NaN))
+                    append!(shaft_ys, (y0, base_y, NaN))
+
+                    tri = Base.invokelatest(Plots.Shape,
+                        [x0 - head_halfwidth, x0 + head_halfwidth, x0],
+                        [base_y, base_y, tip_y])
+                    Base.invokelatest(Plots.plot!, p, tri;
+                             color = :orangered, linecolor = :orangered, label = false)
+                end
+
+                Base.invokelatest(Plots.plot!, p, shaft_xs, shaft_ys;
                          color     = :orangered,
-                         linewidth = 2,
-                         arrow     = small_arrow,
+                         linewidth = 1.5,
                          label     = "Motor force (Re, nondim.)")
             end
         end
