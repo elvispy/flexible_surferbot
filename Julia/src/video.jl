@@ -411,10 +411,12 @@ function plot_frame(record::SurferbotRunRecord, t::Real; omega::Real, x_contact_
                 arrow_scale = 0.8 * y_limit / peak
                 dy = -f_t[pick] .* arrow_scale
 
+                small_arrow = Base.invokelatest(Plots.arrow, :closed, :head, 0.12, 0.08)
                 Base.invokelatest(Plots.quiver!, p, x_raft[pick], y_raft[pick];
                          quiver    = (zeros(length(pick)), dy),
                          color     = :orangered,
-                         linewidth = 3,
+                         linewidth = 2,
+                         arrow     = small_arrow,
                          label     = "Motor force (Re, nondim.)")
             end
         end

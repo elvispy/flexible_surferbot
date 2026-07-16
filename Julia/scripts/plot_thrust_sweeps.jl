@@ -148,31 +148,51 @@ end
 # ─── Three sweeps ─────────────────────────────────────────────────────────────
 const XM_SWEEP_KAPPA = 6.8665e-3   # κ value for the motor-position sweep (Fig 5b snapshot)
 
-function run_sweep_xM(bp)
+# Lazy/incremental helper shared by the xM and kappa sweeps: any point in
+# `existing_x` that already matches a `desired_x` value (to within `rtol`) is
+# reused as-is; only genuinely new points get solved. Without this, widening
+# a sweep (e.g. adding a few points to resolve a feature) means re-solving
+# the entire grid, and some points near resonances take ~1 min instead of
+# ~1 s -- the difference between a few minutes and hours.
+function solve_missing_x(existing_x, existing_thrust, existing_Sxx, desired_x, solve_fn; label = "")
+    new_x = missing_re_values(existing_x, desired_x)
+    if isempty(new_x)
+        return existing_x, existing_thrust, existing_Sxx
+    end
+    println("$(label)Solving $(length(new_x)) new point(s) of $(length(desired_x)) desired, $MAX_WORKERS workers …")
+    new_T   = Vector{Float64}(undef, length(new_x))
+    new_Sxx = Vector{Float64}(undef, length(new_x))
+    @threads for i in eachindex(new_x)
+        Base.acquire(SOLVE_SEM)
+        try
+            new_T[i], new_Sxx[i] = solve_fn(new_x[i])
+        finally
+            Base.release(SOLVE_SEM)
+        end
+        lock(PRINT_LOCK) do
+            @printf "  [%2d/%d]  x=%+.4e   T/d=%+.3e   Sxx=%+.3e\n" i length(new_x) new_x[i] new_T[i] new_Sxx[i]
+        end
+    end
+    x_all      = vcat(existing_x, new_x)
+    thrust_all = vcat(existing_thrust, new_T)
+    Sxx_all    = vcat(existing_Sxx, new_Sxx)
+    order      = sortperm(x_all)
+    return x_all[order], thrust_all[order], Sxx_all[order]
+end
+
+function run_sweep_xM(bp; existing_x = Float64[], existing_thrust = Float64[], existing_Sxx = Float64[])
     L        = Float64(bp.L_raft)
     rho_R    = Float64(bp.rho_raft)
     omega    = Float64(bp.omega)
     EI_xM    = XM_SWEEP_KAPPA * rho_R * L^4 * omega^2
     xs = collect(range(-0.48, 0.0; length = N_SWEEP))
-    T   = Vector{Float64}(undef, N_SWEEP)
-    Sxx = Vector{Float64}(undef, N_SWEEP)
     println("Sweep 1/4: motor position ($N_SWEEP points) …")
-    @threads for i in 1:N_SWEEP
-        xM_norm = xs[i]
-        Base.acquire(SOLVE_SEM)
-        try
-            T[i], Sxx[i] = solve_one((motor_position = xM_norm * L, nu = 0.0, EI = EI_xM), bp)
-        finally
-            Base.release(SOLVE_SEM)
-        end
-        lock(PRINT_LOCK) do
-            @printf "  [%2d/%d]  xM/L=%.3f   T/d=%+.3e   Sxx=%+.3e\n" i length(xs) xM_norm T[i] Sxx[i]
-        end
-    end
-    return (; x = xs, thrust = T, Sxx)
+    solve_fn(xM_norm) = solve_one((motor_position = xM_norm * L, nu = 0.0, EI = EI_xM), bp)
+    x, T, Sxx = solve_missing_x(existing_x, existing_thrust, existing_Sxx, xs, solve_fn)
+    return (; x, thrust = T, Sxx)
 end
 
-function run_sweep_kappa(bp)
+function run_sweep_kappa(bp; existing_x = Float64[], existing_thrust = Float64[], existing_Sxx = Float64[])
     rho_R    = Float64(bp.rho_raft)
     L        = Float64(bp.L_raft)
     omega    = Float64(bp.omega)
@@ -181,23 +201,10 @@ function run_sweep_kappa(bp)
 
     log10_kappa = collect(range(-4.0, 1.0; length = N_SWEEP))
     kappa_vals  = 10.0 .^ log10_kappa
-    T   = Vector{Float64}(undef, N_SWEEP)
-    Sxx = Vector{Float64}(undef, N_SWEEP)
     println("Sweep 2/4: stiffness κ ($N_SWEEP points) …")
-    @threads for i in 1:N_SWEEP
-        lk   = log10_kappa[i]
-        EI_i = 10.0^lk * EI_scale
-        Base.acquire(SOLVE_SEM)
-        try
-            T[i], Sxx[i] = solve_one((EI = EI_i, motor_position = xM, nu = 0.0), bp)
-        finally
-            Base.release(SOLVE_SEM)
-        end
-        lock(PRINT_LOCK) do
-            @printf "  [%2d/%d]  log10(κ)=%.2f   T/d=%+.3e   Sxx=%+.3e\n" i N_SWEEP lk T[i] Sxx[i]
-        end
-    end
-    return (; x = kappa_vals, thrust = T, Sxx)
+    solve_fn(kappa) = solve_one((EI = kappa * EI_scale, motor_position = xM, nu = 0.0), bp)
+    x, T, Sxx = solve_missing_x(existing_x, existing_thrust, existing_Sxx, kappa_vals, solve_fn)
+    return (; x, thrust = T, Sxx)
 end
 
 function desired_Re_values(bp)
@@ -330,17 +337,19 @@ function load_or_compute(bp)
     d = isfile(CACHE_PATH) ? (println("Loading cache from $CACHE_PATH …"); JLD2.load(CACHE_PATH)) : Dict{String,Any}()
     changed = false
 
-    if all(k -> haskey(d, k), ["xM_x", "xM_T", "xM_Sxx"])
-        sw1 = (; x = d["xM_x"], thrust = d["xM_T"], Sxx = d["xM_Sxx"])
-    else
-        sw1 = run_sweep_xM(bp); GC.gc(); changed = true
+    existing1 = all(k -> haskey(d, k), ["xM_x", "xM_T", "xM_Sxx"]) ?
+        (Float64.(d["xM_x"]), Float64.(d["xM_T"]), Float64.(d["xM_Sxx"])) : (Float64[], Float64[], Float64[])
+    sw1 = run_sweep_xM(bp; existing_x = existing1[1], existing_thrust = existing1[2], existing_Sxx = existing1[3])
+    if length(sw1.x) != length(existing1[1])
+        GC.gc(); changed = true
         d["xM_x"] = sw1.x; d["xM_T"] = sw1.thrust; d["xM_Sxx"] = sw1.Sxx
     end
 
-    if all(k -> haskey(d, k), ["kap_x", "kap_T", "kap_Sxx"])
-        sw2 = (; x = d["kap_x"], thrust = d["kap_T"], Sxx = d["kap_Sxx"])
-    else
-        sw2 = run_sweep_kappa(bp); GC.gc(); changed = true
+    existing2 = all(k -> haskey(d, k), ["kap_x", "kap_T", "kap_Sxx"]) ?
+        (Float64.(d["kap_x"]), Float64.(d["kap_T"]), Float64.(d["kap_Sxx"])) : (Float64[], Float64[], Float64[])
+    sw2 = run_sweep_kappa(bp; existing_x = existing2[1], existing_thrust = existing2[2], existing_Sxx = existing2[3])
+    if length(sw2.x) != length(existing2[1])
+        GC.gc(); changed = true
         d["kap_x"] = sw2.x; d["kap_T"] = sw2.thrust; d["kap_Sxx"] = sw2.Sxx
     end
 

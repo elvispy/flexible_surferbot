@@ -10,7 +10,7 @@ the scripts that generate every figure in the paper.
 *Output of `flexible_solver` for a 10 cm raft driven at 10 Hz. The raft is
 two materials joined at its midpoint (black: 10x stiffer half, pale yellow:
 compliant half), producing a visibly asymmetric wake and a mean drift speed
-U ≈ 2.8 mm/s.*
+U ≈ 3.6 mm/s.*
 
 The active code lives in `Julia/`.
 
@@ -38,11 +38,11 @@ cd scripts && julia --project=. -e 'using Pkg; Pkg.instantiate()'
 using Surferbot
 
 L_raft = 0.1
-base = FlexibleParams(L_raft = L_raft, motor_position = -0.3L_raft, EI = 3e-5, omega = 2π * 10, rho_raft = 0.05)
+base = FlexibleParams(L_raft = L_raft, motor_position = -0.3L_raft, EI = 3e-5, omega = 2π * 10, rho_raft = 0.05, forcing_width = 0.01/3)
 nb   = Surferbot.derive_params(base).nb_contact  # raft node count, auto-selected from the wavelength
 EI   = vcat(fill(3e-5, nb ÷ 2), fill(3e-4, nb - nb ÷ 2))   # two materials, joined at the midpoint
 
-params = FlexibleParams(L_raft = L_raft, motor_position = -0.3L_raft, EI = EI, omega = 2π * 10, rho_raft = 0.05)
+params = FlexibleParams(L_raft = L_raft, motor_position = -0.3L_raft, EI = EI, omega = 2π * 10, rho_raft = 0.05, forcing_width = 0.01/3)
 result = flexible_solver(params)   # -> FlexibleResult: U, thrust, eta, phi, ...
 
 render_surferbot_run(result; outdir = "output", basename = "run", duration_periods = 2)

@@ -141,26 +141,22 @@ end
 # ─── Cache ────────────────────────────────────────────────────────────────────
 
 function load_or_compute(bp)
+    existing_lk    = Float64[]
+    existing_alpha = Float64[]
+    sp = nothing
     if isfile(CACHE_PATH)
-        println("Loading cache from $CACHE_PATH …")
-        d  = JLD2.load(CACHE_PATH)
-        sw = (; log10_kappa = d["log10_kappa"], kappa = d["kappa"], alpha = d["alpha"])
-        sp = (; kappa = d["sp_kappa"], alpha = d["sp_alpha"])
-        if !isinf(Float64(sp.kappa))
-            println("Updating cached Surferbot marker to rigid-inviscid reference …")
-            sp = surferbot_alpha(bp)
-            JLD2.save(CACHE_PATH,
-                "log10_kappa", sw.log10_kappa,
-                "kappa",       sw.kappa,
-                "alpha",       sw.alpha,
-                "sp_kappa",    sp.kappa,
-                "sp_alpha",    sp.alpha)
-        end
-        return sw, sp
+        println("Loading cache from $CACHE_PATH … (reusing any point that matches the current grid)")
+        d = JLD2.load(CACHE_PATH)
+        existing_lk    = Float64.(d["log10_kappa"])
+        existing_alpha = Float64.(d["alpha"])
+        sp = (; kappa = Float64(d["sp_kappa"]), alpha = Float64(d["sp_alpha"]))
     end
 
-    sw = run_sweep(bp)
-    sp = surferbot_alpha(bp)
+    sw = run_sweep(bp; existing_lk, existing_alpha)
+    if sp === nothing || !isinf(sp.kappa)
+        sp === nothing || println("Updating cached Surferbot marker to rigid-inviscid reference …")
+        sp = surferbot_alpha(bp)
+    end
 
     mkpath(dirname(CACHE_PATH))
     JLD2.save(CACHE_PATH,
