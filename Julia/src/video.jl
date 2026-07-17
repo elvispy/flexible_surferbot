@@ -386,8 +386,14 @@ function plot_frame(record::SurferbotRunRecord, t::Real; omega::Real, x_contact_
     end
 
     # ── Motor forcing: Re{f̂(x) e^{iωt}}, nondimensionalized, as arrows ────────
-    # Positive f acts downward (paper sign convention), so a positive load is
-    # drawn pointing down (negative dy in this plot's y-up coordinate).
+    # The motor sits above the raft and always pushes or pulls from there, so
+    # each arrow occupies a fixed region just above the raft surface (never
+    # dipping below it) rather than swinging above and below y0. Only the
+    # arrowhead's position within that fixed region encodes the direction:
+    # tip at the bottom (pointing down, toward the raft) for pressing, tip at
+    # the top (pointing up, away from the raft) for pulling. Positive f acts
+    # downward (paper sign convention), so a positive load is pressing
+    # (negative dy in this plot's y-up coordinate).
     if show_motor && !isempty(x_contact_mask) && any(x_contact_mask)
         loads = maybe_get(record.args, :loads, nothing)
         L_c   = maybe_get(record.args, :L_c, nothing)
@@ -406,7 +412,7 @@ function plot_frame(record::SurferbotRunRecord, t::Real; omega::Real, x_contact_
                 # significant (>5% of peak) part of the Gaussian load
                 # footprint, rather than one per (dense) solver grid point.
                 sig_idx  = findall(abs.(loads_nondim) .> 0.05 * peak)
-                n_arrows = min(length(sig_idx), 15)
+                n_arrows = min(length(sig_idx), 8)
                 pick     = sig_idx[round.(Int, range(1, length(sig_idx); length = n_arrows))]
                 arrow_scale = 0.8 * y_limit / peak
                 dy = -f_t[pick] .* arrow_scale
@@ -418,6 +424,7 @@ function plot_frame(record::SurferbotRunRecord, t::Real; omega::Real, x_contact_
                 x_span         = last(x_scaled) - first(x_scaled)
                 head_height    = 0.05 * y_limit
                 head_halfwidth = 0.006 * x_span
+                gap            = 0.05 * y_limit  # clearance above the raft surface
 
                 shaft_xs = Float64[]
                 shaft_ys = Float64[]
@@ -425,13 +432,24 @@ function plot_frame(record::SurferbotRunRecord, t::Real; omega::Real, x_contact_
                     x0  = x_raft[pick[i]]
                     y0  = y_raft[pick[i]]
                     dyi = dy[i]
-                    s   = dyi >= 0 ? 1.0 : -1.0
-                    actual_head = min(head_height, abs(dyi))
-                    tip_y  = y0 + dyi
-                    base_y = tip_y - s * actual_head
+                    actual_head  = min(head_height, abs(dyi))
+                    arrow_bottom = y0 + gap
+                    arrow_top    = arrow_bottom + abs(dyi)
+
+                    if dyi >= 0
+                        # Pulling: tip at the top, pointing up, away from the raft.
+                        tip_y = arrow_top
+                        base_y = tip_y - actual_head
+                        shaft_other_y = arrow_bottom
+                    else
+                        # Pressing: tip at the bottom, pointing down, toward the raft.
+                        tip_y = arrow_bottom
+                        base_y = tip_y + actual_head
+                        shaft_other_y = arrow_top
+                    end
 
                     append!(shaft_xs, (x0, x0, NaN))
-                    append!(shaft_ys, (y0, base_y, NaN))
+                    append!(shaft_ys, (shaft_other_y, base_y, NaN))
 
                     tri = Base.invokelatest(Plots.Shape,
                         [x0 - head_halfwidth, x0 + head_halfwidth, x0],
