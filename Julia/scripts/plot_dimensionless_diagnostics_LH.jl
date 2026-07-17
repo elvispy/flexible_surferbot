@@ -570,9 +570,10 @@ function build_LH_plot(artifact, csv_path, output_dir; xlim_min::Float64,
     # Build plot
     okabe_ito    = ["#E69F00", "#56B4E9", "#009E73", "#F0E442",
                     "#0072B2", "#D55E00", "#CC79A7", "#000000"]
-    curve_colors = [okabe_ito[8], okabe_ito[1], okabe_ito[3], okabe_ito[7]]
-    # Redundant line-style encoding so curves are distinguishable in greyscale
-    curve_styles = [:solid, :solid, :solid, :solid]
+    # Pair the two domain-end elevation conditions by color; line styles retain
+    # the distinction in greyscale and separate the black S/A/orthogonality laws.
+    curve_colors = [okabe_ito[8], okabe_ito[8], okabe_ito[7], okabe_ito[7]]
+    curve_styles = [:solid, :dashdot, :dash, :solid]
 
     plt_opts = (
         xlabel  = L"x_M / L",
@@ -624,7 +625,7 @@ function build_LH_plot(artifact, csv_path, output_dir; xlim_min::Float64,
         end
     end
 
-    orth_color = okabe_ito[5]
+    orth_color = okabe_ito[8]
     contour!(p, orth_xM, scatter_logK, orthogonality';
              levels=[0.0], color=orth_color, linewidth=3.0,
              linestyle=:dash, colorbar=false, label=false)
