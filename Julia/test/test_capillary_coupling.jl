@@ -1,6 +1,9 @@
 using Test
 using Surferbot
 
+repo = joinpath(@__DIR__, "..")
+include(joinpath(repo, "scripts", "plot_dimensionless_diagnostics_LH.jl"))
+
 @testset "capillary_endpoint_map" begin
     # Synthetic free-free-like basis: mode m has parity (-1)^m, so
     # psi_start[m] = (-1)^m * psi_end[m] and (with the validated Fix 2 sign
@@ -47,6 +50,40 @@ using Surferbot
     end
 end
 
+@testset "LH phase orthogonality residual" begin
+    @test phase_orthogonality_residual(1.0 + 0.0im, 0.0 + 1.0im) ≈ 0.0 atol=1e-14
+    @test phase_orthogonality_residual(1.0 + 0.0im, 1.0 + 0.0im) ≈ 1.0
+    @test phase_orthogonality_residual(1.0 + 0.0im, -1.0 + 0.0im) ≈ -1.0
+    @test isnan(phase_orthogonality_residual(0.0im, 1.0 + 0.0im))
+    @test isnan(phase_orthogonality_residual(1.0 + 0.0im, 0.0im))
+
+    S = ComplexF64[1.0 1.0;
+                   1e-20 1.0]
+    A = ComplexF64[1.0im 1.0;
+                   1.0    1.0im]
+    residual = phase_orthogonality_field(S, A)
+
+    @test size(residual) == size(S)
+    @test residual[1, 1] ≈ 0.0 atol=1e-14
+    @test isnan(residual[2, 1])
+    @test residual[1, 2] ≈ 1.0
+    @test residual[2, 2] ≈ 0.0 atol=1e-14
+    @test all(-1.0 .<= filter(isfinite, vec(residual)) .<= 1.0)
+
+    # Passing through S=0 flips both components of S*conj(A). The phase is
+    # undefined there, so a contour must not interpolate a false quadrature
+    # crossing between the two samples.
+    S_zero_crossing = reshape(ComplexF64[-1.0, 1.0], 2, 1)
+    A_zero_crossing = fill(1.0 + 0.1im, 2, 1)
+    @test all(isnan, phase_orthogonality_field(S_zero_crossing, A_zero_crossing))
+
+    # A true quadrature crossing changes Re(S*conj(A)) while Im(S*conj(A))
+    # remains nonzero with one sign; those samples must remain contourable.
+    S_phase_crossing = reshape(ComplexF64[-1.0 + 1.0im, 1.0 + 1.0im], 2, 1)
+    A_phase_crossing = fill(1.0 + 0.0im, 2, 1)
+    @test all(isfinite, phase_orthogonality_field(S_phase_crossing, A_phase_crossing))
+end
+
 @testset "C_sigma end-to-end symmetry at xM=0 (real physics, not synthetic)" begin
     # The unit test above checks the extracted capillary_endpoint_map formula
     # in isolation. This checks the actual production pipeline that consumes
@@ -63,9 +100,6 @@ end
     # leakage in the cached impedance Z_psi). This is what the C_sigma sign bug
     # broke (A(xM=0) came out as ~1e-5 relative to |S|~1e-3, i.e. ~1e-2
     # relative) -- see the commit fixing it for the full derivation.
-    repo = joinpath(@__DIR__, "..")
-    include(joinpath(repo, "scripts", "plot_dimensionless_diagnostics_LH.jl"))
-
     output_dir = joinpath(repo, "output")
     art = load_sweep(joinpath(output_dir, "jld2", "sweep_motor_position_EI_coupled_from_matlab.jld2"))
     params = art.base_params
@@ -82,4 +116,13 @@ end
         # catches the ~1e-2 relative parity-sign bug by four orders of magnitude.
         @test abs(diag.A) / max(abs(diag.S), eps()) < 1e-6
     end
+
+    EI_probe = 10 .^ (([-3.0, -2.0, -1.0]) .+ shift)
+    xM_probe = collect(range(-0.5, 0.0; length=7))
+    orth = theoretical_phase_orthogonality_field(EI_probe, xM_probe, theory_ctx)
+    finite_orth = filter(isfinite, vec(orth))
+    @test size(orth) == (length(xM_probe), length(EI_probe))
+    @test !isempty(finite_orth)
+    @test all(-1.0 .<= finite_orth .<= 1.0)
+    @test all(isnan, orth[end, :])
 end
