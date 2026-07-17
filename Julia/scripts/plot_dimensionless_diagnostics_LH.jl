@@ -43,6 +43,9 @@ const ModalPressureMap = Main.PrescribedWnDiagonalImpedance
 
 const NUM_MODES    = 8
 const RATIO_CUTOFF = 0.5
+# The cached modal map has approximately 1e-7 opposite-parity leakage at
+# centered forcing, so phase is not numerically meaningful below this scale.
+const PHASE_AMPLITUDE_RELATIVE_FLOOR = 1e-6
 
 # Branch-terminus detection: when a tracked high-xM root disappears between
 # consecutive EI steps and the function is still decreasing at xM=0.5, we add
@@ -92,6 +95,73 @@ end
 # find_filtered_minima is provided by Surferbot (Julia/src/modal.jl) — interpolates
 # a sub-grid root location instead of snapping to the xgrid point, avoiding a
 # staircase artifact wherever the branch-tracing loop below samples logK densely.
+
+function phase_orthogonality_residual(S::Number, A::Number;
+                                       amplitude_floor_S::Real=0.0,
+                                       amplitude_floor_A::Real=0.0)
+    absS = abs(S)
+    absA = abs(A)
+    (absS <= amplitude_floor_S || absA <= amplitude_floor_A) && return NaN
+    return clamp(real(S * conj(A)) / (absS * absA), -1.0, 1.0)
+end
+
+function phase_orthogonality_field(S::AbstractMatrix, A::AbstractMatrix;
+                                    relative_floor::Real=PHASE_AMPLITUDE_RELATIVE_FLOOR)
+    size(S) == size(A) || throw(DimensionMismatch("S and A fields must have the same size"))
+    residual = fill(NaN, size(S))
+    cross_term = S .* conj.(A)
+    for j in axes(S, 2)
+        floorS = relative_floor * maximum(abs, view(S, :, j))
+        floorA = relative_floor * maximum(abs, view(A, :, j))
+        for i in axes(S, 1)
+            residual[i, j] = phase_orthogonality_residual(
+                S[i, j], A[i, j];
+                amplitude_floor_S=floorS,
+                amplitude_floor_A=floorA,
+            )
+        end
+    end
+
+    # A sampled passage through S=0 or A=0 flips the phase by pi. If the zero
+    # lies between grid points, contour interpolation otherwise mistakes that
+    # discontinuity for cos(arg(S)-arg(A)) = 0. At such a passage both real and
+    # imaginary parts of S*conj(A) reverse sign; at true quadrature only its real
+    # part crosses zero while the imaginary part remains nonzero with one sign.
+    invalid = falses(size(residual))
+    opposite_sign(a, b) = a != 0 && b != 0 && signbit(a) != signbit(b)
+    if size(cross_term, 1) > 1
+        for j in axes(cross_term, 2), i in firstindex(cross_term, 1):(lastindex(cross_term, 1) - 1)
+            z1, z2 = cross_term[i, j], cross_term[i + 1, j]
+            if opposite_sign(real(z1), real(z2)) && opposite_sign(imag(z1), imag(z2))
+                invalid[i, j] = true
+                invalid[i + 1, j] = true
+            end
+        end
+    end
+    if size(cross_term, 2) > 1
+        for j in firstindex(cross_term, 2):(lastindex(cross_term, 2) - 1), i in axes(cross_term, 1)
+            z1, z2 = cross_term[i, j], cross_term[i, j + 1]
+            if opposite_sign(real(z1), real(z2)) && opposite_sign(imag(z1), imag(z2))
+                invalid[i, j] = true
+                invalid[i, j + 1] = true
+            end
+        end
+    end
+    residual[invalid] .= NaN
+    return residual
+end
+
+function theoretical_phase_orthogonality_field(EI_list, xM_grid, theory_ctx)
+    S_field = Matrix{ComplexF64}(undef, length(xM_grid), length(EI_list))
+    A_field = similar(S_field)
+    for (j, EI) in enumerate(EI_list), (i, xM_norm) in enumerate(xM_grid)
+        q = solve_theoretical_modal_response(EI, xM_norm, theory_ctx)
+        diag = theoretical_endpoint_diagnostics_LH(q, theory_ctx)
+        S_field[i, j] = diag.S
+        A_field[i, j] = diag.A
+    end
+    return phase_orthogonality_field(S_field, A_field)
+end
 
 function roots_for_condition(condition_name, xgrid, absS, absA, abs_eta_1, abs_eta_end)
     if condition_name == "S"
@@ -215,7 +285,8 @@ end
 
 function get_roots_theoretical_LH(artifact, condition_name; output_dir::AbstractString,
                                    EI_list::Union{Nothing,AbstractVector{Float64}}=nothing,
-                                   n_EI::Int=301)
+                                   n_EI::Int=301,
+                                   include_resonance_stripes::Bool=true)
     params    = artifact.base_params
     EI_artifact = collect(Float64.(artifact.parameter_axes.EI))
     # When an explicit EI_list is provided (e.g. EI_scatter from build_LH_plot),
@@ -313,7 +384,7 @@ function get_roots_theoretical_LH(artifact, condition_name; output_dir::Abstract
     # fine grid introduces spurious stripes at new κ values near true resonances.
     res_candidates = Tuple{Int,Float64}[]
     col_amp = fill(NaN, length(EI_coarse))
-    if condition_name in ("S", "A")
+    if include_resonance_stripes && condition_name in ("S", "A")
         logEI_coarse = log10.(EI_coarse)
         for (iei, EI) in enumerate(EI_coarse)
             absS = Float64[]; absA = Float64[]
@@ -390,7 +461,8 @@ end
 #   Pass a vector → use that instead (needed for uncoupled where the artifact
 #                   EI range is narrower than the desired x axis).
 
-function build_LH_plot(artifact, csv_path, output_dir; xlim_min::Float64)
+function build_LH_plot(artifact, csv_path, output_dir; xlim_min::Float64,
+                       include_resonance_stripes::Bool=false)
     params = artifact.base_params
     shift  = log10(Float64(params.rho_raft) * Float64(params.L_raft)^4 *
                    Float64(params.omega)^2)
@@ -438,54 +510,60 @@ function build_LH_plot(artifact, csv_path, output_dir; xlim_min::Float64)
         @info "Computing LH roots: $cname"
         res = get_roots_theoretical_LH(artifact, cname;
                                         output_dir=output_dir,
-                                        EI_list=EI_scatter)
+                                        EI_list=EI_scatter,
+                                        include_resonance_stripes=include_resonance_stripes)
         results[cname] = (logK = res.logEI .- shift, xM_norm = res.xM_norm)
     end
+
+    orth_xM = collect(range(YLIMS[1], YLIMS[2]; length=301))
+    orth_ctx = theoretical_modal_context_LH(params; output_dir=output_dir)
+    orthogonality = theoretical_phase_orthogonality_field(EI_scatter, orth_xM, orth_ctx)
 
     # Resonance-stripe sync: beam-end is more sensitive to certain resonances that the
     # LH far-field quantile misses.  Collect beam-detected resonance candidates (index,
     # q_val), group consecutive scatter-grid indices into runs, keep the minimum-q
     # index per run, then inject any stripe not already present in the LH results.
-    beam_sync_ctx   = theoretical_modal_context(params; output_dir=output_dir)
-    xM_sync         = collect(range(-0.49, 0.0; length=401))
-    sync_candidates = Dict{String, Vector{Tuple{Int,Float64}}}("S"=>[], "A"=>[])
-    sync_amp        = fill(NaN, length(EI_scatter))
-    for (iei, EI) in enumerate(EI_scatter)
-        scatter_logK[iei] < xlim_min && continue
-        absS=Float64[]; absA=Float64[]; abs1=Float64[]; abse=Float64[]
-        for xM in xM_sync
-            q = solve_theoretical_modal_response(EI, xM, beam_sync_ctx)
-            d = theoretical_endpoint_diagnostics_beam(q, beam_sync_ctx)
-            push!(absS, abs(d.S)); push!(absA, abs(d.A))
-            push!(abs1, abs(d.eta_beam_1)); push!(abse, abs(d.eta_beam_end))
+    if include_resonance_stripes
+        beam_sync_ctx   = theoretical_modal_context(params; output_dir=output_dir)
+        xM_sync         = collect(range(-0.49, 0.0; length=401))
+        sync_candidates = Dict{String, Vector{Tuple{Int,Float64}}}("S"=>[], "A"=>[])
+        sync_amp        = fill(NaN, length(EI_scatter))
+        for (iei, EI) in enumerate(EI_scatter)
+            scatter_logK[iei] < xlim_min && continue
+            absS=Float64[]; absA=Float64[]; abs1=Float64[]; abse=Float64[]
+            for xM in xM_sync
+                q = solve_theoretical_modal_response(EI, xM, beam_sync_ctx)
+                d = theoretical_endpoint_diagnostics_beam(q, beam_sync_ctx)
+                push!(absS, abs(d.S)); push!(absA, abs(d.A))
+                push!(abs1, abs(d.eta_beam_1)); push!(abse, abs(d.eta_beam_end))
+            end
+            sync_amp[iei] = max(mean(absS), mean(absA))
+            alpha_col   = @. -(abs1^2 - abse^2) / (abs1^2 + abse^2 + eps())
+            is_odd      = mean(absS) < mean(absA)
+            resonance_q = is_odd ? 0.20 : 0.15
+            q_val       = quantile(abs.(alpha_col), resonance_q)
+            q_val < RESONANCE_ALPHA_CUTOFF || continue
+            cond = is_odd ? "S" : "A"
+            push!(sync_candidates[cond], (iei, q_val))
         end
-        sync_amp[iei] = max(mean(absS), mean(absA))
-        # Pre-fix right-minus-left convention -- harmless, see the identical
-        # note near the other alpha_col above (only abs(alpha_col) is used).
-        alpha_col   = @. -(abs1^2 - abse^2) / (abs1^2 + abse^2 + eps())
-        is_odd      = mean(absS) < mean(absA)
-        resonance_q = is_odd ? 0.20 : 0.15
-        q_val       = quantile(abs.(alpha_col), resonance_q)
-        q_val < RESONANCE_ALPHA_CUTOFF || continue
-        cond = is_odd ? "S" : "A"
-        push!(sync_candidates[cond], (iei, q_val))
-    end
-    # Amplitude guard (see RESONANCE_AMP_FACTOR): reject candidates that dip
-    # below the alpha-quantile cutoff without genuine amplification.
-    let baseline = median(filter(isfinite, sync_amp))
+        let baseline = median(filter(isfinite, sync_amp))
+            for cond in ("S", "A")
+                filter!(c -> sync_amp[c[1]] > RESONANCE_AMP_FACTOR * baseline,
+                        sync_candidates[cond])
+            end
+        end
+        res_xM_sync = collect(range(xM_sync[1], xM_sync[end]; length=RESONANCE_N_PTS))
         for cond in ("S", "A")
-            filter!(c -> sync_amp[c[1]] > RESONANCE_AMP_FACTOR * baseline, sync_candidates[cond])
-        end
-    end
-    res_xM_sync = collect(range(xM_sync[1], xM_sync[end]; length=RESONANCE_N_PTS))
-    for cond in ("S", "A")
-        for (best_iei, _) in dedup_resonance_runs(sync_candidates[cond])
-            logK_val    = scatter_logK[best_iei]
-            already_present = any(abs.(results[cond].logK .- logK_val) .< 0.01)
-            already_present && continue
-            prev = results[cond]
-            results[cond] = (logK    = vcat(prev.logK,    fill(logK_val, RESONANCE_N_PTS)),
-                             xM_norm = vcat(prev.xM_norm, res_xM_sync))
+            for (best_iei, _) in dedup_resonance_runs(sync_candidates[cond])
+                logK_val = scatter_logK[best_iei]
+                already_present = any(abs.(results[cond].logK .- logK_val) .< 0.01)
+                already_present && continue
+                prev = results[cond]
+                results[cond] = (
+                    logK=vcat(prev.logK, fill(logK_val, RESONANCE_N_PTS)),
+                    xM_norm=vcat(prev.xM_norm, res_xM_sync),
+                )
+            end
         end
     end
 
@@ -545,6 +623,13 @@ function build_LH_plot(artifact, csv_path, output_dir; xlim_min::Float64)
             hline!(p, [rlk]; color=curve_colors[i], linewidth=4.0, label=false)
         end
     end
+
+    orth_color = okabe_ito[5]
+    contour!(p, orth_xM, scatter_logK, orthogonality';
+             levels=[0.0], color=orth_color, linewidth=3.0,
+             linestyle=:dash, colorbar=false, label=false)
+    plot!(p, [NaN], [NaN]; label=L"S \perp A", color=orth_color,
+          linewidth=3.0, linestyle=:dash)
 
     return p
 end
@@ -857,7 +942,7 @@ end
 
 # ─── Main ─────────────────────────────────────────────────────────────────────
 
-function main()
+function main(args=ARGS)
     output_dir = joinpath(@__DIR__, "..", "output")
     fig_dir    = joinpath(output_dir, "figures")
     mkpath(fig_dir)
@@ -874,6 +959,8 @@ function main()
     out_cpl_LH = joinpath(fig_dir, "plot_dimensionless_diagnostics_LH_cpl_theo.pdf")
     savefig(p_cpl_LH, out_cpl_LH)
     println("Saved $out_cpl_LH")
+
+    "--lh-coupled-only" in args && return
 
     # ── 2. Beam-end coupled plot ──────────────────────────────────────────────
     p_cpl_beam = build_beam_end_plot(art_cpl,

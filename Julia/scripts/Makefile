@@ -59,8 +59,9 @@ $(FIG_DIR)/plot_thrust_beam_and_LH_LH_cbrt.pdf: plot_thrust_beam_and_LH.jl \
 	$(JULIA) --threads auto $<
 
 $(FIG_DIR)/plot_dimensionless_diagnostics_LH_cpl_theo.pdf: plot_dimensionless_diagnostics_LH.jl \
-		$(SWEEP_CPL_JLD2) $(SWEEP_UCPL_JLD2) $(SWEEP_CPL_CSV) $(SWEEP_UCPL_CSV)
-	$(JULIA) --threads auto $<
+		../experiments/prescribed_wn_diagonal_impedance.jl \
+		$(SWEEP_CPL_JLD2) $(SWEEP_CPL_CSV)
+	$(JULIA) --threads auto $< --lh-coupled-only
 
 $(FIG_DIR)/plot_freefree_modes.pdf: plot_freefree_modes.jl
 	$(JULIA) $<
