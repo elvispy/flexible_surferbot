@@ -1,7 +1,6 @@
 using Test
 using Surferbot
-include(joinpath(@__DIR__, "..", "src", "optimization.jl"))
-const SBO = SurferbotOptimization
+const SBO = Surferbot.SurferbotOptimization
 
 const OPT_BASE_PARAMS = FlexibleParams(
     sigma = 0.0,

@@ -212,8 +212,16 @@ function derive_params(params::FlexibleParams{T}) where {T<:Real}
         Gamma = params.rho * params.L_raft^2 / rho_raft_scalar,
         Fr = sqrt(params.L_raft * params.omega^2 / params.g),
         Re = params.L_raft^2 * params.omega / params.nu,
+        # inv_Re computed directly (nu/(...)), not as 1/Re: Re = C/nu blows up
+        # to a Dual(Inf, NaN) under ForwardDiff when nu=0 (an extremely common
+        # inviscid configuration), even though 1/Re = nu/C is a perfectly
+        # smooth (entire) function of nu at nu=0 -- the singularity is an
+        # artifact of the C/nu-then-invert expression graph, not a real one.
+        inv_Re = params.nu / (params.L_raft^2 * params.omega),
         kappa = EI_scalar / (rho_raft_scalar * params.L_raft^4 * params.omega^2),
         We = rho_raft_scalar * params.L_raft * params.omega^2 / params.sigma,
+        # Same reasoning as inv_Re, for sigma=0 (no surface tension).
+        inv_We = params.sigma / (rho_raft_scalar * params.L_raft * params.omega^2),
         Lambda = d / params.L_raft,
     )
 
@@ -328,9 +336,9 @@ function assemble_flexible_system(params::FlexibleParams{T}) where {T<:Real}
     BCtype = String(derived.params.bc)
     Fr = derived.nd_groups.Fr
     Gamma = derived.nd_groups.Gamma
-    We = derived.nd_groups.We
     Lambda = derived.nd_groups.Lambda
-    Re = derived.nd_groups.Re
+    inv_We = derived.nd_groups.inv_We
+    inv_Re = derived.nd_groups.inv_Re
     I_NP = sparse(T(1) * I, NP, NP)
     I_CC = sparse(T(1) * I, nb_contact, nb_contact)
 
@@ -375,12 +383,12 @@ function assemble_flexible_system(params::FlexibleParams{T}) where {T<:Real}
     L = idxLeftFreeSurf
     DxFree = getNonCompactFDmatrix(nbLeft, T(1.0), 1, derived.params.ooa)
     DxxFree = getNonCompactFDmatrix(nbLeft, T(1.0), 2, derived.params.ooa)
-    S11[L[2:(end - 1)], L] = derived.dx^2 .* I_NP[L[2:(end - 1)], L] .+ (Complex{T}(4im) / Re) .* DxxFree[2:(end - 1), :]
-    S12[L[2:(end - 1)], L] = (-derived.dx^2 / Fr^2) .* I_NP[L[2:(end - 1)], L] .+ (T(1) / (We * Gamma)) .* DxxFree[2:(end - 1), :]
+    S11[L[2:(end - 1)], L] = derived.dx^2 .* I_NP[L[2:(end - 1)], L] .+ (Complex{T}(4im) * inv_Re) .* DxxFree[2:(end - 1), :]
+    S12[L[2:(end - 1)], L] = (-derived.dx^2 / Fr^2) .* I_NP[L[2:(end - 1)], L] .+ (inv_We / Gamma) .* DxxFree[2:(end - 1), :]
 
     R = idxRightFreeSurf
-    S11[R[2:(end - 1)], R] = derived.dx^2 .* I_NP[R[2:(end - 1)], R] .+ (Complex{T}(4im) / Re) .* DxxFree[2:(end - 1), :]
-    S12[R[2:(end - 1)], R] = (-derived.dx^2 / Fr^2) .* I_NP[R[2:(end - 1)], R] .+ (T(1) / (We * Gamma)) .* DxxFree[2:(end - 1), :]
+    S11[R[2:(end - 1)], R] = derived.dx^2 .* I_NP[R[2:(end - 1)], R] .+ (Complex{T}(4im) * inv_Re) .* DxxFree[2:(end - 1), :]
+    S12[R[2:(end - 1)], R] = (-derived.dx^2 / Fr^2) .* I_NP[R[2:(end - 1)], R] .+ (inv_We / Gamma) .* DxxFree[2:(end - 1), :]
 
     CC = idxContact
     DxRaft  = getNonCompactFDmatrix(nb_contact, T(1.0), 1, derived.params.ooa)
@@ -390,8 +398,8 @@ function assemble_flexible_system(params::FlexibleParams{T}) where {T<:Real}
     # Fix 1: exact K̄⁻¹ in raft balance — adds (2/Re)·inertia_coeff·∂_xx φ_z
     inertia_coeff = derived.inertia_vec .- Gamma * Lambda / Fr^2
     inertia_diag  = Diagonal(Complex{T}.(1im .* inertia_coeff))
-    S11[CC, CC] = (Complex{T}(1im) * Lambda * Gamma * derived.dx^2) .* I_NP[CC, CC] .- (T(2) * Gamma * Lambda / Re) .* Dx2Raft
-    S12[CC, CC] = derived.dx^2 .* inertia_diag .+ (T(2) / Re) .* (Diagonal(Complex{T}.(inertia_coeff)) * Dx2Raft)
+    S11[CC, CC] = (Complex{T}(1im) * Lambda * Gamma * derived.dx^2) .* I_NP[CC, CC] .- (T(2) * Gamma * Lambda * inv_Re) .* Dx2Raft
+    S12[CC, CC] = derived.dx^2 .* inertia_diag .+ (T(2) * inv_Re) .* (Diagonal(Complex{T}.(inertia_coeff)) * Dx2Raft)
     S13[CC, :] = Dx2Raft
 
     boundary_contact = [1, nb_contact]
@@ -402,17 +410,17 @@ function assemble_flexible_system(params::FlexibleParams{T}) where {T<:Real}
     # Fix 2: exact K̄ in edge condition — K̄·M_x = ∓(Λ/We)·φ_zx
     # Left edge:  K̄·M_x + (Λ/We)·φ_zx = 0  →  S12 coeff = +(Λ/We)
     # Right edge: K̄·M_x − (Λ/We)·φ_zx = 0  →  S12 coeff = −(Λ/We)
-    edge_visc = Complex{T}(T(2) / (Re * derived.dx^2))
+    edge_visc = Complex{T}(T(2) * inv_Re / derived.dx^2)
     S13[CC[1], :]   = Complex{T}(1im) .* DxRaft[1, :]   .- edge_visc .* Dx3Raft[1, :]
-    S12[CC[1], L]   = (Lambda / We) .* DxFree[end, :]
+    S12[CC[1], L]   = (Lambda * inv_We) .* DxFree[end, :]
     S13[CC[end], :] = Complex{T}(1im) .* DxRaft[end, :] .- edge_visc .* Dx3Raft[end, :]
-    S12[CC[end], R] = (-Lambda / We) .* DxFree[1, :]
+    S12[CC[end], R] = (-Lambda * inv_We) .* DxFree[1, :]
 
     # K̄(M/κ) = φ_zxx — exact form; avoids the K̄⁻¹ ≈ -i approximation (valid only for Re → ∞)
     kappa_inv = T(1) ./ derived.kappa_vec
     S32[:, CC] = -Dx2Raft
     S33 .= Complex{T}(1im) .* Diagonal(derived.dx^2 .* kappa_inv) .-
-           Complex{T}(T(2) / Re) .* (Dx2Raft * Diagonal(kappa_inv))
+           Complex{T}(T(2) * inv_Re) .* (Dx2Raft * Diagonal(kappa_inv))
     S32[boundary_contact, :] .= 0
     S33[boundary_contact, :] .= 0
     S33[1, 1] = 1
@@ -558,5 +566,9 @@ function flexible_surferbot_v2_julia(; kwargs...)
     args = result.metadata.args
     return result.U, result.x, result.z, result.phi, result.eta, args
 end
+
+# Included last: depends on FlexibleParams, derive_params, and
+# assemble_flexible_system all being defined above.
+include("optimization.jl")
 
 end # module

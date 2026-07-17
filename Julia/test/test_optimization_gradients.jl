@@ -1,7 +1,7 @@
 using Test
 using Surferbot
-include(joinpath(@__DIR__, "..", "src", "optimization.jl"))
-const SBO = SurferbotOptimization
+using ForwardDiff
+const SBO = Surferbot.SurferbotOptimization
 
 const GRAD_BASE_PARAMS = FlexibleParams(
     sigma = 0.0,
@@ -45,19 +45,85 @@ end
     @test length(grad) == 2
     @test primal.outputs.thrust isa Float64
 
-    # KNOWN BROKEN, not fixed: objective_and_gradient's ForwardDiff.jacobian call
-    # (src/optimization.jl) is applied to a complex-valued, sparse-backed
-    # function (vcat(vec(system.A), system.b)), which ForwardDiff.jacobian does
-    # not support -- it silently returns un-extracted, nested Dual garbage
-    # instead of erroring, so grad[1] (d/d motor_position) comes out ~2.2x
-    # wrong. Splitting into real/imag parts (the correct usage) exposes a
-    # second, deeper bug: NaN derivatives in assemble_flexible_system's
-    # motor_position dependence, likely a sqrt/division singularity under AD
-    # in the radiative BC / dispersion-relation code. SurferbotOptimization is
-    # not included by Surferbot.jl and is not used by any script or figure in
-    # this repo (grep confirms only test/ and the throwaway
-    # experiments/optimization.jl reference it) -- so this is dead code, not
-    # worth chasing the AD bug into src/DtN.jl right now.
-    @test_broken isapprox(grad[1], fd_grad[1]; atol=1e-5, rtol=5e-3)
+    # Two bugs fixed here (see Julia/src/optimization.jl and Julia/src/Surferbot.jl):
+    # (1) objective_and_gradient's ForwardDiff.jacobian call was applied to a
+    #     complex-valued function (vcat(vec(system.A), system.b)), which
+    #     ForwardDiff.jacobian does not support -- it silently returned
+    #     un-extracted, nested Dual garbage instead of erroring, so grad[1]
+    #     (d/d motor_position) came out ~2.2x wrong. Fixed by differentiating
+    #     a real-valued function (real/imag parts stacked) and reassembling
+    #     the complex Jacobian afterward.
+    # (2) That exposed a second bug: Surferbot.jl's nd_groups computed
+    #     We = C/sigma and Re = C/nu, then used 1/We and 1/Re downstream. At
+    #     sigma=0 or nu=0 (both common configurations -- the "no surface
+    #     tension"/inviscid limits used here), this is fine in plain Float64
+    #     (We=Inf, 1/We=0, the physically-correct vanishing-capillarity/
+    #     inviscid limit) but produces Dual(Inf, NaN) under ForwardDiff, even
+    #     though 1/We = sigma/C is a perfectly smooth function of sigma at
+    #     sigma=0 -- the singularity was an artifact of the specific
+    #     C/sigma-then-invert expression graph, not a real one. Fixed by
+    #     computing inv_We = sigma/C and inv_Re = nu/C directly.
+    @test isapprox(grad[1], fd_grad[1]; atol=1e-5, rtol=5e-3)
     @test isapprox(grad[2], fd_grad[2]; atol=1e-5, rtol=5e-3)
+end
+
+@testset "assemble_flexible_system AD-safe" begin
+    # Isolated regression tests at the smallest reproducible unit: directly
+    # differentiate assemble_flexible_system's system matrix (real/imag
+    # parts) and check for finite (non-NaN) results, independent of the full
+    # optimization pipeline above. Covers the removable-singularity fix (at
+    # sigma=0 and nu=0), a sanity check that nu != 0 still works, and a
+    # multi-material (graded, vector EI) configuration -- theta_to_params
+    # itself still rejects vector EI/rho_raft (optimizing over graded beams
+    # is a separate, unimplemented feature), so this checks only that
+    # assemble_flexible_system's own AD path handles graded beams correctly.
+    #
+    # Uses a local field-override helper rather than
+    # Surferbot.Sweep.apply_parameter_overrides: that helper doesn't promote
+    # every FlexibleParams field to a common type, so passing a single Dual
+    # override alongside otherwise-Float64 fields fails to construct the
+    # (uniformly-typed) FlexibleParams{T}. dual_params mirrors
+    # theta_to_params's cast-every-field style instead.
+    function dual_params(base_params::FlexibleParams, field::Symbol, value)
+        T = value isa AbstractVector ? eltype(value) : typeof(value)
+        fields = Dict{Symbol,Any}()
+        for name in fieldnames(FlexibleParams)
+            v = getfield(base_params, name)
+            fields[name] = if name == field
+                value
+            elseif v isa AbstractVector
+                T.(v)
+            elseif isnothing(v)
+                v
+            elseif v isa Symbol || v isa Integer
+                v
+            else
+                T(v)
+            end
+        end
+        return FlexibleParams{T}(; fields...)
+    end
+
+    function finite_jacobian(overrides_fn, value)
+        f = (s) -> begin
+            p = overrides_fn(s)
+            sys = Surferbot.assemble_flexible_system(p)
+            vcat(real.(vec(sys.A)), imag.(vec(sys.A)))
+        end
+        all(isfinite, ForwardDiff.derivative(f, value))
+    end
+
+    @test finite_jacobian(s -> dual_params(GRAD_BASE_PARAMS, :sigma, s), 0.0)
+    @test finite_jacobian(s -> dual_params(GRAD_BASE_PARAMS, :nu, s), 0.0)
+    @test finite_jacobian(s -> dual_params(GRAD_BASE_PARAMS, :nu, s), 1e-6)
+
+    base = Surferbot.derive_params(GRAD_BASE_PARAMS)
+    nb = base.nb_contact
+    EI_vec = vcat(fill(GRAD_BASE_PARAMS.EI, nb ÷ 2), fill(GRAD_BASE_PARAMS.EI * 10, nb - nb ÷ 2))
+    multi_material_fn = (s) -> begin
+        EI_perturbed = typeof(s).(EI_vec)
+        EI_perturbed[1] = s
+        dual_params(GRAD_BASE_PARAMS, :EI, EI_perturbed)
+    end
+    @test finite_jacobian(multi_material_fn, EI_vec[1])
 end

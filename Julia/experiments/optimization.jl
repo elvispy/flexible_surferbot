@@ -1,6 +1,5 @@
 using Surferbot
-include(joinpath(@__DIR__, "..", "src", "optimization.jl"))
-using .SurferbotOptimization
+using Surferbot.SurferbotOptimization
 
 # Purpose: run the current Julia gradient-based optimization demo for the
 # Surferbot parameterization `(x_A, log(EI))`.
