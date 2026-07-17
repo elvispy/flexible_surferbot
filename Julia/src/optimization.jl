@@ -354,14 +354,26 @@ function objective_and_gradient(theta::AbstractVector{<:Real}, base_params, conf
     z = primal.full_solution
     grad = zeros(Float64, length(theta))
 
-    # Compute all assembly derivatives at once using AD
-    f_total = (th) -> begin
+    # Compute all assembly derivatives at once using AD. ForwardDiff.jacobian
+    # does not support complex-valued outputs (it silently returns wrong,
+    # un-extracted Dual values instead of erroring), so differentiate a
+    # real-valued function that stacks the real/imaginary parts, then
+    # reassemble a complex Jacobian with the same shape/slicing the
+    # sensitivity-solve loop below expects.
+    mn = length(A)
+    nb_len = length(primal.system.b)
+    f_real = (th) -> begin
         params = theta_to_params(th, base_params)
         system = Surferbot.assemble_flexible_system(params)
-        return vcat(vec(system.A), system.b)
+        Avec = vec(system.A)
+        return vcat(real.(Avec), imag.(Avec), real.(system.b), imag.(system.b))
     end
-    J = ForwardDiff.jacobian(f_total, theta)
-    
+    J_real = ForwardDiff.jacobian(f_real, theta)
+    J = vcat(
+        Complex.(J_real[1:mn, :],             J_real[(mn + 1):(2mn), :]),
+        Complex.(J_real[(2mn + 1):(2mn + nb_len), :], J_real[(2mn + nb_len + 1):end, :]),
+    )
+
     # Solve for sensitivities using our Dual-safe helper
     m, n_sys = size(A)
     for idx in eachindex(theta)
