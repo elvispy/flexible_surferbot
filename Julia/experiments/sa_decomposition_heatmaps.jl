@@ -45,7 +45,16 @@ function build_sa_grid(; n_xM::Int = 200, n_k::Int = 200)
             absS[i, j] = abs(d.S)
             absA[i, j] = abs(d.A)
             cosdphi[i, j] = cos(angle(d.S) - angle(d.A))
-            alpha[i, j] = -(abs2(d.eta_LH_1) - abs2(d.eta_LH_end)) / (abs2(d.eta_LH_1) + abs2(d.eta_LH_end))
+            # alpha = (|eta_left|^2 - |eta_right|^2) / denom (left minus right,
+            # matching Surferbot.Analysis.beam_asymmetry's convention). Do NOT
+            # copy the "right-minus-left" shape seen elsewhere in this file
+            # (plot_dimensionless_diagnostics_LH.jl's internal alpha_col) --
+            # that's a pre-existing, deliberately-tolerated quirk that's
+            # harmless ONLY because those call sites consume abs(alpha_col),
+            # never its sign. This heatmap displays the signed value, so the
+            # sign must be right: eta_LH_1 is the LEFT end, eta_LH_end is the
+            # RIGHT end (see this file's own docstring above).
+            alpha[i, j] = (abs2(d.eta_LH_1) - abs2(d.eta_LH_end)) / (abs2(d.eta_LH_1) + abs2(d.eta_LH_end))
         end
     end
 
@@ -72,7 +81,7 @@ function plot_sa_heatmaps(grid)
     p4 = heatmap(grid.xM_grid, grid.logK_grid, grid.alpha';
         title = L"\alpha \;\mathrm{(for\ reference)}", colormap = cgrad(:RdBu, rev = true), clims = (-1, 1), common...)
 
-    return plot(p1, p2, p3, p4; layout = (1, 4), size = (2200, 520))
+    return plot(p1, p2, p3, p4; layout = (2, 2), size = (1200, 900))
 end
 
 function main()
@@ -89,7 +98,7 @@ function main()
     end
     println("Saved $csv_path")
 
-    fig_path = joinpath(OUTPUT_DIR, "figures", "sa_decomposition_heatmaps.png")
+    fig_path = joinpath(OUTPUT_DIR, "figures", "sa_decomposition_heatmaps.pdf")
     mkpath(dirname(fig_path))
     p = plot_sa_heatmaps(grid)
     savefig(p, fig_path)
