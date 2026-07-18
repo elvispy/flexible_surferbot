@@ -52,33 +52,23 @@ const GRAY = RGBf(0.25, 0.25, 0.25)
 # cm-unicode ships no such file, so math symbols keep Latin Modern Math
 # (harder to notice a mismatch on symbols than on the italic and digit
 # glyphs of the tick labels/legend text most of these figures show).
-function _kpsewhich(fname, fallback)
-    p = try
-        strip(read(`kpsewhich $fname`, String))
-    catch
-        ""
-    end
-    isempty(p) ? fallback : p
-end
-const CMU_DIR = dirname(_kpsewhich("cmunrm.otf",
-    "/usr/local/texlive/2025/texmf-dist/fonts/opentype/public/cm-unicode/cmunrm.otf"))
-const LM_FONT = joinpath(CMU_DIR, "cmunrm.otf")
+const NEWCM_DIR = "/usr/local/texlive/2025/texmf-dist/fonts/opentype/public/newcomputermodern"
+const LM_FONT = joinpath(NEWCM_DIR, "NewCM10-Regular.otf")
+const NEWCM_MATH = joinpath(NEWCM_DIR, "NewCMMath-Regular.otf")
 const XM_HIGHLIGHTS = [-0.12, -0.1885, -0.272]
 
 function setup_lm_mathfonts()
     MTE_ID = Base.PkgId(Base.UUID("0a4f8689-d25c-4efe-a92b-7142dfc1aa53"), "MathTeXEngine")
     MTE = get(Base.loaded_modules, MTE_ID, nothing)
     MTE === nothing && return
-    LM_MATH = _kpsewhich("latinmodern-math.otf",
-        "/usr/local/texlive/2025/texmf-dist/fonts/opentype/public/lm-math/latinmodern-math.otf")
-    isfile(LM_MATH) || return
+    isfile(NEWCM_MATH) || return
     try
         MTE.set_texfont_family!(
-            regular    = joinpath(CMU_DIR, "cmunrm.otf"),
-            italic     = joinpath(CMU_DIR, "cmunti.otf"),
-            bold       = joinpath(CMU_DIR, "cmunbx.otf"),
-            bolditalic = joinpath(CMU_DIR, "cmunbi.otf"),
-            math       = LM_MATH,
+            regular    = joinpath(NEWCM_DIR, "NewCM10-Regular.otf"),
+            italic     = joinpath(NEWCM_DIR, "NewCM10-Italic.otf"),
+            bold       = joinpath(NEWCM_DIR, "NewCM10-Bold.otf"),
+            bolditalic = joinpath(NEWCM_DIR, "NewCM10-BoldItalic.otf"),
+            math       = NEWCM_MATH,
         )
     catch
     end
@@ -554,30 +544,29 @@ function make_single_axis_panel(sw, d, F_T_star; xlabel, outfile,
     ylim = isnothing(ylims) ? panel_limits(yt, yt) : ylims
     
     # Standalone-panel font scale: this panel is embedded at 0.7\textwidth as a
-    # single sub-figure (Fig 3c), unlike the other make_sweep_panel outputs of
-    # this script (embedded at full \textwidth), so it needs larger absolute
-    # font sizes to print at the same size as neighbouring panels. Value
-    # tuned by comparing tick-digit height against Fig 3b in the compiled PDF.
-    FONT_SCALE = 2.5
+    # single sub-figure (Fig 3c). To match Fig 3b (which is 1100px at 0.5\textwidth 
+    # with 39pt fonts), the effective scaling requires a FONT_SCALE of 1.2
+    # to yield exactly the same physical text size on the page.
+    FONT_SCALE = 1.2
     ax = Axis(fig[1, 1];
         xlabel,
         ylabel = L"F_T/F_T^\ast",
-        xlabelsize = 29 * FONT_SCALE,
-        ylabelsize = 29 * FONT_SCALE,
+        xlabelsize = 33 * FONT_SCALE, # 33 * 1.2 * 0.7 / 1285 ≈ 0.0179 (matches 3b's 39 * 0.5 / 1100 = 0.0177)
+        ylabelsize = 33 * FONT_SCALE,
         ylabelfont = LM_FONT,
         ylabelpadding = 24 * FONT_SCALE,
-        xticklabelsize = 26 * FONT_SCALE,
-        yticklabelsize = 26 * FONT_SCALE,
+        xticklabelsize = 24 * FONT_SCALE, # 24 * 1.2 * 0.7 / 1285 ≈ 0.0130 (matches 3b's 29 * 0.5 / 1100 = 0.0131)
+        yticklabelsize = 24 * FONT_SCALE,
         xscale, xticks, limits = ((minimum(sw.x), maximum(sw.x)), ylim),
         alignmode = Makie.Mixed(left = Makie.Protrusion(125 * FONT_SCALE), right = Makie.Protrusion(90 * FONT_SCALE)))
 
-    lines!(ax, sw.x[order], yt[order]; color = BLUE, linewidth = 3)
+    lines!(ax, sw.x[order], yt[order]; color = BLUE, linewidth = 4)
     if !isnothing(marker_point)
         s1 = scatter!(ax, [marker_point.x], [marker_point.y];
-            marker = :star5, markersize = 40, color = GOLD,
+            marker = :star5, markersize = 25, color = GOLD,
             strokecolor = :black, strokewidth = 1.6)
         axislegend(ax, [s1], ["SurferBot"]; position = :rt,
-            labelsize = 22 * FONT_SCALE,
+            labelsize = 24 * FONT_SCALE,
             backgroundcolor = (:white, 0.86), framecolor = (:black, 0.45))
     end
     if show_zero
