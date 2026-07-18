@@ -261,8 +261,7 @@ function main()
                     xticklabelsize = 18, yticklabelsize = 18,
                     xlabelsize = 22, ylabelsize = 22,
                     xminorticksvisible = false, xminorgridvisible = false,
-                    yminorgridvisible = false,
-                    clip_decorations = false)
+                    yminorgridvisible = false)
                 panel_axes[r, c] = ax
                 last_hm = draw_panel!(ax, maps[r, c];
                     show_xlabel = r == length(ROW_SPECS),
