@@ -253,8 +253,10 @@ function main()
             for c in eachindex(COL_SPECS)
                 show_top_ticks = r == 1 && c == 2
                 show_outer_bottom_ticks = r == length(ROW_SPECS) && c != 2
-                panel_xticks = c == 1 ? [-0.5, -0.25] :
-                               c == length(COL_SPECS) ? [-0.25, 0.0] : -0.5:0.25:0
+                panel_xticks = c == 1 ?
+                    ([-0.5, -0.25, 0.0], ["-0.50", "-0.25", ""]) :
+                    c == length(COL_SPECS) ?
+                    ([-0.5, -0.25, 0.0], ["", "-0.25", "0.00"]) : -0.5:0.25:0
                 ax = CairoMakie.Axis(fig[r + 1, c + 2],
                     xticklabelsize = 18, yticklabelsize = 18,
                     xlabelsize = 22, ylabelsize = 22,
