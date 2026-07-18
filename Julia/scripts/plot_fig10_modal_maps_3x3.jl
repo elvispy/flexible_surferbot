@@ -252,6 +252,9 @@ function main()
                 fontsize = 20, tellheight = false)
             for c in eachindex(COL_SPECS)
                 show_top_ticks = r == 1 && c == 2
+                show_outer_bottom_ticks = r == length(ROW_SPECS) && c != 2
+                panel_xticks = c == 1 ? [-0.5, -0.25] :
+                               c == length(COL_SPECS) ? [-0.25, 0.0] : -0.5:0.25:0
                 ax = CairoMakie.Axis(fig[r + 1, c + 2],
                     xticklabelsize = 18, yticklabelsize = 18,
                     xlabelsize = 22, ylabelsize = 22,
@@ -261,8 +264,9 @@ function main()
                 last_hm = draw_panel!(ax, maps[r, c];
                     show_xlabel = r == length(ROW_SPECS),
                     show_yticks = c == 1,
-                    show_xticks = show_top_ticks,
-                    xaxisposition = show_top_ticks ? :top : :bottom)
+                    show_xticks = show_top_ticks || show_outer_bottom_ticks,
+                    xaxisposition = show_top_ticks ? :top : :bottom,
+                    xticks = panel_xticks)
             end
         end
         for r in 1:size(panel_axes, 1), c in 1:size(panel_axes, 2)
