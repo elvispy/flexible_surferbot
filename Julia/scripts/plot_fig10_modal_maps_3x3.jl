@@ -10,6 +10,27 @@ const JULIA_DIR = normpath(joinpath(@__DIR__, ".."))
 const OUTPUT_DIR = joinpath(JULIA_DIR, "output")
 include(joinpath(JULIA_DIR, "scripts", "plot_dimensionless_diagnostics_LH.jl"))
 
+const NEWCM_DIR = "/usr/local/texlive/2025/texmf-dist/fonts/opentype/public/newcomputermodern"
+const NEWCM_FONT = joinpath(NEWCM_DIR, "NewCM10-Regular.otf")
+const NEWCM_MATH = joinpath(NEWCM_DIR, "NewCMMath-Regular.otf")
+
+function setup_newcm_mathfonts()
+    MTE_ID = Base.PkgId(Base.UUID("0a4f8689-d25c-4efe-a92b-7142dfc1aa53"), "MathTeXEngine")
+    MTE = get(Base.loaded_modules, MTE_ID, nothing)
+    MTE === nothing && return
+    isfile(NEWCM_MATH) || return
+    try
+        MTE.set_texfont_family!(
+            regular    = joinpath(NEWCM_DIR, "NewCM10-Regular.otf"),
+            italic     = joinpath(NEWCM_DIR, "NewCM10-Italic.otf"),
+            bold       = joinpath(NEWCM_DIR, "NewCM10-Bold.otf"),
+            bolditalic = joinpath(NEWCM_DIR, "NewCM10-BoldItalic.otf"),
+            math       = NEWCM_MATH,
+        )
+    catch
+    end
+end
+
 struct RowSpec
     title
     artifact::Symbol
@@ -187,6 +208,8 @@ function draw_panel!(ax, data; show_xlabel::Bool, show_yticks::Bool, show_xticks
 end
 
 function main()
+    setup_newcm_mathfonts()
+
     artifacts = Dict(
         :coupled => Surferbot.Sweep.load_sweep(joinpath(
             OUTPUT_DIR, "jld2", "sweep_motor_position_EI_coupled_from_matlab.jld2")),
@@ -215,7 +238,7 @@ function main()
         end
     end
 
-    CairoMakie.with_theme(CairoMakie.theme_latexfonts()) do
+    CairoMakie.with_theme(CairoMakie.theme_latexfonts(); fonts = (; regular = NEWCM_FONT)) do
         fig = CairoMakie.Figure(size = (940, 820), backgroundcolor = :white,
             fontsize = 20, figure_padding = (2, 1, 40, 2))
         last_hm = nothing

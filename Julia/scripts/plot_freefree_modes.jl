@@ -4,7 +4,26 @@ using LaTeXStrings
 using Printf
 
 const FIG_DIR = joinpath(@__DIR__, "../output/figures")
-const LM_FONT = "Latin Modern Roman"
+const NEWCM_DIR = "/usr/local/texlive/2025/texmf-dist/fonts/opentype/public/newcomputermodern"
+const NEWCM_FONT = joinpath(NEWCM_DIR, "NewCM10-Regular.otf")
+const NEWCM_MATH = joinpath(NEWCM_DIR, "NewCMMath-Regular.otf")
+
+function setup_newcm_mathfonts()
+    MTE_ID = Base.PkgId(Base.UUID("0a4f8689-d25c-4efe-a92b-7142dfc1aa53"), "MathTeXEngine")
+    MTE = get(Base.loaded_modules, MTE_ID, nothing)
+    MTE === nothing && return
+    isfile(NEWCM_MATH) || return
+    try
+        MTE.set_texfont_family!(
+            regular    = joinpath(NEWCM_DIR, "NewCM10-Regular.otf"),
+            italic     = joinpath(NEWCM_DIR, "NewCM10-Italic.otf"),
+            bold       = joinpath(NEWCM_DIR, "NewCM10-Bold.otf"),
+            bolditalic = joinpath(NEWCM_DIR, "NewCM10-BoldItalic.otf"),
+            math       = NEWCM_MATH,
+        )
+    catch
+    end
+end
 
 function freefree_modes_l2(n_modes::Int; n_pts::Int = 600)
     xi = range(0.0, 1.0; length = n_pts)
@@ -29,6 +48,8 @@ function freefree_modes_l2(n_modes::Int; n_pts::Int = 600)
 end
 
 function plot_modes()
+    setup_newcm_mathfonts()
+    
     xi, modes = freefree_modes_l2(5)
     n_modes = length(modes)
     beta_vals = vcat(0.0, 0.0, Surferbot.freefree_betaL_roots(n_modes - 2))
@@ -38,7 +59,7 @@ function plot_modes()
     ylims = (-ylim_abs, ylim_abs)
 
     set_theme!(Theme(
-        fonts = (; regular = LM_FONT),
+        fonts = (; regular = NEWCM_FONT),
         fontsize = 18,
         Axis = (;
             xlabelsize = 20, ylabelsize = 20,
@@ -71,9 +92,9 @@ function plot_modes()
         lines!(ax, xi, modes[i]; color = :black, linewidth = 1.8)
         label_y = ylim_abs * 0.90
         label = @sprintf("n = %d,\\; \\beta_n = %.2f", n, beta_vals[i])
-        text!(ax, -0.50, label_y;
+        text!(ax, -0.48, label_y;
             text = latexstring(label),
-            fontsize = 20, font = LM_FONT,
+            fontsize = 20, font = NEWCM_FONT,
             align = (:left, :top))
     end
 
