@@ -163,6 +163,51 @@ function theoretical_phase_orthogonality_field(EI_list, xM_grid, theory_ctx)
     return phase_orthogonality_field(S_field, A_field)
 end
 
+function add_LH_curve_legend!(p)
+    # GR shortens automatic legend samples enough to erase dashed and dash-dot
+    # styles. Draw a local key from ordinary line primitives instead.
+    x_left, x_right = -0.492, -0.080
+    y_bottom, y_top = -0.38, 0.42
+    plot!(p, Shape([x_left, x_right, x_right, x_left],
+                   [y_bottom, y_bottom, y_top, y_top]);
+          seriestype=:shape, fillcolor=RGBA(1, 1, 1, 0.85),
+          linecolor=:black, linewidth=1.5, label=false)
+
+    # The ordinate is log10(kappa), despite its exponential tick labels.
+    rows = (0.22, -0.02, -0.26)
+    entries = [
+        (sample_x=(-0.482, -0.395), text_x=-0.380, y=rows[1], label=CURVE_LABELS[1], color=:black, style=:solid),
+        (sample_x=(-0.482, -0.395), text_x=-0.380, y=rows[2], label=CURVE_LABELS[2], color=:black, style=:dashdot),
+        (sample_x=(-0.482, -0.395), text_x=-0.380, y=rows[3], label=L"S \perp A", color=:black, style=:dash),
+        (sample_x=(-0.285, -0.198), text_x=-0.183, y=rows[1], label=CURVE_LABELS[3], color="#CC79A7", style=:dash),
+        (sample_x=(-0.285, -0.198), text_x=-0.183, y=rows[2], label=CURVE_LABELS[4], color="#CC79A7", style=:solid),
+    ]
+
+    for entry in entries
+        x0, x1 = entry.sample_x
+        y = entry.y
+        dx = x1 - x0
+        if entry.style == :solid
+            plot!(p, [x0, x1], [y, y]; color=entry.color, linewidth=4.0, label=false)
+        elseif entry.style == :dash
+            for (xa, xb) in ((x0, x0 + 0.31dx), (x0 + 0.56dx, x1))
+                plot!(p, [xa, xb], [y, y]; color=entry.color, linewidth=4.0, label=false)
+            end
+        else
+            # Explicit dash-dot-dash sample: GR otherwise reduces a short
+            # dash-dot legend handle to a solid stroke.
+            plot!(p, [x0, x0 + 0.25dx], [y, y]; color=entry.color, linewidth=4.0, label=false)
+            scatter!(p, [x0 + 0.47dx], [y]; color=entry.color, markerstrokewidth=0,
+                     markersize=4, label=false)
+            plot!(p, [x0 + 0.64dx, x1], [y, y]; color=entry.color, linewidth=4.0, label=false)
+        end
+    end
+    annotations = [(entry.text_x, entry.y, text(entry.label, 11, "Computer Modern", :black, :left))
+                   for entry in entries]
+    annotate!(p, annotations)
+    return p
+end
+
 function roots_for_condition(condition_name, xgrid, absS, absA, abs_eta_1, abs_eta_end)
     if condition_name == "S"
         ratio = absS ./ max.(absA, eps())
@@ -585,10 +630,7 @@ function build_LH_plot(artifact, csv_path, output_dir; xlim_min::Float64,
         interpolate = true,
         xlims   = YLIMS,
         ylims   = XLIMS,
-        legend  = :topleft,
-        background_color_legend = RGBA(1, 1, 1, 0.85),
-        foreground_color_legend = :black,
-        legend_font_halign = :left,
+        legend  = false,
         size    = (820, 640),
         margin  = 6Plots.mm,
         dpi     = 300,
@@ -614,7 +656,7 @@ function build_LH_plot(artifact, csv_path, output_dir; xlim_min::Float64,
         isempty(res.logK[mask]) && continue
         lk_path, xm_path, res_lks = cluster_branches(res.logK[mask], res.xM_norm[mask])
         isempty(lk_path) || plot!(p, xm_path, lk_path;
-            label      = CURVE_LABELS[i],
+            label      = false,
             color      = curve_colors[i],
             linestyle  = curve_styles[i],
             linewidth  = 4.0)
@@ -629,8 +671,8 @@ function build_LH_plot(artifact, csv_path, output_dir; xlim_min::Float64,
     contour!(p, orth_xM, scatter_logK, orthogonality';
              levels=[0.0], color=orth_color, linewidth=3.0,
              linestyle=:dash, colorbar=false, label=false)
-    plot!(p, [NaN], [NaN]; label=L"S \perp A", color=orth_color,
-          linewidth=3.0, linestyle=:dash)
+
+    add_LH_curve_legend!(p)
 
     return p
 end

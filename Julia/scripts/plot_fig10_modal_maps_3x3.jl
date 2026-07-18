@@ -164,7 +164,8 @@ function exp_ticks(log_xlim)
     return vals, labels
 end
 
-function draw_panel!(ax, data; show_xlabel::Bool, show_yticks::Bool, show_xticks::Bool)
+function draw_panel!(ax, data; show_xlabel::Bool, show_yticks::Bool, show_xticks::Bool,
+                     xaxisposition::Symbol=:bottom, xticks=-0.5:0.25:0)
     hm = CairoMakie.heatmap!(ax, data.xM, data.kappa, data.alpha;
         colormap = :balance, colorrange = (-1, 1))
     CairoMakie.xlims!(ax, -0.5, 0)
@@ -172,11 +173,12 @@ function draw_panel!(ax, data; show_xlabel::Bool, show_yticks::Bool, show_xticks
     ax.yscale = log10
     ticks, labels = exp_ticks(data.xlim)
     ax.yticks = (ticks, labels)
-    ax.xticks = -0.5:0.25:0
+    ax.xticks = xticks
+    ax.xaxisposition = xaxisposition
     ax.xlabel = show_xlabel ? L"x_M/L" : ""
     ax.ylabel = show_yticks ? L"\kappa" : ""
     if !show_xticks
-        CairoMakie.hidexdecorations!(ax; grid = false)
+        CairoMakie.hidexdecorations!(ax; label = !show_xlabel, grid = false)
     end
     if !show_yticks
         CairoMakie.hideydecorations!(ax; grid = false)
@@ -214,8 +216,8 @@ function main()
     end
 
     CairoMakie.with_theme(CairoMakie.theme_latexfonts()) do
-        fig = CairoMakie.Figure(size = (940, 760), backgroundcolor = :white,
-            fontsize = 20, figure_padding = (2, 1, 2, 2))
+        fig = CairoMakie.Figure(size = (940, 820), backgroundcolor = :white,
+            fontsize = 20, figure_padding = (2, 1, 40, 2))
         last_hm = nothing
         panel_axes = Matrix{CairoMakie.Axis}(undef, length(ROW_SPECS), length(COL_SPECS))
         for c in eachindex(COL_SPECS)
@@ -225,9 +227,9 @@ function main()
         for r in eachindex(ROW_SPECS)
             CairoMakie.Label(fig[r + 1, 1], ROW_SPECS[r].title, rotation = pi / 2,
                 fontsize = 20, tellheight = false)
-            # x_M/L is now the per-panel x-axis label (bottom row, via draw_panel!)
-            # rather than a shared per-row side label, since kappa/xM axes are transposed.
             for c in eachindex(COL_SPECS)
+                panel_xticks = c == 1 ? [-0.5, -0.25] :
+                               c == length(COL_SPECS) ? [-0.25, 0.0] : [-0.25]
                 ax = CairoMakie.Axis(fig[r + 1, c + 2],
                     xticklabelsize = 18, yticklabelsize = 18,
                     xlabelsize = 22, ylabelsize = 22,
@@ -237,7 +239,9 @@ function main()
                 last_hm = draw_panel!(ax, maps[r, c];
                     show_xlabel = r == length(ROW_SPECS),
                     show_yticks = c == 1,
-                    show_xticks = r == length(ROW_SPECS))
+                    show_xticks = r == 2,
+                    xaxisposition = r == 2 ? :top : :bottom,
+                    xticks = panel_xticks)
             end
         end
         for r in 1:size(panel_axes, 1), c in 1:size(panel_axes, 2)
@@ -248,8 +252,8 @@ function main()
         end
         CairoMakie.Colorbar(fig[2:4, 6], last_hm, label = L"\alpha",
             labelsize = 22, ticklabelsize = 18, width = 18)
-        CairoMakie.colgap!(fig.layout, 5)
-        CairoMakie.rowgap!(fig.layout, 18)
+        CairoMakie.colgap!(fig.layout, 18)
+        CairoMakie.rowgap!(fig.layout, 32)
         CairoMakie.colsize!(fig.layout, 1, CairoMakie.Fixed(40))
         CairoMakie.colsize!(fig.layout, 2, CairoMakie.Fixed(5))
         CairoMakie.colsize!(fig.layout, 6, CairoMakie.Fixed(42))
