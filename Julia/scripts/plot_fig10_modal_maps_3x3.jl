@@ -239,7 +239,7 @@ function main()
     end
 
     CairoMakie.with_theme(CairoMakie.theme_latexfonts(); fonts = (; regular = NEWCM_FONT)) do
-        fig = CairoMakie.Figure(size = (940, 820), backgroundcolor = :white,
+        fig = CairoMakie.Figure(size = (1004, 820), backgroundcolor = :white,
             fontsize = 20, figure_padding = (2, 1, 40, 2))
         last_hm = nothing
         panel_axes = Matrix{CairoMakie.Axis}(undef, length(ROW_SPECS), length(COL_SPECS))
@@ -261,13 +261,8 @@ function main()
                     xticklabelsize = 18, yticklabelsize = 18,
                     xlabelsize = 22, ylabelsize = 22,
                     xminorticksvisible = false, xminorgridvisible = false,
-                    yminorgridvisible = false)
-                # Keep labels at shared panel boundaries inside their own axes.
-                if c == 1
-                    ax.xticklabelalign = (:right, :top)
-                elseif c == length(COL_SPECS)
-                    ax.xticklabelalign = (:left, :top)
-                end
+                    yminorgridvisible = false,
+                    clip_decorations = false)
                 panel_axes[r, c] = ax
                 last_hm = draw_panel!(ax, maps[r, c];
                     show_xlabel = r == length(ROW_SPECS),
@@ -285,7 +280,7 @@ function main()
         end
         CairoMakie.Colorbar(fig[2:4, 6], last_hm, label = L"\alpha",
             labelsize = 22, ticklabelsize = 18, width = 18)
-        CairoMakie.colgap!(fig.layout, 18)
+        CairoMakie.colgap!(fig.layout, 50)
         CairoMakie.rowgap!(fig.layout, 32)
         CairoMakie.colsize!(fig.layout, 1, CairoMakie.Fixed(40))
         CairoMakie.colsize!(fig.layout, 2, CairoMakie.Fixed(5))
