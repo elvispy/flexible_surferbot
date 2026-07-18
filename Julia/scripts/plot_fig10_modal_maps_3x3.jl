@@ -239,8 +239,8 @@ function main()
     end
 
     CairoMakie.with_theme(CairoMakie.theme_latexfonts(); fonts = (; regular = NEWCM_FONT)) do
-        fig = CairoMakie.Figure(size = (1004, 820), backgroundcolor = :white,
-            fontsize = 20, figure_padding = (2, 1, 40, 2))
+        fig = CairoMakie.Figure(size = (940, 820), backgroundcolor = :white,
+            fontsize = 20, figure_padding = (2, 1, 15, 2))
         last_hm = nothing
         panel_axes = Matrix{CairoMakie.Axis}(undef, length(ROW_SPECS), length(COL_SPECS))
         for c in eachindex(COL_SPECS)
@@ -279,12 +279,16 @@ function main()
         end
         CairoMakie.Colorbar(fig[2:4, 6], last_hm, label = L"\alpha",
             labelsize = 22, ticklabelsize = 18, width = 18)
-        CairoMakie.colgap!(fig.layout, 50)
-        CairoMakie.rowgap!(fig.layout, 32)
+        CairoMakie.colgap!(fig.layout, 8)
+        CairoMakie.colgap!(fig.layout, 3, 35)
+        CairoMakie.colgap!(fig.layout, 4, 35)
+        CairoMakie.colgap!(fig.layout, 5, 20)
+        CairoMakie.rowgap!(fig.layout, 16)
+        CairoMakie.rowgap!(fig.layout, 1, 12)
         CairoMakie.colsize!(fig.layout, 1, CairoMakie.Fixed(40))
         CairoMakie.colsize!(fig.layout, 2, CairoMakie.Fixed(5))
         CairoMakie.colsize!(fig.layout, 6, CairoMakie.Fixed(42))
-        CairoMakie.rowsize!(fig.layout, 1, CairoMakie.Fixed(34))
+        CairoMakie.rowsize!(fig.layout, 1, CairoMakie.Fixed(24))
 
         out = joinpath(OUTPUT_DIR, "figures", "plot_fig10_modal_maps_3x3.pdf")
         mkpath(dirname(out))
