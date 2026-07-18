@@ -228,8 +228,7 @@ function main()
             CairoMakie.Label(fig[r + 1, 1], ROW_SPECS[r].title, rotation = pi / 2,
                 fontsize = 20, tellheight = false)
             for c in eachindex(COL_SPECS)
-                panel_xticks = c == 1 ? [-0.5, -0.25] :
-                               c == length(COL_SPECS) ? [-0.25, 0.0] : [-0.25]
+                show_top_ticks = r == 1 && c == 2
                 ax = CairoMakie.Axis(fig[r + 1, c + 2],
                     xticklabelsize = 18, yticklabelsize = 18,
                     xlabelsize = 22, ylabelsize = 22,
@@ -239,9 +238,8 @@ function main()
                 last_hm = draw_panel!(ax, maps[r, c];
                     show_xlabel = r == length(ROW_SPECS),
                     show_yticks = c == 1,
-                    show_xticks = r == 2,
-                    xaxisposition = r == 2 ? :top : :bottom,
-                    xticks = panel_xticks)
+                    show_xticks = show_top_ticks,
+                    xaxisposition = show_top_ticks ? :top : :bottom)
             end
         end
         for r in 1:size(panel_axes, 1), c in 1:size(panel_axes, 2)
