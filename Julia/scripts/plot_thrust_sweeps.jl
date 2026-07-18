@@ -22,6 +22,7 @@ using Surferbot
 using JLD2
 using CairoMakie
 using LaTeXStrings
+import Plots
 using Printf
 using CSV
 using DataFrames
@@ -538,48 +539,54 @@ function make_single_axis_panel(sw, d, F_T_star; xlabel, outfile,
                                 xscale=identity, xticks=Makie.automatic,
                                 ylims=nothing, show_zero=true,
                                 marker_point=nothing)
-    fig = makie_figure()
     yt = sw.thrust .* d ./ abs(F_T_star)
     order = sortperm(sw.x)
     ylim = isnothing(ylims) ? panel_limits(yt, yt) : ylims
     
-    # Standalone-panel font scale: this panel is embedded at 0.7\textwidth as a
-    # single sub-figure (Fig 3c). To match Fig 3b (which is 1100px at 0.5\textwidth 
-    # with 39pt fonts), the effective scaling requires a FONT_SCALE of 1.2
-    # to yield exactly the same physical text size on the page.
-    FONT_SCALE = 1.2
-    ax = Axis(fig[1, 1];
-        xlabel,
-        ylabel = L"F_T/F_T^\ast",
-        xlabelsize = 33 * FONT_SCALE, # 33 * 1.2 * 0.7 / 1285 ≈ 0.0179 (matches 3b's 39 * 0.5 / 1100 = 0.0177)
-        ylabelsize = 33 * FONT_SCALE,
-        ylabelfont = LM_FONT,
-        ylabelpadding = 24 * FONT_SCALE,
-        xticklabelsize = 24 * FONT_SCALE, # 24 * 1.2 * 0.7 / 1285 ≈ 0.0130 (matches 3b's 29 * 0.5 / 1100 = 0.0131)
-        yticklabelsize = 24 * FONT_SCALE,
-        xscale, xticks, limits = ((minimum(sw.x), maximum(sw.x)), ylim),
-        alignmode = Makie.Mixed(left = Makie.Protrusion(125 * FONT_SCALE), right = Makie.Protrusion(90 * FONT_SCALE)))
+    Plots.gr()
+    
+    p = Plots.plot(sw.x[order], yt[order];
+        color          = Plots.RGB(0.10, 0.30, 0.80),
+        linewidth      = 4.0,
+        label          = false,
+        xlabel         = xlabel,
+        ylabel         = L"F_T/F_T^\ast",
+        xscale         = xscale == log10 ? :log10 : :identity,
+        xticks         = xticks,
+        ylims          = ylim,
+        grid           = true,
+        framestyle     = :box,
+        fontfamily     = "Computer Modern",
+        guidefontsize  = 39,
+        tickfontsize   = 29,
+        size           = (1100, 530),
+        dpi            = 220,
+        left_margin    = 16Plots.mm,
+        bottom_margin  = 14Plots.mm,
+        top_margin     = 4Plots.mm,
+        right_margin   = 5Plots.mm,
+    )
 
-    lines!(ax, sw.x[order], yt[order]; color = BLUE, linewidth = 4)
     if !isnothing(marker_point)
-        s1 = scatter!(ax, [marker_point.x], [marker_point.y];
-            marker = :star5, markersize = 25, color = GOLD,
-            strokecolor = :black, strokewidth = 1.6)
-        axislegend(ax, [s1], ["SurferBot"]; position = :rt,
-            labelsize = 24 * FONT_SCALE,
-            backgroundcolor = (:white, 0.86), framecolor = (:black, 0.45))
+        Plots.scatter!(p, [marker_point.x], [marker_point.y];
+            color = Plots.RGB(0.84, 0.55, 0.10),
+            markerstrokecolor = :black,
+            markerstrokewidth = 1.6,
+            markersize = 14,
+            marker = :star5,
+            label = "SurferBot",
+            legend = :topright,
+            legendfontsize = 29
+        )
     end
+    
     if show_zero
-        hlines!(ax, [0.0]; color = (:black, 0.55), linewidth = 1)
+        Plots.hline!(p, [0.0]; color = :black, alpha = 0.55, linewidth = 1, label = false)
     end
-
-    Makie.colsize!(fig.layout, 1, Makie.Fixed(1285))
-    Makie.rowsize!(fig.layout, 1, Makie.Fixed(355))
-    Makie.resize_to_layout!(fig)
-
-    save(outfile * ".pdf", fig)
-    save(outfile * ".png", fig; px_per_unit = 2)
-    println("Saved $outfile.{pdf,png}")
+    
+    Plots.savefig(p, outfile * ".pdf")
+    Plots.savefig(p, outfile * ".png")
+    println("Saved $outfile.{pdf,png} (via Plots.jl)")
 end
 
 # ─── Main ─────────────────────────────────────────────────────────────────────
