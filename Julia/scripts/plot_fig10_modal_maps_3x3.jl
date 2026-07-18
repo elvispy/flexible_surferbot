@@ -197,6 +197,8 @@ function draw_panel!(ax, data; show_xlabel::Bool, show_yticks::Bool, show_xticks
     ax.xticks = xticks
     ax.xaxisposition = xaxisposition
     ax.xlabel = show_xlabel ? L"x_M/L" : ""
+    # Hidden center ticks still reserve the outer axes' label clearance.
+    ax.xlabelpadding = show_xlabel && !show_xticks ? 34 : 0
     ax.ylabel = show_yticks ? L"\kappa" : ""
     if !show_xticks
         CairoMakie.hidexdecorations!(ax; label = !show_xlabel, grid = false)
