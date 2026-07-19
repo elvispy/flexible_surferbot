@@ -418,10 +418,11 @@ function draw_sweep_axis!(figpos, labelpos, sweep; legend_position = :rb,
         xlabelsize = sweep_labelsize,
         xticklabelsize = sweep_ticksize,
         yticklabelsize = sweep_ticksize,
+        ytickformat = vals -> [@sprintf("%.1f", v) for v in vals],
         xscale = sweep.xscale,
         xticks = sweep.xticks,
         limits = ((minimum(sweep.x), maximum(sweep.x)), (-ylim, ylim)),
-        alignmode = CM.Mixed(left = CM.Protrusion(125), right = CM.Protrusion(90)))
+        alignmode = CM.Mixed(left = CM.Protrusion(150), right = CM.Protrusion(90)))
         
     CM.Label(labelpos, L"\text{Normalized thrust}", rotation = pi/2, fontsize = sweep_labelsize, font = LM_FONT)
         

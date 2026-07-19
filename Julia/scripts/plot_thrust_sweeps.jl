@@ -456,7 +456,7 @@ function add_dual_axis!(fig, sw, alpha_sw, d, F_T_star; xlabel, xscale=identity,
 
     ax = Axis(fig[1, 1];
         xlabel,
-        xscale, xticks, ytickformat = x -> [@sprintf("%.0f", v) for v in x],
+        xscale, xticks, ytickformat = x -> [@sprintf("%.1f", v) for v in x],
         limits = (xlim, ylim),
         alignmode = Makie.Mixed(left = Makie.Protrusion(125), right = Makie.Protrusion(90)))
 
