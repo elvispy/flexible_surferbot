@@ -526,10 +526,12 @@ function make_single_axis_panel(sw, d, F_T_star; xlabel, outfile,
     ylim = isnothing(ylims) ? panel_limits(yt, yt) : ylims
     
     PaperPlotTheme.with_theme() do
-        fig = Figure(size = (1100, 530), backgroundcolor = :white, figure_padding = (28, 8, 8, 18))
+        # Match Figure 3(b)'s data-frame aspect despite the shorter Re tick set.
+        fig = Figure(size = (1100, 530), backgroundcolor = :white, figure_padding = (28, 8, 18, 21))
         ax = Axis(fig[1, 1]; xlabel = xlabel, ylabel = L"F_T/F_T^\ast",
             xlabelsize = FIG3_LABELSIZE, ylabelsize = FIG3_LABELSIZE,
             xticklabelsize = FIG3_TICKSIZE, yticklabelsize = FIG3_TICKSIZE,
+            xlabelpadding = -20, xticklabelpad = -8,
             xscale = xscale, xticks = xticks, xgridvisible = true, ygridvisible = true)
         xlims!(ax, minimum(sw.x), maximum(sw.x))
         ylims!(ax, ylim...)

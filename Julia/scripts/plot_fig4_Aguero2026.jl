@@ -68,6 +68,7 @@ function main()
         ax = Axis(fig[1, 1]; xlabel = L"x\;(\mathrm{cm})", ylabel = L"h\;(\mu\mathrm{m})",
             xlabelsize = FIG3_LABELSIZE, ylabelsize = FIG3_LABELSIZE,
             xticklabelsize = FIG3_TICKSIZE, yticklabelsize = FIG3_TICKSIZE,
+            xlabelpadding = -20, xticklabelpad = -8,
             xticks = -6:2:6, yticks = -300:100:300, xgridvisible = true, ygridvisible = true)
         xlims!(ax, -7, 7)
         ylims!(ax, -300, 300)
