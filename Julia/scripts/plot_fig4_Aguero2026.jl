@@ -27,7 +27,7 @@ const FIG1_RAFT = "#000000"
 const FIG1_MOTOR = CairoMakie.RGBf(0.66, 0.43, 0.05)
 const FIG3_LABELSIZE = 62
 const FIG3_TICKSIZE = 47
-const FIG3_TEXT_COLOR = RGBf(0.35, 0.35, 0.35)
+const FIG3_TEXT_COLOR = RGBf(0.25, 0.25, 0.25)
 
 function main()
     fig_dir = joinpath(@__DIR__, "..", "output", "figures")
@@ -66,7 +66,7 @@ function main()
     PaperPlotTheme.with_theme() do
         fig = Figure(size = (1100, 530), backgroundcolor = :white,
             figure_padding = (28, 8, 14, 18))
-        ax = Axis(fig[1, 1]; xlabel = L"x\;(\mathrm{cm})", ylabel = L"h\;(\mathit{\mu}\mathrm{m})",
+        ax = Axis(fig[1, 1]; xlabel = L"x\;(\mathrm{cm})", ylabel = L"h\;(𝜇\mathrm{m})",
             xlabelsize = FIG3_LABELSIZE, ylabelsize = FIG3_LABELSIZE,
             xticklabelsize = FIG3_TICKSIZE, yticklabelsize = FIG3_TICKSIZE,
             xlabelcolor = FIG3_TEXT_COLOR, ylabelcolor = FIG3_TEXT_COLOR,
