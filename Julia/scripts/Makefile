@@ -13,6 +13,7 @@ JLD2_DIR := ../output/jld2
 CSV_DIR  := ../output/csv
 OVERLEAF ?= $(HOME)/Documents/Github/overleaf/wave-driven-propulsion
 TEX      := $(OVERLEAF)/main.tex
+PAPER_THEME := paper_plot_theme.jl
 
 # ── Cluster-generated data (no build rules — must exist before make runs) ───
 THRUST_CACHE    := $(JLD2_DIR)/thrust_sweeps.jld2
@@ -41,40 +42,40 @@ MSG ?= regenerate figures
 all: $(FIGURES)
 
 # ── Figure rules ─────────────────────────────────────────────────────────────
-$(FIG_DIR)/plot_thrust_sweeps_xM.pdf: plot_thrust_sweeps.jl \
+$(FIG_DIR)/plot_thrust_sweeps_xM.pdf: plot_thrust_sweeps.jl $(PAPER_THEME) \
 		$(THRUST_CACHE) $(ALPHA_CACHE) $(SWEEP_CPL_CSV)
 	$(JULIA) --threads auto $<
 
-$(FIG_DIR)/plot_kappa_snapshot_2.12e-03.pdf: plot_kappa_snapshot.jl
+$(FIG_DIR)/plot_kappa_snapshot_2.12e-03.pdf: plot_kappa_snapshot.jl $(PAPER_THEME)
 	$(JULIA) $< --paper-snapshots
 
-$(FIG_DIR)/plot_kappa_snapshot_grid_flexibility.pdf: plot_kappa_snapshot.jl \
+$(FIG_DIR)/plot_kappa_snapshot_grid_flexibility.pdf: plot_kappa_snapshot.jl $(PAPER_THEME) \
 		$(THRUST_CACHE) $(ALPHA_CACHE) $(SWEEP_CPL_CSV)
 	$(JULIA) $< --snapshot-grids
 
 $(FIG_DIR)/plot_kappa_snapshot_grid_motor_position.pdf: $(FIG_DIR)/plot_kappa_snapshot_grid_flexibility.pdf
 
-$(FIG_DIR)/plot_thrust_beam_and_LH_LH_cbrt.pdf: plot_thrust_beam_and_LH.jl \
+$(FIG_DIR)/plot_thrust_beam_and_LH_LH_cbrt.pdf: plot_thrust_beam_and_LH.jl $(PAPER_THEME) \
 		$(SWEEP_CPL_CSV)
 	$(JULIA) --threads auto $<
 
-$(FIG_DIR)/plot_dimensionless_diagnostics_LH_cpl_theo.pdf: plot_dimensionless_diagnostics_LH.jl \
+$(FIG_DIR)/plot_dimensionless_diagnostics_LH_cpl_theo.pdf: plot_dimensionless_diagnostics_LH.jl $(PAPER_THEME) \
 		../experiments/prescribed_wn_diagonal_impedance.jl \
 		$(SWEEP_CPL_JLD2) $(SWEEP_CPL_CSV)
 	$(JULIA) --threads auto $< --lh-coupled-only
 
-$(FIG_DIR)/plot_freefree_modes.pdf: plot_freefree_modes.jl
+$(FIG_DIR)/plot_freefree_modes.pdf: plot_freefree_modes.jl $(PAPER_THEME)
 	$(JULIA) $<
 
 $(FIG_DIR)/plot_beam_num_modes_cmp_cpl.pdf: plot_beam_num_modes_cmp.jl \
 		$(SWEEP_CPL_JLD2) $(SWEEP_UCPL_JLD2) $(SWEEP_CPL_CSV)
 	$(JULIA) --threads auto $<
 
-$(FIG_DIR)/plot_fig10_modal_maps_3x3.pdf: plot_fig10_modal_maps_3x3.jl \
+$(FIG_DIR)/plot_fig10_modal_maps_3x3.pdf: plot_fig10_modal_maps_3x3.jl $(PAPER_THEME) \
 		$(SWEEP_CPL_JLD2) $(SWEEP_UCPL_JLD2) $(SWEEP_CPL_CSV) $(SWEEP_UCPL_CSV)
 	$(JULIA) --threads auto $<
 
-$(FIG_DIR)/plot_fig4_Aguero2026_1.pdf: plot_fig4_Aguero2026.jl
+$(FIG_DIR)/plot_fig4_Aguero2026_1.pdf: plot_fig4_Aguero2026.jl $(PAPER_THEME)
 	$(JULIA) $<
 
 # ── Sync: copy only figures referenced in main.tex ───────────────────────────

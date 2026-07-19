@@ -22,11 +22,13 @@ using Surferbot
 using JLD2
 using CairoMakie
 using LaTeXStrings
-import Plots
 using Printf
 using CSV
 using DataFrames
 using Base.Threads: @threads, ReentrantLock
+
+include(joinpath(@__DIR__, "paper_plot_theme.jl"))
+using .PaperPlotTheme
 
 const PRINT_LOCK   = ReentrantLock()
 const MAX_WORKERS  = min(Threads.nthreads(), 8)
@@ -43,36 +45,13 @@ const RED = RGBf(0.78, 0.12, 0.18)
 const ALPHA_COLOR = RGBf(0.00, 0.45, 0.25)
 const GOLD = RGBf(0.84, 0.55, 0.10)
 const GRAY = RGBf(0.25, 0.25, 0.25)
-# The paper body (jfm.cls) uses plain LaTeX default Computer Modern, and
-# Plots.jl/GR's fontfamily="Computer Modern" (see plot_fig4_Aguero2026.jl)
-# resolves to the same family. "Latin Modern" is a distinct, only visually-
-# similar redesign -- using it here made every Makie-generated label/tick
-# subtly mismatched against the rest of the paper. cm-unicode ships true
-# Computer Modern as OTF, so text glyphs now match exactly. MathTeXEngine
-# still needs a math font with an OpenType MATH table for symbol layout;
-# cm-unicode ships no such file, so math symbols keep Latin Modern Math
-# (harder to notice a mismatch on symbols than on the italic and digit
-# glyphs of the tick labels/legend text most of these figures show).
 const NEWCM_DIR = "/usr/local/texlive/2025/texmf-dist/fonts/opentype/public/newcomputermodern"
 const LM_FONT = joinpath(NEWCM_DIR, "NewCM10-Regular.otf")
 const NEWCM_MATH = joinpath(NEWCM_DIR, "NewCMMath-Regular.otf")
 const XM_HIGHLIGHTS = [-0.12, -0.1885, -0.272]
 
 function setup_lm_mathfonts()
-    MTE_ID = Base.PkgId(Base.UUID("0a4f8689-d25c-4efe-a92b-7142dfc1aa53"), "MathTeXEngine")
-    MTE = get(Base.loaded_modules, MTE_ID, nothing)
-    MTE === nothing && return
-    isfile(NEWCM_MATH) || return
-    try
-        MTE.set_texfont_family!(
-            regular    = joinpath(NEWCM_DIR, "NewCM10-Regular.otf"),
-            italic     = joinpath(NEWCM_DIR, "NewCM10-Italic.otf"),
-            bold       = joinpath(NEWCM_DIR, "NewCM10-Bold.otf"),
-            bolditalic = joinpath(NEWCM_DIR, "NewCM10-BoldItalic.otf"),
-            math       = NEWCM_MATH,
-        )
-    catch
-    end
+    PaperPlotTheme.setup_mathfonts!()
 end
 const KAPPA_HIGHLIGHTS = [2.1209508879201904e-3, 6.8665e-3, 1.698244e-2]
 const RIGID_XM_VALUES = collect(range(-0.48, 0.48; length = 2 * N_SWEEP - 1))
@@ -543,50 +522,25 @@ function make_single_axis_panel(sw, d, F_T_star; xlabel, outfile,
     order = sortperm(sw.x)
     ylim = isnothing(ylims) ? panel_limits(yt, yt) : ylims
     
-    Plots.gr()
-    
-    p = Plots.plot(sw.x[order], yt[order];
-        color          = Plots.RGB(0.10, 0.30, 0.80),
-        linewidth      = 4.0,
-        label          = false,
-        xlabel         = xlabel,
-        ylabel         = L"F_T/F_T^\ast",
-        xscale         = xscale == log10 ? :log10 : :identity,
-        xticks         = xticks,
-        ylims          = ylim,
-        grid           = true,
-        framestyle     = :box,
-        fontfamily     = "Computer Modern",
-        guidefontsize  = 39,
-        tickfontsize   = 29,
-        size           = (1100, 530),
-        dpi            = 220,
-        left_margin    = 16Plots.mm,
-        bottom_margin  = 14Plots.mm,
-        top_margin     = 4Plots.mm,
-        right_margin   = 5Plots.mm,
-    )
-
-    if !isnothing(marker_point)
-        Plots.scatter!(p, [marker_point.x], [marker_point.y];
-            color = Plots.RGB(0.84, 0.55, 0.10),
-            markerstrokecolor = :black,
-            markerstrokewidth = 1.6,
-            markersize = 14,
-            marker = :star5,
-            label = "SurferBot",
-            legend = :topright,
-            legendfontsize = 29
-        )
+    PaperPlotTheme.with_theme() do
+        fig = Figure(size = (1100, 530), backgroundcolor = :white, figure_padding = (28, 8, 8, 18))
+        ax = Axis(fig[1, 1]; xlabel = xlabel, ylabel = L"F_T/F_T^\ast",
+            xlabelsize = 39, ylabelsize = 39, xticklabelsize = 29, yticklabelsize = 29,
+            xscale = xscale, xticks = xticks, xgridvisible = true, ygridvisible = true)
+        xlims!(ax, minimum(sw.x), maximum(sw.x))
+        ylims!(ax, ylim...)
+        lines!(ax, sw.x[order], yt[order]; color = BLUE, linewidth = 4.0)
+        if !isnothing(marker_point)
+            marker_handle = scatter!(ax, [marker_point.x], [marker_point.y]; marker = :star5,
+                color = GOLD, strokecolor = :black, strokewidth = 1.6, markersize = 20)
+            axislegend(ax, [marker_handle], [L"\text{SurferBot}"]; position = :rt, labelsize = 29)
+        end
+        show_zero && hlines!(ax, [0.0]; color = (:black, 0.55), linewidth = 1.0)
+        save(outfile * ".pdf", fig)
+        save(outfile * ".png", fig; px_per_unit = 2)
     end
-    
-    if show_zero
-        Plots.hline!(p, [0.0]; color = :black, alpha = 0.55, linewidth = 1, label = false)
-    end
-    
-    Plots.savefig(p, outfile * ".pdf")
-    Plots.savefig(p, outfile * ".png")
-    println("Saved $outfile.{pdf,png} (via Plots.jl)")
+    println("Saved $outfile.{pdf,png} (via CairoMakie)")
+    return nothing
 end
 
 # ─── Main ─────────────────────────────────────────────────────────────────────

@@ -37,6 +37,9 @@ using CSV
 using DataFrames
 import CairoMakie as CM
 
+include(joinpath(@__DIR__, "paper_plot_theme.jl"))
+using .PaperPlotTheme
+
 # ─── Parameters ──────────────────────────────────────────────────────────────
 
 function build_params(; EI=nothing, xM_norm=nothing)
@@ -94,25 +97,10 @@ function _kpsewhich(fname, fallback)
 end
 const CMU_DIR = dirname(_kpsewhich("cmunrm.otf",
     "/usr/local/texlive/2025/texmf-dist/fonts/opentype/public/cm-unicode/cmunrm.otf"))
-const LM_FONT = joinpath(CMU_DIR, "cmunrm.otf")
+const LM_FONT = PaperPlotTheme.REGULAR
 
 function setup_lm_mathfonts()
-    MTE_ID = Base.PkgId(Base.UUID("0a4f8689-d25c-4efe-a92b-7142dfc1aa53"), "MathTeXEngine")
-    MTE = get(Base.loaded_modules, MTE_ID, nothing)
-    MTE === nothing && return
-    LM_MATH = _kpsewhich("latinmodern-math.otf",
-        "/usr/local/texlive/2025/texmf-dist/fonts/opentype/public/lm-math/latinmodern-math.otf")
-    isfile(LM_MATH) || return
-    try
-        MTE.set_texfont_family!(
-            regular    = joinpath(CMU_DIR, "cmunrm.otf"),
-            italic     = joinpath(CMU_DIR, "cmunti.otf"),
-            bold       = joinpath(CMU_DIR, "cmunbx.otf"),
-            bolditalic = joinpath(CMU_DIR, "cmunbi.otf"),
-            math       = LM_MATH,
-        )
-    catch
-    end
+    PaperPlotTheme.setup_mathfonts!()
 end
 const THRUST_CACHE_PATH = joinpath(@__DIR__, "..", "output", "jld2", "thrust_sweeps.jld2")
 const ALPHA_CACHE_PATH = joinpath(@__DIR__, "..", "output", "jld2", "alpha_sweep_kappa_farfield.jld2")

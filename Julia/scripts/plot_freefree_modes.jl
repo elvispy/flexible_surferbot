@@ -1,7 +1,10 @@
 using Surferbot
+using CairoMakie
 using LaTeXStrings
 using Printf
-import Plots
+
+include(joinpath(@__DIR__, "paper_plot_theme.jl"))
+using .PaperPlotTheme
 
 const FIG_DIR = joinpath(@__DIR__, "../output/figures")
 
@@ -28,8 +31,6 @@ function freefree_modes_l2(n_modes::Int; n_pts::Int = 600)
 end
 
 function plot_modes()
-    Plots.gr()
-    
     xi, modes = freefree_modes_l2(5)
     n_modes = length(modes)
     beta_vals = vcat(0.0, 0.0, Surferbot.freefree_betaL_roots(n_modes - 2))
@@ -38,51 +39,31 @@ function plot_modes()
     ylim_abs = max(abs(minimum(y_all)), abs(maximum(y_all))) * 1.35
     ylims = (-ylim_abs, ylim_abs)
 
-    subplots = []
-    for i in 1:n_modes
-        n = i - 1
-        is_bottom = (i == n_modes)
-        
-        p = Plots.plot(xi, modes[i];
-            color = :black,
-            linewidth = 1.8,
-            label = false,
-            xlims = (-0.5, 0.5),
-            ylims = ylims,
-            xticks = is_bottom ? (-0.5:0.25:0.5, [L"-0.5", L"-0.25", L"0", L"0.25", L"0.5"]) : false,
-            yticks = ([-2.0, 0.0, 2.0], [L"-2", L"0", L"2"]),
-            xlabel = is_bottom ? L"x" : "",
-            ylabel = i == 3 ? L"W_n(x)" : "",
-            grid = false,
-            framestyle = :box,
-            tick_direction = :out,
-            fontfamily = "Computer Modern",
-            guidefontsize = 19,
-            tickfontsize = 13,
-            left_margin = 12Plots.mm,
-            right_margin = 8Plots.mm,
-            top_margin = i == 1 ? 2Plots.mm : -4Plots.mm,
-            bottom_margin = is_bottom ? 8Plots.mm : 0Plots.mm,
-        )
-        Plots.hline!(p, [0.0]; color = :black, alpha = 0.25, linewidth = 0.8, label = false)
-        
-        label_y = ylim_abs * 0.70
-        label_str = @sprintf("\$n = %d,\\; \\beta_n = %.2f\$", n, beta_vals[i])
-        Plots.annotate!(p, -0.48, label_y, Plots.text(label_str, :left, 13, "Computer Modern"))
-        push!(subplots, p)
-    end
-
-    fig = Plots.plot(subplots...;
-        layout = (n_modes, 1),
-        size = (700, 540),
-        dpi = 220,
-        link = :x,
-    )
-
     outfile = joinpath(FIG_DIR, "plot_freefree_modes")
-    Plots.savefig(fig, outfile * ".pdf")
-    Plots.savefig(fig, outfile * ".png")
-    println("Saved $outfile.{pdf,png} (via Plots.jl)")
+    PaperPlotTheme.with_theme() do
+        fig = Figure(size = (700, 540), backgroundcolor = :white,
+            figure_padding = (8, 20, 8, 8))
+        for i in 1:n_modes
+            n = i - 1
+            is_bottom = i == n_modes
+            ax = Axis(fig[i, 1]; limits = ((-0.5, 0.5), ylims),
+                xticks = -0.5:0.25:0.5, yticks = [-2.0, 0.0, 2.0],
+                xlabel = is_bottom ? L"x" : "", ylabel = i == 3 ? L"W_n(x)" : "",
+                xlabelsize = 19, ylabelsize = 19, xticklabelsize = 13, yticklabelsize = 13,
+                xticklabelsvisible = is_bottom, xticksvisible = is_bottom,
+                xgridvisible = false, ygridvisible = false)
+            hlines!(ax, [0.0]; color = (:black, 0.25), linewidth = 0.8)
+            lines!(ax, xi, modes[i]; color = :black, linewidth = 1.8)
+            label = LaTeXString(@sprintf("n = %d,\\; \\beta_n = %.2f", n, beta_vals[i]))
+            text!(ax, -0.48, ylim_abs * 0.70;
+                text = label,
+                fontsize = 13, align = (:left, :center))
+        end
+        rowgap!(fig.layout, 0)
+        save(outfile * ".pdf", fig)
+        save(outfile * ".png", fig; px_per_unit = 2)
+    end
+    println("Saved $outfile.{pdf,png} (via CairoMakie)")
 end
 
 function main()

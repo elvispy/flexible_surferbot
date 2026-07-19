@@ -31,12 +31,15 @@ Source CSVs: output/csv/sweeper_{coupled,uncoupled}_full_grid.csv
 
 using CSV
 using DataFrames
-using Plots
+using CairoMakie
 using LaTeXStrings
 using Printf
 using Statistics
 using LinearAlgebra
 using Surferbot
+
+include(joinpath(@__DIR__, "paper_plot_theme.jl"))
+using .PaperPlotTheme
 
 # ─── κ axis: integer log10(κ) grid, ticks shown as 10^n (exponentials, not log₁₀κ) ────
 
@@ -222,58 +225,36 @@ function render_panel(log10_kappa, xM_axis, delta_grid, fig_title, out_base, bp,
         cbticks  = [-30, -15, 0, 15, 30]
     end
 
-    plt_opts = (
-        xlabel             = L"x_M / L",
-        ylabel             = L"\kappa",
-        yticks             = kappa_exp_xticks(XLIMS),
-        colormap           = cgrad(:RdBu, rev=true),
-        clims              = (-clim_val, clim_val),
-        colorbar_ticks     = cbticks,
-        interpolate        = true,
-        xlims              = YLIMS,
-        ylims              = XLIMS,
-        legend             = :topleft,
-        background_color_legend = RGBA(1, 1, 1, 0.85),
-        foreground_color_legend = :black,
-        legendfontsize     = 9,
-        colorbar           = true,
-        colorbar_title     = cbtitle,
-        colorbar_titlefontsize     = 11,
-        colorbar_titlerotation     = 270,
-        colorbar_tickfontsize      = 11,
-        size               = (820, 640),
-        margin             = 6Plots.mm,
-        right_margin       = 16Plots.mm,
-        dpi                = 220,
-        titlefontsize      = 14,
-        guidefontsize      = 14,
-        tickfontsize       = 12,
-        fontfamily         = "Computer Modern",
-        framestyle         = :box,
-        grid               = false,
-    )
-
     # Pad heatmap to xM/L = -0.5 by repeating first row (data starts at -0.48)
     if minimum(xp) > -0.5
         cp = vcat(cp[1:1, :], cp)
         xp = vcat([-0.5], xp)
     end
 
-    p = heatmap(xp, kp, cp'; plt_opts...)
-
-    GOLD = RGB(0.95, 0.75, 0.05)
-
-
-
-    snap_markers = [:circle, :rect, :utriangle, :diamond, :dtriangle]
-    for (i, (lk, xm, lab)) in enumerate(zip(snapshot_logK, snapshot_xMs, snapshot_labels))
-        scatter!(p, [xm], [lk];
-                 marker=snap_markers[i], markersize=9, color=GOLD,
-                 markerstrokecolor=:black, markerstrokewidth=1, label=lab)
+    PaperPlotTheme.with_theme() do
+        fig = Figure(size = (820, 640), backgroundcolor = :white, figure_padding = (12, 8, 12, 12))
+        ax = Axis(fig[1, 1]; xlabel = L"x_M / L", ylabel = L"\kappa",
+            xlabelsize = 14, ylabelsize = 14, xticklabelsize = 12, yticklabelsize = 12,
+            yticks = kappa_exp_xticks(XLIMS), xgridvisible = false, ygridvisible = false)
+        xlims!(ax, YLIMS...)
+        ylims!(ax, XLIMS...)
+        hm = heatmap!(ax, xp, kp, cp; colormap = :balance, colorrange = (-clim_val, clim_val))
+        gold = RGBf(0.95, 0.75, 0.05)
+        markers = [:circle, :rect, :utriangle, :diamond, :dtriangle]
+        handles = Any[]
+        for (i, (lk, xm, _)) in enumerate(zip(snapshot_logK, snapshot_xMs, snapshot_labels))
+            push!(handles, scatter!(ax, [xm], [lk]; marker = markers[i], markersize = 14,
+                color = gold, strokecolor = :black, strokewidth = 1))
+        end
+        !isempty(handles) && axislegend(ax, handles, snapshot_labels; position = :lt, labelsize = 9)
+        colorbar_opts = cbticks === :auto ?
+            (; label = cbtitle, labelsize = 11, ticklabelsize = 11) :
+            (; label = cbtitle, ticks = cbticks, labelsize = 11, ticklabelsize = 11)
+        Colorbar(fig[1, 2], hm; colorbar_opts...)
+        save(out_base * ".pdf", fig)
     end
-
-    savefig(p, out_base * ".pdf")
     println("Saved $(out_base).pdf")
+    return nothing
 end
 
 # ─── Main ─────────────────────────────────────────────────────────────────────

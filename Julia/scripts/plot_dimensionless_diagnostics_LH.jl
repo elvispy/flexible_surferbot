@@ -29,7 +29,10 @@ Scatter: theoretical prediction via the a-priori modal law.
 Output: output/figures/plot_dimensionless_diagnostics_cpl_theo_LH.pdf
 """
 
-using Surferbot, JLD2, Plots, LaTeXStrings, Printf, LinearAlgebra, CSV, DataFrames, Statistics
+using Surferbot, JLD2, CairoMakie, LaTeXStrings, Printf, LinearAlgebra, CSV, DataFrames, Statistics
+
+include(joinpath(@__DIR__, "paper_plot_theme.jl"))
+using .PaperPlotTheme
 
 # κ axis: integer log10(κ) grid, ticks shown as 10^n (exponentials, not log₁₀κ)
 function kappa_exp_xticks(xlims)
@@ -161,51 +164,6 @@ function theoretical_phase_orthogonality_field(EI_list, xM_grid, theory_ctx)
         A_field[i, j] = diag.A
     end
     return phase_orthogonality_field(S_field, A_field)
-end
-
-function add_LH_curve_legend!(p)
-    # GR shortens automatic legend samples enough to erase dashed and dash-dot
-    # styles. Draw a local key from ordinary line primitives instead.
-    x_left, x_right = -0.492, -0.200
-    y_bottom, y_top = -0.38, 0.42
-    plot!(p, Shape([x_left, x_right, x_right, x_left],
-                   [y_bottom, y_bottom, y_top, y_top]);
-          seriestype=:shape, fillcolor=RGBA(1, 1, 1, 0.85),
-          linecolor=:black, linewidth=1.5, label=false)
-
-    # The ordinate is log10(kappa), despite its exponential tick labels.
-    rows = (0.22, -0.02, -0.26)
-    entries = [
-        (sample_x=(-0.482, -0.442), text_x=-0.432, y=rows[1], label=CURVE_LABELS[1], color=:black, style=:solid),
-        (sample_x=(-0.482, -0.442), text_x=-0.432, y=rows[2], label=CURVE_LABELS[2], color=:black, style=:dashdot),
-        (sample_x=(-0.482, -0.442), text_x=-0.432, y=rows[3], label=L"S \perp A", color=:black, style=:dash),
-        (sample_x=(-0.350, -0.310), text_x=-0.300, y=rows[1], label=CURVE_LABELS[3], color="#CC79A7", style=:dash),
-        (sample_x=(-0.350, -0.310), text_x=-0.300, y=rows[2], label=CURVE_LABELS[4], color="#CC79A7", style=:solid),
-    ]
-
-    for entry in entries
-        x0, x1 = entry.sample_x
-        y = entry.y
-        dx = x1 - x0
-        if entry.style == :solid
-            plot!(p, [x0, x1], [y, y]; color=entry.color, linewidth=4.0, label=false)
-        elseif entry.style == :dash
-            for (xa, xb) in ((x0, x0 + 0.31dx), (x0 + 0.56dx, x1))
-                plot!(p, [xa, xb], [y, y]; color=entry.color, linewidth=4.0, label=false)
-            end
-        else
-            # Explicit dash-dot-dash sample: GR otherwise reduces a short
-            # dash-dot legend handle to a solid stroke.
-            plot!(p, [x0, x0 + 0.25dx], [y, y]; color=entry.color, linewidth=4.0, label=false)
-            scatter!(p, [x0 + 0.47dx], [y]; color=entry.color, markerstrokewidth=0,
-                     markersize=4, label=false)
-            plot!(p, [x0 + 0.64dx, x1], [y, y]; color=entry.color, linewidth=4.0, label=false)
-        end
-    end
-    annotations = [(entry.text_x, entry.y, text(entry.label, 9, "Computer Modern", :black, :left))
-                   for entry in entries]
-    annotate!(p, annotations)
-    return p
 end
 
 function roots_for_condition(condition_name, xgrid, absS, absA, abs_eta_1, abs_eta_end)
@@ -620,62 +578,44 @@ function build_LH_plot(artifact, csv_path, output_dir; xlim_min::Float64,
     curve_colors = [okabe_ito[8], okabe_ito[8], okabe_ito[7], okabe_ito[7]]
     curve_styles = [:solid, :dashdot, :dash, :solid]
 
-    plt_opts = (
-        xlabel  = L"x_M / L",
-        ylabel  = L"\kappa",
-        yticks  = kappa_exp_xticks(XLIMS),
-        colormap = :balance,
-        clims   = (-1, 1),
-        levels  = 51,
-        interpolate = true,
-        xlims   = YLIMS,
-        ylims   = XLIMS,
-        colorbar = true,
-        legend  = false,
-        size    = (820, 640),
-        margin  = 6Plots.mm,
-        dpi     = 300,
-        titlefontsize     = 14,
-        guidefontsize     = 14,
-        tickfontsize      = 12,
-        legendfontsize    = 11,
-        fontfamily        = "Computer Modern",
-        framestyle        = :box,
-        grid              = false,
-        tick_direction    = :out,
-        colorbar_title    = L"\alpha",
-        colorbar_titlefontsize = 14,
-        colorbar_tickfontsize  = 11,
-    )
-
-    p = heatmap(xM_axis, logEI_axis .- shift, alpha_LH'; plt_opts...)
-
-    for (i, cname) in enumerate(CURVE_NAMES)
-        res  = results[cname]
-        mask = (XLIMS[1] .<= res.logK .<= XLIMS[2]) .&
-               (YLIMS[1] .<= res.xM_norm .<= YLIMS[2])
-        isempty(res.logK[mask]) && continue
-        lk_path, xm_path, res_lks = cluster_branches(res.logK[mask], res.xM_norm[mask])
-        isempty(lk_path) || plot!(p, xm_path, lk_path;
-            label      = false,
-            color      = curve_colors[i],
-            linestyle  = curve_styles[i],
-            linewidth  = 4.0)
-        for rlk in res_lks
-            (XLIMS[1] <= rlk <= XLIMS[2]) || continue
-            # Resonance stripes: same color, thinner, slightly transparent
-            hline!(p, [rlk]; color=curve_colors[i], linewidth=4.0, label=false)
+    return PaperPlotTheme.with_theme() do
+        fig = Figure(size = (820, 640), backgroundcolor = :white,
+            figure_padding = (12, 8, 12, 12))
+        ax = Axis(fig[1, 1]; xlabel = L"x_M / L", ylabel = L"\kappa",
+            xlabelsize = 14, ylabelsize = 14, xticklabelsize = 12, yticklabelsize = 12,
+            yticks = kappa_exp_xticks(XLIMS), xgridvisible = false, ygridvisible = false)
+        xlims!(ax, YLIMS...)
+        ylims!(ax, XLIMS...)
+        hm = heatmap!(ax, xM_axis, logEI_axis .- shift, alpha_LH;
+            colormap = :balance, colorrange = (-1, 1))
+        for (i, cname) in enumerate(CURVE_NAMES)
+            res = results[cname]
+            mask = (XLIMS[1] .<= res.logK .<= XLIMS[2]) .&
+                   (YLIMS[1] .<= res.xM_norm .<= YLIMS[2])
+            isempty(res.logK[mask]) && continue
+            lk_path, xm_path, res_lks = cluster_branches(res.logK[mask], res.xM_norm[mask])
+            isempty(lk_path) || lines!(ax, xm_path, lk_path;
+                color = curve_colors[i], linestyle = curve_styles[i], linewidth = 4.0)
+            for rlk in res_lks
+                XLIMS[1] <= rlk <= XLIMS[2] || continue
+                hlines!(ax, [rlk]; color = curve_colors[i], linewidth = 4.0)
+            end
         end
+        contour!(ax, orth_xM, scatter_logK, orthogonality; levels = [0.0],
+            color = okabe_ito[8], linewidth = 3.0, linestyle = :dash)
+        legend_entries = [
+            LineElement(color = :black, linestyle = :solid, linewidth = 4.0),
+            LineElement(color = :black, linestyle = :dashdot, linewidth = 4.0),
+            LineElement(color = :black, linestyle = :dash, linewidth = 3.0),
+            LineElement(color = okabe_ito[7], linestyle = :dash, linewidth = 4.0),
+            LineElement(color = okabe_ito[7], linestyle = :solid, linewidth = 4.0),
+        ]
+        axislegend(ax, legend_entries, [CURVE_LABELS[1], CURVE_LABELS[2], L"S \perp A",
+            CURVE_LABELS[3], CURVE_LABELS[4]]; position = :lt, labelsize = 11,
+            framecolor = :black, backgroundcolor = (:white, 0.85))
+        Colorbar(fig[1, 2], hm; label = L"\alpha", labelsize = 14, ticklabelsize = 11)
+        return fig
     end
-
-    orth_color = okabe_ito[8]
-    contour!(p, orth_xM, scatter_logK, orthogonality';
-             levels=[0.0], color=orth_color, linewidth=3.0,
-             linestyle=:dash, label=false)
-
-    add_LH_curve_legend!(p)
-
-    return p
 end
 
 # ─── Beam-end theoretical diagnostics ────────────────────────────────────────
@@ -932,56 +872,36 @@ function build_beam_end_plot(artifact, csv_path, output_dir; xlim_min::Float64)
     curve_colors = [okabe_ito[8], okabe_ito[1], okabe_ito[3], okabe_ito[7]]
     curve_styles = [:solid, :solid, :solid, :solid]
 
-    plt_opts = (
-        xlabel  = L"x_M / L",
-        ylabel  = L"\kappa",
-        yticks  = kappa_exp_xticks(XLIMS),
-        colormap = :balance,
-        clims   = (-1, 1),
-        levels  = 51,
-        interpolate = true,
-        xlims   = YLIMS,
-        ylims   = XLIMS,
-        legend  = :topleft,
-        background_color_legend = RGBA(1, 1, 1, 0.85),
-        foreground_color_legend = :black,
-        legend_font_halign = :left,
-        size    = (820, 640),
-        margin  = 6Plots.mm,
-        dpi     = 300,
-        titlefontsize     = 14,
-        guidefontsize     = 14,
-        tickfontsize      = 12,
-        legendfontsize    = 11,
-        fontfamily        = "Computer Modern",
-        framestyle        = :box,
-        grid              = false,
-        tick_direction    = :out,
-        colorbar_title    = L"\alpha",
-        colorbar_titlefontsize = 14,
-        colorbar_tickfontsize  = 11,
-    )
-
-    p = heatmap(xM_axis, logEI_axis .- shift, alpha_beam'; plt_opts...)
-
-    for (i, cname) in enumerate(CURVE_NAMES)
-        res  = results[cname]
-        mask = (XLIMS[1] .<= res.logK .<= XLIMS[2]) .&
-               (YLIMS[1] .<= res.xM_norm .<= YLIMS[2])
-        isempty(res.logK[mask]) && continue
-        lk_path, xm_path, res_lks = cluster_branches(res.logK[mask], res.xM_norm[mask])
-        isempty(lk_path) || plot!(p, xm_path, lk_path;
-            label      = BEAM_CURVE_LABELS[i],
-            color      = curve_colors[i],
-            linestyle  = curve_styles[i],
-            linewidth  = 4.0)
-        for rlk in res_lks
-            (XLIMS[1] <= rlk <= XLIMS[2]) || continue
-            hline!(p, [rlk]; color=curve_colors[i], linewidth=4.0, label=false)
+    return PaperPlotTheme.with_theme() do
+        fig = Figure(size = (820, 640), backgroundcolor = :white,
+            figure_padding = (12, 8, 12, 12))
+        ax = Axis(fig[1, 1]; xlabel = L"x_M / L", ylabel = L"\kappa",
+            xlabelsize = 14, ylabelsize = 14, xticklabelsize = 12, yticklabelsize = 12,
+            yticks = kappa_exp_xticks(XLIMS), xgridvisible = false, ygridvisible = false)
+        xlims!(ax, YLIMS...)
+        ylims!(ax, XLIMS...)
+        hm = heatmap!(ax, xM_axis, logEI_axis .- shift, alpha_beam;
+            colormap = :balance, colorrange = (-1, 1))
+        for (i, cname) in enumerate(CURVE_NAMES)
+            res = results[cname]
+            mask = (XLIMS[1] .<= res.logK .<= XLIMS[2]) .&
+                   (YLIMS[1] .<= res.xM_norm .<= YLIMS[2])
+            isempty(res.logK[mask]) && continue
+            lk_path, xm_path, res_lks = cluster_branches(res.logK[mask], res.xM_norm[mask])
+            isempty(lk_path) || lines!(ax, xm_path, lk_path;
+                color = curve_colors[i], linestyle = curve_styles[i], linewidth = 4.0)
+            for rlk in res_lks
+                XLIMS[1] <= rlk <= XLIMS[2] || continue
+                hlines!(ax, [rlk]; color = curve_colors[i], linewidth = 4.0)
+            end
         end
+        legend_entries = [LineElement(color = curve_colors[i], linestyle = curve_styles[i], linewidth = 4.0)
+                          for i in eachindex(CURVE_NAMES)]
+        axislegend(ax, legend_entries, BEAM_CURVE_LABELS; position = :lt, labelsize = 11,
+            framecolor = :black, backgroundcolor = (:white, 0.85))
+        Colorbar(fig[1, 2], hm; label = L"\alpha", labelsize = 14, ticklabelsize = 11)
+        return fig
     end
-
-    return p
 end
 
 # ─── Main ─────────────────────────────────────────────────────────────────────
@@ -1001,7 +921,7 @@ function main(args=ARGS)
                                joinpath(output_dir, "csv", "sweeper_coupled_full_grid.csv"),
                                output_dir; xlim_min=-4.0)
     out_cpl_LH = joinpath(fig_dir, "plot_dimensionless_diagnostics_LH_cpl_theo.pdf")
-    savefig(p_cpl_LH, out_cpl_LH)
+    save(out_cpl_LH, p_cpl_LH)
     println("Saved $out_cpl_LH")
 
     "--lh-coupled-only" in args && return
@@ -1011,7 +931,7 @@ function main(args=ARGS)
                                       joinpath(output_dir, "csv", "sweeper_coupled_full_grid.csv"),
                                       output_dir; xlim_min=-4.0)
     out_cpl_beam = joinpath(fig_dir, "plot_dimensionless_diagnostics_LH_cpl_beam.pdf")
-    savefig(p_cpl_beam, out_cpl_beam)
+    save(out_cpl_beam, p_cpl_beam)
     println("Saved $out_cpl_beam")
 
     # ── 3. Beam-end uncoupled plot (x axis −5 to max) ────────────────────────
@@ -1022,7 +942,7 @@ function main(args=ARGS)
                                        joinpath(output_dir, "csv", "sweeper_uncoupled_full_grid.csv"),
                                        output_dir; xlim_min=-4.0)
     out_ucpl_beam = joinpath(fig_dir, "plot_dimensionless_diagnostics_LH_ucpl_beam.pdf")
-    savefig(p_ucpl_beam, out_ucpl_beam)
+    save(out_ucpl_beam, p_ucpl_beam)
     println("Saved $out_ucpl_beam")
 end
 

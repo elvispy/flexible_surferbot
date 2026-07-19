@@ -16,12 +16,15 @@ Ports MATLAB/utils/plot_one.m to Julia.
 """
 
 using Surferbot
-using Plots
+using CairoMakie
 using LaTeXStrings
+
+include(joinpath(@__DIR__, "paper_plot_theme.jl"))
+using .PaperPlotTheme
 
 const FIG1_FREE_SURFACE = "#1A4DCC"
 const FIG1_RAFT = "#000000"
-const FIG1_MOTOR = RGB(0.66, 0.43, 0.05)
+const FIG1_MOTOR = CairoMakie.RGBf(0.66, 0.43, 0.05)
 
 function main()
     fig_dir = joinpath(@__DIR__, "..", "output", "figures")
@@ -53,43 +56,24 @@ function main()
     x_cm   = result.x .* 1e2
     eta_um = real.(result.eta .* exp(im * theta)) .* 1e6
 
-    p = plot(x_cm, eta_um;
-        color          = FIG1_FREE_SURFACE,
-        linewidth      = 2.8,
-        label          = false,
-        xlabel         = L"x\;(\mathrm{cm})",
-        ylabel         = L"h\;(\mu\mathrm{m})",
-        xlims          = (-7, 7),
-        ylims          = (-300, 300),
-        xticks         = -6:2:6,
-        yticks         = -300:100:300,
-        grid           = true,
-        framestyle     = :box,
-        fontfamily     = "Computer Modern",
-        guidefontsize  = 39,
-        tickfontsize   = 29,
-        size           = (1100, 530),
-        dpi            = 220,
-        # left_margin must stay >~10.2mm: below that, GR clips the ascender
-        # off any tall letter (h, b, l, d - confirmed across all of them) in
-        # this rotated ylabel, turning "h" into what reads as "n". This is a
-        # margin/protrusion bug in GR's rotated-text bounding box, unrelated
-        # to font style (italic vs upright made no difference).
-        left_margin    = 10.5Plots.mm,
-        bottom_margin  = 14Plots.mm,
-        top_margin     =  4Plots.mm,
-        right_margin   =  0Plots.mm,
-    )
-    plot!(p, x_cm[contact], eta_um[contact];
-        color = FIG1_RAFT, linewidth = 5.6, label = false)
-
     motor_x_cm = params.motor_position * 1e2
     motor_idx  = argmin(abs.(x_cm .- motor_x_cm))
-    scatter!(p, [x_cm[motor_idx]], [eta_um[motor_idx]];
-        color = FIG1_MOTOR, markerstrokecolor = FIG1_MOTOR, markersize = 11, label = false)
 
     fname = joinpath(fig_dir, "plot_fig4_Aguero2026_1.pdf")
-    savefig(p, fname)
+    PaperPlotTheme.with_theme() do
+        fig = Figure(size = (1100, 530), backgroundcolor = :white,
+            figure_padding = (28, 8, 8, 18))
+        ax = Axis(fig[1, 1]; xlabel = L"x\;(\mathrm{cm})", ylabel = L"h\;(\mu\mathrm{m})",
+            xlabelsize = 39, ylabelsize = 39, xticklabelsize = 29, yticklabelsize = 29,
+            xticks = -6:2:6, yticks = -300:100:300, xgridvisible = true, ygridvisible = true)
+        xlims!(ax, -7, 7)
+        ylims!(ax, -300, 300)
+        lines!(ax, x_cm, eta_um; color = FIG1_FREE_SURFACE, linewidth = 2.8)
+        lines!(ax, x_cm[contact], eta_um[contact]; color = FIG1_RAFT, linewidth = 5.6)
+        scatter!(ax, [x_cm[motor_idx]], [eta_um[motor_idx]];
+            color = FIG1_MOTOR, strokecolor = FIG1_MOTOR, markersize = 18)
+        save(fname, fig)
+    end
     println("Saved $fname")
 end
 
