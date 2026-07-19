@@ -575,8 +575,11 @@ function build_LH_plot(artifact, csv_path, output_dir; xlim_min::Float64,
                     "#0072B2", "#D55E00", "#CC79A7", "#000000"]
     # Pair the two domain-end elevation conditions by color; line styles retain
     # the distinction in greyscale and separate the black S/A/orthogonality laws.
-    curve_colors = [okabe_ito[8], okabe_ito[8], okabe_ito[7], okabe_ito[7]]
+    # The S, A, and orthogonality families remain distinct after grayscale printing.
+    curve_colors = [RGBf(0.00, 0.00, 0.00), RGBf(0.20, 0.20, 0.20),
+                    okabe_ito[7], okabe_ito[7]]
     curve_styles = [:solid, :dashdot, :dash, :solid]
+    orthogonality_color = RGBf(0.40, 0.40, 0.40)
 
     return PaperPlotTheme.with_theme() do
         fig = Figure(size = (820, 640), backgroundcolor = :white,
@@ -602,17 +605,17 @@ function build_LH_plot(artifact, csv_path, output_dir; xlim_min::Float64,
             end
         end
         contour!(ax, orth_xM, scatter_logK, orthogonality; levels = [0.0],
-            color = okabe_ito[8], linewidth = 3.0, linestyle = :dash)
+            color = orthogonality_color, linewidth = 3.0, linestyle = :dash)
         legend_entries = [
             LineElement(color = :black, linestyle = :solid, linewidth = 4.0),
-            LineElement(color = :black, linestyle = :dashdot, linewidth = 4.0),
-            LineElement(color = :black, linestyle = :dash, linewidth = 3.0),
+            LineElement(color = RGBf(0.20, 0.20, 0.20), linestyle = :dashdot, linewidth = 4.0),
+            LineElement(color = orthogonality_color, linestyle = :dash, linewidth = 3.0),
             LineElement(color = okabe_ito[7], linestyle = :dash, linewidth = 4.0),
             LineElement(color = okabe_ito[7], linestyle = :solid, linewidth = 4.0),
         ]
         axislegend(ax, legend_entries, [CURVE_LABELS[1], CURVE_LABELS[2], L"S \perp A",
             CURVE_LABELS[3], CURVE_LABELS[4]]; position = :lt, labelsize = 14,
-            framecolor = :black, backgroundcolor = (:white, 0.85))
+            patchsize = (84, 20), framecolor = :black, backgroundcolor = (:white, 0.85))
         Colorbar(fig[1, 2], hm; label = L"\alpha", labelsize = 16, ticklabelsize = 14)
         return fig
     end

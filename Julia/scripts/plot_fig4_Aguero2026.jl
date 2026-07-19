@@ -27,6 +27,7 @@ const FIG1_RAFT = "#000000"
 const FIG1_MOTOR = CairoMakie.RGBf(0.66, 0.43, 0.05)
 const FIG3_LABELSIZE = 62
 const FIG3_TICKSIZE = 47
+const FIG3_TEXT_COLOR = RGBf(0.20, 0.20, 0.20)
 
 function main()
     fig_dir = joinpath(@__DIR__, "..", "output", "figures")
@@ -68,6 +69,8 @@ function main()
         ax = Axis(fig[1, 1]; xlabel = L"x\;(\mathrm{cm})", ylabel = L"h\;(\mu\mathrm{m})",
             xlabelsize = FIG3_LABELSIZE, ylabelsize = FIG3_LABELSIZE,
             xticklabelsize = FIG3_TICKSIZE, yticklabelsize = FIG3_TICKSIZE,
+            xlabelcolor = FIG3_TEXT_COLOR, ylabelcolor = FIG3_TEXT_COLOR,
+            xticklabelcolor = FIG3_TEXT_COLOR, yticklabelcolor = FIG3_TEXT_COLOR,
             xlabelpadding = -20, xticklabelpad = -8,
             xticks = -6:2:6, yticks = -300:100:300, xgridvisible = true, ygridvisible = true)
         xlims!(ax, -7, 7)
