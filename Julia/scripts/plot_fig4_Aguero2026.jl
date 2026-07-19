@@ -66,7 +66,7 @@ function main()
     PaperPlotTheme.with_theme() do
         fig = Figure(size = (1100, 530), backgroundcolor = :white,
             figure_padding = (28, 8, 14, 18))
-        ax = Axis(fig[1, 1]; xlabel = L"x\;(\mathrm{cm})", ylabel = L"h\;(\mu\mathrm{m})",
+        ax = Axis(fig[1, 1]; xlabel = L"x\;(\mathrm{cm})", ylabel = L"h\;(\mathit{\mu}\mathrm{m})",
             xlabelsize = FIG3_LABELSIZE, ylabelsize = FIG3_LABELSIZE,
             xticklabelsize = FIG3_TICKSIZE, yticklabelsize = FIG3_TICKSIZE,
             xlabelcolor = FIG3_TEXT_COLOR, ylabelcolor = FIG3_TEXT_COLOR,
