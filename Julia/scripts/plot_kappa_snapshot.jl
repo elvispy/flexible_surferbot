@@ -556,7 +556,7 @@ function make_snapshot_grid(fig_dir; kind::Symbol, op_indices, filename, column_
 
     fig = CM.Figure(size = (1500, 995), backgroundcolor = :white)
     CM.rowsize!(fig.layout, 1, CM.Fixed(355))  # keep sweep row at original height
-    draw_sweep_axis!(fig[1, 1:3], fig[1, 1:3, CM.Left()], sweep; legend_position = :rb,
+    draw_sweep_axis!(fig[1, 1:3], fig[1, 1:3, CM.Left()], sweep; legend_position = :rt,
         highlight_colors = COLUMN_COLORS, highlight_linewidths = COLUMN_LINEWIDTHS)
 
     for j in 1:3
@@ -594,11 +594,13 @@ function main_snapshot_grids(fig_dir)
                          L"\kappa=1.70\times10^{-2}"])
     make_snapshot_grid(fig_dir;
         kind = :xM,
-        op_indices = [2, 3, 4],
+        # Match the sweep's left-to-right thin-to-thick highlighted lines.
+        # This swaps the former (b,e) and (d,g) snapshot columns.
+        op_indices = [4, 3, 2],
         filename = "plot_kappa_snapshot_grid_motor_position",
-        column_titles = [L"x_M/L=-0.12",
+        column_titles = [L"x_M/L=-0.272",
                          L"x_M/L=-0.1885",
-                         L"x_M/L=-0.272"],
+                         L"x_M/L=-0.12"],
         modal_energy_ylims = (0.0, 3e-6))
 end
 

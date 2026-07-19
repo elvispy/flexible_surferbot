@@ -634,6 +634,7 @@ function main()
                   [L"-0.5", L"-0.25", L"0", L"0.25", L"0.5"]),
         xlims = (-0.5, 0.5),
         highlight_x = Float64[],
+        legend_position = :rt,
         grid_style = true)
 end
 

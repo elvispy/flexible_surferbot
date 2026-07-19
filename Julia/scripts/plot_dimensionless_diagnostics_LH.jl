@@ -166,7 +166,7 @@ end
 function add_LH_curve_legend!(p)
     # GR shortens automatic legend samples enough to erase dashed and dash-dot
     # styles. Draw a local key from ordinary line primitives instead.
-    x_left, x_right = -0.492, -0.080
+    x_left, x_right = -0.492, -0.200
     y_bottom, y_top = -0.38, 0.42
     plot!(p, Shape([x_left, x_right, x_right, x_left],
                    [y_bottom, y_bottom, y_top, y_top]);
@@ -176,11 +176,11 @@ function add_LH_curve_legend!(p)
     # The ordinate is log10(kappa), despite its exponential tick labels.
     rows = (0.22, -0.02, -0.26)
     entries = [
-        (sample_x=(-0.482, -0.395), text_x=-0.380, y=rows[1], label=CURVE_LABELS[1], color=:black, style=:solid),
-        (sample_x=(-0.482, -0.395), text_x=-0.380, y=rows[2], label=CURVE_LABELS[2], color=:black, style=:dashdot),
-        (sample_x=(-0.482, -0.395), text_x=-0.380, y=rows[3], label=L"S \perp A", color=:black, style=:dash),
-        (sample_x=(-0.285, -0.198), text_x=-0.183, y=rows[1], label=CURVE_LABELS[3], color="#CC79A7", style=:dash),
-        (sample_x=(-0.285, -0.198), text_x=-0.183, y=rows[2], label=CURVE_LABELS[4], color="#CC79A7", style=:solid),
+        (sample_x=(-0.482, -0.442), text_x=-0.432, y=rows[1], label=CURVE_LABELS[1], color=:black, style=:solid),
+        (sample_x=(-0.482, -0.442), text_x=-0.432, y=rows[2], label=CURVE_LABELS[2], color=:black, style=:dashdot),
+        (sample_x=(-0.482, -0.442), text_x=-0.432, y=rows[3], label=L"S \perp A", color=:black, style=:dash),
+        (sample_x=(-0.350, -0.310), text_x=-0.300, y=rows[1], label=CURVE_LABELS[3], color="#CC79A7", style=:dash),
+        (sample_x=(-0.350, -0.310), text_x=-0.300, y=rows[2], label=CURVE_LABELS[4], color="#CC79A7", style=:solid),
     ]
 
     for entry in entries
@@ -202,7 +202,7 @@ function add_LH_curve_legend!(p)
             plot!(p, [x0 + 0.64dx, x1], [y, y]; color=entry.color, linewidth=4.0, label=false)
         end
     end
-    annotations = [(entry.text_x, entry.y, text(entry.label, 11, "Computer Modern", :black, :left))
+    annotations = [(entry.text_x, entry.y, text(entry.label, 9, "Computer Modern", :black, :left))
                    for entry in entries]
     annotate!(p, annotations)
     return p
@@ -630,6 +630,7 @@ function build_LH_plot(artifact, csv_path, output_dir; xlim_min::Float64,
         interpolate = true,
         xlims   = YLIMS,
         ylims   = XLIMS,
+        colorbar = true,
         legend  = false,
         size    = (820, 640),
         margin  = 6Plots.mm,
@@ -670,7 +671,7 @@ function build_LH_plot(artifact, csv_path, output_dir; xlim_min::Float64,
     orth_color = okabe_ito[8]
     contour!(p, orth_xM, scatter_logK, orthogonality';
              levels=[0.0], color=orth_color, linewidth=3.0,
-             linestyle=:dash, colorbar=false, label=false)
+             linestyle=:dash, label=false)
 
     add_LH_curve_legend!(p)
 
