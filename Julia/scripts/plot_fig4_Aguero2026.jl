@@ -27,7 +27,7 @@ const FIG1_RAFT = "#000000"
 const FIG1_MOTOR = CairoMakie.RGBf(0.66, 0.43, 0.05)
 const FIG3_LABELSIZE = 62
 const FIG3_TICKSIZE = 47
-const FIG3_TEXT_COLOR = RGBf(0.20, 0.20, 0.20)
+const FIG3_TEXT_COLOR = RGBf(0.35, 0.35, 0.35)
 
 function main()
     fig_dir = joinpath(@__DIR__, "..", "output", "figures")
