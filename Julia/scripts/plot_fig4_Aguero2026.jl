@@ -25,6 +25,8 @@ using .PaperPlotTheme
 const FIG1_FREE_SURFACE = "#1A4DCC"
 const FIG1_RAFT = "#000000"
 const FIG1_MOTOR = CairoMakie.RGBf(0.66, 0.43, 0.05)
+const FIG3_LABELSIZE = 66
+const FIG3_TICKSIZE = 50
 
 function main()
     fig_dir = joinpath(@__DIR__, "..", "output", "figures")
@@ -64,14 +66,15 @@ function main()
         fig = Figure(size = (1100, 530), backgroundcolor = :white,
             figure_padding = (28, 8, 8, 18))
         ax = Axis(fig[1, 1]; xlabel = L"x\;(\mathrm{cm})", ylabel = L"h\;(\mu\mathrm{m})",
-            xlabelsize = 39, ylabelsize = 39, xticklabelsize = 29, yticklabelsize = 29,
+            xlabelsize = FIG3_LABELSIZE, ylabelsize = FIG3_LABELSIZE,
+            xticklabelsize = FIG3_TICKSIZE, yticklabelsize = FIG3_TICKSIZE,
             xticks = -6:2:6, yticks = -300:100:300, xgridvisible = true, ygridvisible = true)
         xlims!(ax, -7, 7)
         ylims!(ax, -300, 300)
         lines!(ax, x_cm, eta_um; color = FIG1_FREE_SURFACE, linewidth = 2.8)
         lines!(ax, x_cm[contact], eta_um[contact]; color = FIG1_RAFT, linewidth = 5.6)
         scatter!(ax, [x_cm[motor_idx]], [eta_um[motor_idx]];
-            color = FIG1_MOTOR, strokecolor = FIG1_MOTOR, markersize = 18)
+            color = FIG1_MOTOR, strokecolor = FIG1_MOTOR, markersize = 30)
         save(fname, fig)
     end
     println("Saved $fname")

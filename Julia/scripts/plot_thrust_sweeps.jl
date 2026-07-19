@@ -45,6 +45,9 @@ const RED = RGBf(0.78, 0.12, 0.18)
 const ALPHA_COLOR = RGBf(0.00, 0.45, 0.25)
 const GOLD = RGBf(0.84, 0.55, 0.10)
 const GRAY = RGBf(0.25, 0.25, 0.25)
+const FIG3_LABELSIZE = 66
+const FIG3_TICKSIZE = 50
+const FIG3_LEGENDSIZE = 50
 const NEWCM_DIR = "/usr/local/texlive/2025/texmf-dist/fonts/opentype/public/newcomputermodern"
 const LM_FONT = joinpath(NEWCM_DIR, "NewCM10-Regular.otf")
 const NEWCM_MATH = joinpath(NEWCM_DIR, "NewCMMath-Regular.otf")
@@ -525,15 +528,17 @@ function make_single_axis_panel(sw, d, F_T_star; xlabel, outfile,
     PaperPlotTheme.with_theme() do
         fig = Figure(size = (1100, 530), backgroundcolor = :white, figure_padding = (28, 8, 8, 18))
         ax = Axis(fig[1, 1]; xlabel = xlabel, ylabel = L"F_T/F_T^\ast",
-            xlabelsize = 39, ylabelsize = 39, xticklabelsize = 29, yticklabelsize = 29,
+            xlabelsize = FIG3_LABELSIZE, ylabelsize = FIG3_LABELSIZE,
+            xticklabelsize = FIG3_TICKSIZE, yticklabelsize = FIG3_TICKSIZE,
             xscale = xscale, xticks = xticks, xgridvisible = true, ygridvisible = true)
         xlims!(ax, minimum(sw.x), maximum(sw.x))
         ylims!(ax, ylim...)
         lines!(ax, sw.x[order], yt[order]; color = BLUE, linewidth = 4.0)
         if !isnothing(marker_point)
             marker_handle = scatter!(ax, [marker_point.x], [marker_point.y]; marker = :star5,
-                color = GOLD, strokecolor = :black, strokewidth = 1.6, markersize = 20)
-            axislegend(ax, [marker_handle], [L"\text{SurferBot}"]; position = :rt, labelsize = 29)
+                color = GOLD, strokecolor = :black, strokewidth = 1.6, markersize = 32)
+            axislegend(ax, [marker_handle], [L"\text{SurferBot}"]; position = :rt,
+                labelsize = FIG3_LEGENDSIZE)
         end
         show_zero && hlines!(ax, [0.0]; color = (:black, 0.55), linewidth = 1.0)
         save(outfile * ".pdf", fig)

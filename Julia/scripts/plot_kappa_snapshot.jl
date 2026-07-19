@@ -544,8 +544,12 @@ function make_snapshot_grid(fig_dir; kind::Symbol, op_indices, filename, column_
 
     fig = CM.Figure(size = (1500, 995), backgroundcolor = :white)
     CM.rowsize!(fig.layout, 1, CM.Fixed(355))  # keep sweep row at original height
+    # `XM_HIGHLIGHTS` is stored in the historical right-to-left order.  The
+    # snapshot columns are left-to-right, so reverse styles only for this grid.
+    highlight_colors = kind == :xM ? reverse(COLUMN_COLORS) : COLUMN_COLORS
+    highlight_linewidths = kind == :xM ? reverse(COLUMN_LINEWIDTHS) : COLUMN_LINEWIDTHS
     draw_sweep_axis!(fig[1, 1:3], fig[1, 1:3, CM.Left()], sweep; legend_position = :rt,
-        highlight_colors = COLUMN_COLORS, highlight_linewidths = COLUMN_LINEWIDTHS)
+        highlight_colors, highlight_linewidths)
 
     for j in 1:3
         col = COLUMN_COLORS[j]
