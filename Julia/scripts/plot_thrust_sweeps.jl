@@ -45,9 +45,9 @@ const RED = RGBf(0.78, 0.12, 0.18)
 const ALPHA_COLOR = RGBf(0.00, 0.45, 0.25)
 const GOLD = RGBf(0.84, 0.55, 0.10)
 const GRAY = RGBf(0.25, 0.25, 0.25)
-const FIG3_LABELSIZE = 66
-const FIG3_TICKSIZE = 50
-const FIG3_LEGENDSIZE = 50
+const FIG3_LABELSIZE = 62
+const FIG3_TICKSIZE = 47
+const FIG3_LEGENDSIZE = 47
 const NEWCM_DIR = "/usr/local/texlive/2025/texmf-dist/fonts/opentype/public/newcomputermodern"
 const LM_FONT = joinpath(NEWCM_DIR, "NewCM10-Regular.otf")
 const NEWCM_MATH = joinpath(NEWCM_DIR, "NewCMMath-Regular.otf")
@@ -479,6 +479,10 @@ function add_dual_axis!(fig, sw, alpha_sw, d, F_T_star; xlabel, xscale=identity,
         xscale, xticks,
         yaxisposition = :right,
         ylabel = L"\alpha",
+        ylabelsize = 29,
+        yticklabelsize = 26,
+        ylabelfont = LM_FONT,
+        yticklabelfont = LM_FONT,
         ylabelcolor = ALPHA_COLOR,
         yticklabelcolor = ALPHA_COLOR,
         rightspinecolor = ALPHA_COLOR,
@@ -527,7 +531,7 @@ function make_single_axis_panel(sw, d, F_T_star; xlabel, outfile,
     
     PaperPlotTheme.with_theme() do
         # Match Figure 3(b)'s data-frame aspect despite the shorter Re tick set.
-        fig = Figure(size = (1100, 530), backgroundcolor = :white, figure_padding = (28, 8, 18, 21))
+        fig = Figure(size = (1100, 530), backgroundcolor = :white, figure_padding = (28, 8, 24, 21))
         ax = Axis(fig[1, 1]; xlabel = xlabel, ylabel = L"F_T/F_T^\ast",
             xlabelsize = FIG3_LABELSIZE, ylabelsize = FIG3_LABELSIZE,
             xticklabelsize = FIG3_TICKSIZE, yticklabelsize = FIG3_TICKSIZE,

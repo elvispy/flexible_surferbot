@@ -25,8 +25,8 @@ using .PaperPlotTheme
 const FIG1_FREE_SURFACE = "#1A4DCC"
 const FIG1_RAFT = "#000000"
 const FIG1_MOTOR = CairoMakie.RGBf(0.66, 0.43, 0.05)
-const FIG3_LABELSIZE = 66
-const FIG3_TICKSIZE = 50
+const FIG3_LABELSIZE = 62
+const FIG3_TICKSIZE = 47
 
 function main()
     fig_dir = joinpath(@__DIR__, "..", "output", "figures")
@@ -64,7 +64,7 @@ function main()
     fname = joinpath(fig_dir, "plot_fig4_Aguero2026_1.pdf")
     PaperPlotTheme.with_theme() do
         fig = Figure(size = (1100, 530), backgroundcolor = :white,
-            figure_padding = (28, 8, 8, 18))
+            figure_padding = (28, 8, 14, 18))
         ax = Axis(fig[1, 1]; xlabel = L"x\;(\mathrm{cm})", ylabel = L"h\;(\mu\mathrm{m})",
             xlabelsize = FIG3_LABELSIZE, ylabelsize = FIG3_LABELSIZE,
             xticklabelsize = FIG3_TICKSIZE, yticklabelsize = FIG3_TICKSIZE,

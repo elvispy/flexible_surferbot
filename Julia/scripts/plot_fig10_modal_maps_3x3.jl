@@ -221,16 +221,16 @@ function main()
 
     PaperPlotTheme.with_theme() do
         fig = CairoMakie.Figure(size = (940, 820), backgroundcolor = :white,
-            fontsize = 20, figure_padding = (2, 1, 15, 2))
+            fontsize = 18, figure_padding = (2, 1, 15, 2))
         last_hm = nothing
         panel_axes = Matrix{CairoMakie.Axis}(undef, length(ROW_SPECS), length(COL_SPECS))
         for c in eachindex(COL_SPECS)
             CairoMakie.Label(fig[1, c + 2], COL_SPECS[c].title,
-                fontsize = 22, tellwidth = false)
+                fontsize = 18, tellwidth = false)
         end
         for r in eachindex(ROW_SPECS)
             CairoMakie.Label(fig[r + 1, 1], ROW_SPECS[r].title, rotation = pi / 2,
-                fontsize = 20, tellheight = false)
+                fontsize = 18, tellheight = false)
             for c in eachindex(COL_SPECS)
                 show_top_ticks = r == 1 && c == 2
                 show_outer_bottom_ticks = r == length(ROW_SPECS) && c != 2
@@ -239,8 +239,8 @@ function main()
                     c == length(COL_SPECS) ?
                     ([-0.5, -0.25, 0.0], ["-0.50", "-0.25", "0.00"]) : -0.5:0.25:0
                 ax = CairoMakie.Axis(fig[r + 1, c + 2],
-                    xticklabelsize = 18, yticklabelsize = 18,
-                    xlabelsize = 22, ylabelsize = 22,
+                    xticklabelsize = 16, yticklabelsize = 16,
+                    xlabelsize = 18, ylabelsize = 18,
                     xminorticksvisible = false, xminorgridvisible = false,
                     yminorgridvisible = false)
                 panel_axes[r, c] = ax
@@ -259,7 +259,7 @@ function main()
             r > 1 && CairoMakie.linkxaxes!(panel_axes[1, c], panel_axes[r, c])
         end
         CairoMakie.Colorbar(fig[2:4, 6], last_hm, label = L"\alpha",
-            labelsize = 22, ticklabelsize = 18, width = 18)
+            labelsize = 18, ticklabelsize = 16, width = 18)
         CairoMakie.colgap!(fig.layout, 8)
         CairoMakie.colgap!(fig.layout, 3, 35)
         CairoMakie.colgap!(fig.layout, 4, 35)

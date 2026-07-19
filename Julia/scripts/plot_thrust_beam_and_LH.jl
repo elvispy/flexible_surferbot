@@ -234,7 +234,7 @@ function render_panel(log10_kappa, xM_axis, delta_grid, fig_title, out_base, bp,
     PaperPlotTheme.with_theme() do
         fig = Figure(size = (820, 640), backgroundcolor = :white, figure_padding = (12, 8, 12, 12))
         ax = Axis(fig[1, 1]; xlabel = L"x_M / L", ylabel = L"\kappa",
-            xlabelsize = 14, ylabelsize = 14, xticklabelsize = 12, yticklabelsize = 12,
+            xlabelsize = 16, ylabelsize = 16, xticklabelsize = 14, yticklabelsize = 14,
             yticks = kappa_exp_xticks(XLIMS), xgridvisible = false, ygridvisible = false)
         xlims!(ax, YLIMS...)
         ylims!(ax, XLIMS...)
@@ -246,10 +246,10 @@ function render_panel(log10_kappa, xM_axis, delta_grid, fig_title, out_base, bp,
             push!(handles, scatter!(ax, [xm], [lk]; marker = markers[i], markersize = 14,
                 color = gold, strokecolor = :black, strokewidth = 1))
         end
-        !isempty(handles) && axislegend(ax, handles, snapshot_labels; position = :lt, labelsize = 9)
+        !isempty(handles) && axislegend(ax, handles, snapshot_labels; position = :lt, labelsize = 14)
         colorbar_opts = cbticks === :auto ?
-            (; label = cbtitle, labelsize = 11, ticklabelsize = 11) :
-            (; label = cbtitle, ticks = cbticks, labelsize = 11, ticklabelsize = 11)
+            (; label = cbtitle, labelsize = 16, ticklabelsize = 14) :
+            (; label = cbtitle, ticks = cbticks, labelsize = 16, ticklabelsize = 14)
         Colorbar(fig[1, 2], hm; colorbar_opts...)
         save(out_base * ".pdf", fig)
     end

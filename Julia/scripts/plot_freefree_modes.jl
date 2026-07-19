@@ -49,7 +49,7 @@ function plot_modes()
             ax = Axis(fig[i, 1]; limits = ((-0.5, 0.5), ylims),
                 xticks = -0.5:0.25:0.5, yticks = [-2.0, 0.0, 2.0],
                 xlabel = is_bottom ? L"x" : "", ylabel = i == 3 ? L"W_n(x)" : "",
-                xlabelsize = 19, ylabelsize = 19, xticklabelsize = 13, yticklabelsize = 13,
+                xlabelsize = 15, ylabelsize = 15, xticklabelsize = 13, yticklabelsize = 13,
                 xticklabelsvisible = is_bottom, xticksvisible = is_bottom,
                 xgridvisible = false, ygridvisible = false)
             hlines!(ax, [0.0]; color = (:black, 0.25), linewidth = 0.8)

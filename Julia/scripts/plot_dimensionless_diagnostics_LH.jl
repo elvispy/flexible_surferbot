@@ -582,7 +582,7 @@ function build_LH_plot(artifact, csv_path, output_dir; xlim_min::Float64,
         fig = Figure(size = (820, 640), backgroundcolor = :white,
             figure_padding = (12, 8, 12, 12))
         ax = Axis(fig[1, 1]; xlabel = L"x_M / L", ylabel = L"\kappa",
-            xlabelsize = 14, ylabelsize = 14, xticklabelsize = 12, yticklabelsize = 12,
+            xlabelsize = 16, ylabelsize = 16, xticklabelsize = 14, yticklabelsize = 14,
             yticks = kappa_exp_xticks(XLIMS), xgridvisible = false, ygridvisible = false)
         xlims!(ax, YLIMS...)
         ylims!(ax, XLIMS...)
@@ -611,9 +611,9 @@ function build_LH_plot(artifact, csv_path, output_dir; xlim_min::Float64,
             LineElement(color = okabe_ito[7], linestyle = :solid, linewidth = 4.0),
         ]
         axislegend(ax, legend_entries, [CURVE_LABELS[1], CURVE_LABELS[2], L"S \perp A",
-            CURVE_LABELS[3], CURVE_LABELS[4]]; position = :lt, labelsize = 11,
+            CURVE_LABELS[3], CURVE_LABELS[4]]; position = :lt, labelsize = 14,
             framecolor = :black, backgroundcolor = (:white, 0.85))
-        Colorbar(fig[1, 2], hm; label = L"\alpha", labelsize = 14, ticklabelsize = 11)
+        Colorbar(fig[1, 2], hm; label = L"\alpha", labelsize = 16, ticklabelsize = 14)
         return fig
     end
 end
@@ -876,7 +876,7 @@ function build_beam_end_plot(artifact, csv_path, output_dir; xlim_min::Float64)
         fig = Figure(size = (820, 640), backgroundcolor = :white,
             figure_padding = (12, 8, 12, 12))
         ax = Axis(fig[1, 1]; xlabel = L"x_M / L", ylabel = L"\kappa",
-            xlabelsize = 14, ylabelsize = 14, xticklabelsize = 12, yticklabelsize = 12,
+            xlabelsize = 16, ylabelsize = 16, xticklabelsize = 14, yticklabelsize = 14,
             yticks = kappa_exp_xticks(XLIMS), xgridvisible = false, ygridvisible = false)
         xlims!(ax, YLIMS...)
         ylims!(ax, XLIMS...)
@@ -897,9 +897,9 @@ function build_beam_end_plot(artifact, csv_path, output_dir; xlim_min::Float64)
         end
         legend_entries = [LineElement(color = curve_colors[i], linestyle = curve_styles[i], linewidth = 4.0)
                           for i in eachindex(CURVE_NAMES)]
-        axislegend(ax, legend_entries, BEAM_CURVE_LABELS; position = :lt, labelsize = 11,
+        axislegend(ax, legend_entries, BEAM_CURVE_LABELS; position = :lt, labelsize = 14,
             framecolor = :black, backgroundcolor = (:white, 0.85))
-        Colorbar(fig[1, 2], hm; label = L"\alpha", labelsize = 14, ticklabelsize = 11)
+        Colorbar(fig[1, 2], hm; label = L"\alpha", labelsize = 16, ticklabelsize = 14)
         return fig
     end
 end
