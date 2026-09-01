@@ -7,7 +7,7 @@ build-backend = "setuptools.build_meta"
 name = "surferbot"           # the importable package name
 version = "0.1.0"            # **required** by PEP 621
 description = "…brief desc…"
-authors = [{ name = "Your Name", email = "you@example.com" }]
+authors = [{ name = "Elvis Aguero", email = "elvis_vera@brown.edu" }]
 readme = "README.md"         # optional but recommended
 license = { text = "MIT" }
 dependencies = [
