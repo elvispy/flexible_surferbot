@@ -508,12 +508,18 @@ function draw_wave_axis!(ax, result; ylim, show_ylabel, title, F_T_ratio, F_T_ra
     dir = sign(F_T_raw)
     arrow_y = -0.45 * ylim
     label_y = -0.58 * ylim
-    arrow_x = -dir * 1.1 / (L_raft * 100)
-    arrow_u = dir * 2.2 / (L_raft * 100)
-    CM.arrows2d!(ax, [arrow_x], [arrow_y], [arrow_u], [0.0];
-        shaftcolor = :black, tipcolor = :black, shaftwidth = 3.0, tipwidth = 18, tiplength = 18)
+    # Round first, then decide.  A case that displays as 0.0 has no meaningful
+    # direction, so the arrow is dropped rather than pointing at rounding noise.
+    # `+ 0.0` also normalises -0.0, which would otherwise print as "-0.0".
+    shown = round(F_T_ratio; digits = 1) + 0.0
+    if shown != 0
+        arrow_x = -dir * 1.1 / (L_raft * 100)
+        arrow_u = dir * 2.2 / (L_raft * 100)
+        CM.arrows2d!(ax, [arrow_x], [arrow_y], [arrow_u], [0.0];
+            shaftcolor = :black, tipcolor = :black, shaftwidth = 3.0, tipwidth = 18, tiplength = 18)
+    end
     CM.text!(ax, 0.0, label_y;
-        text = LaTeXString(@sprintf("\$F_T/F_T^\\ast = %.1f\$", F_T_ratio)),
+        text = LaTeXString(@sprintf("\$F_T/F_T^\\ast = %.1f\$", shown)),
         align = (:center, :top), fontsize = 20, color = :black)
 end
 
