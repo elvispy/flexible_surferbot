@@ -105,22 +105,11 @@ end
 const THRUST_CACHE_PATH = joinpath(@__DIR__, "..", "output", "jld2", "thrust_sweeps.jld2")
 const ALPHA_CACHE_PATH = joinpath(@__DIR__, "..", "output", "jld2", "alpha_sweep_kappa_farfield.jld2")
 const GRID_ALPHA_CSV = joinpath(@__DIR__, "..", "output", "csv", "sweeper_coupled_full_grid.csv")
-# First and third values chosen as local minima of F_T/F_T^* in the kappa
-# sweep at the SurferBot forcing position (very negative thrust), not the
-# resonance peaks -- see chat: original 1.71103172e-3/2.22e-2 sat on peaks.
-# The first value MUST be one of thrust_sweeps.jld2's own coarse kap_x sample
-# points (not just a nearby true minimum from a separate fine solver scan):
-# the plotted Fig 5 top-row curve linearly interpolates between those ~50
-# log-spaced samples, and this particular resonance dip is narrower than the
-# sample spacing, so an off-sample kappa (e.g. 1.949845e-3) reads as only
-# ~-4 on the plotted curve even though the true minimum there is ~-27.
-# kappa=2.1209508879201904e-3 IS an existing sample (F_T/F_T*=-22.1,
-# flanked by +28.4/-10.7), so it shows as a real, visible dip.
-# First and third are local minima of F_T/F_T^* in the kappa sweep at the
-# SurferBot forcing position.  They moved when the sweep was refined from 50
-# to 249 points: the old values sat on the flanks of these dips, not their
-# floors.  The middle value is not an extremum, it is the alpha ~ -1 case.
-const KAPPA_HIGHLIGHTS = [1.9952623149688789e-3, 6.8665e-3, 1.7575106248547922e-2]
+# The plotted Fig 5 top-row curve interpolates between the sweep's own sample
+# points, so a highlight that is not itself a sample reads as a much shallower
+# dip than the true minimum. These values are sample points of the refined
+# 201-point sweep. The middle one is not an extremum, it is the alpha ~ -1 case.
+const KAPPA_HIGHLIGHTS = PaperPlotTheme.KAPPA_HIGHLIGHTS
 const XM_HIGHLIGHTS = [-0.12, -0.1885, -0.272]
 const SNAPSHOT_CACHE_PATH = joinpath(@__DIR__, "..", "output", "jld2", "kappa_snapshots_cache.jld2")
 
@@ -137,11 +126,11 @@ function paper_snapshot_ops()
     xM_sb    = Float64(bp.motor_position) / Float64(bp.L_raft)
 
     ops = [
-        (kappa=1.9952623149688789e-3, xM=xM_sb,  file_xM=nothing, label="(a)"),
-        (kappa=6.8665e-3, xM=xM_sb,  file_xM=nothing, label="(b)"),
-        (kappa=6.8665e-3, xM=-0.1885,  file_xM=-0.1885,   label="(c)"),
-        (kappa=6.8665e-3, xM=-0.272,  file_xM=-0.272,   label="(d)"),
-        (kappa=1.7575106248547922e-2, xM=xM_sb,  file_xM=nothing, label="(e)"),
+        (kappa=KAPPA_HIGHLIGHTS[1], xM=xM_sb,  file_xM=nothing, label="(a)"),
+        (kappa=KAPPA_HIGHLIGHTS[2], xM=xM_sb,  file_xM=nothing, label="(b)"),
+        (kappa=KAPPA_HIGHLIGHTS[2], xM=-0.1885,  file_xM=-0.1885,   label="(c)"),
+        (kappa=KAPPA_HIGHLIGHTS[2], xM=-0.272,  file_xM=-0.272,   label="(d)"),
+        (kappa=KAPPA_HIGHLIGHTS[3], xM=xM_sb,  file_xM=nothing, label="(e)"),
     ]
     return bp, EI_scale, xM_sb, ops
 end

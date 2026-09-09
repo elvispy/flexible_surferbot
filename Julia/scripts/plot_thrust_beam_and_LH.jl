@@ -328,10 +328,10 @@ function main()
     # panels appear in the paper. The motor-position grid runs (b) = -0.272,
     # (c) = -0.1885, (d) = -0.12 after its columns were reordered, and its (d)
     # shares an operating point with (c) of the flexibility grid. The two outer
-    # kappa are the refined local minima of thrust and must stay in step with
-    # KAPPA_HIGHLIGHTS in plot_thrust_sweeps.jl and plot_kappa_snapshot.jl.
-    snap_kappas = [6.8665e-3, 6.8665e-3, 6.8665e-3,
-                   1.9952623149688789e-3, 1.7575106248547922e-2]
+    # kappa come from PaperPlotTheme.KAPPA_HIGHLIGHTS so this figure cannot drift
+    # out of step with the snapshot grids and the one-dimensional sweeps again.
+    kh = PaperPlotTheme.KAPPA_HIGHLIGHTS
+    snap_kappas = [kh[2], kh[2], kh[2], kh[1], kh[3]]
     snap_logK   = log10.(snap_kappas)
     snap_xMs    = [-0.272,  -0.1885,  xM_sb,  xM_sb,  xM_sb]
     snap_labels = [L"Fig.~5\,(b)", L"Fig.~5\,(c)", L"Figs.~5\,(d),\,6\,(c)",

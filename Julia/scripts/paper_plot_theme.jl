@@ -9,6 +9,12 @@ const BOLD = joinpath(NEWCM_DIR, "NewCM10-Bold.otf")
 const BOLDITALIC = joinpath(NEWCM_DIR, "NewCM10-BoldItalic.otf")
 const MATH = joinpath(NEWCM_DIR, "NewCMMath-Regular.otf")
 
+# The three stiffnesses highlighted throughout the paper: local minima of thrust
+# at the SurferBot forcing position, taken from the refined 201-point sweep. The
+# snapshot grids, the one-dimensional sweeps and the two-dimensional thrust map
+# all mark these same points, so they are defined once here.
+const KAPPA_HIGHLIGHTS = [1.9952623149688789e-3, 6.8665e-3, 1.7575106248547922e-2]
+
 function setup_mathfonts!()
     mte_id = Base.PkgId(Base.UUID("0a4f8689-d25c-4efe-a92b-7142dfc1aa53"), "MathTeXEngine")
     mte = get(Base.loaded_modules, mte_id, nothing)

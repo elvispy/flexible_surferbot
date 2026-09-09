@@ -66,11 +66,7 @@ const XM_HIGHLIGHTS = [-0.12, -0.1885, -0.272]
 function setup_lm_mathfonts()
     PaperPlotTheme.setup_mathfonts!()
 end
-# Local minima of the thrust curve on the refined 201-point sweep. The outer two
-# moved off their 50-point positions (2.12e-3, 1.698e-2) once the sweep resolved
-# the minima properly. Keep in step with KAPPA_HIGHLIGHTS in plot_kappa_snapshot.jl,
-# which uses the same values to pick the snapshot columns.
-const KAPPA_HIGHLIGHTS = [1.9952623149688789e-3, 6.8665e-3, 1.7575106248547922e-2]
+const KAPPA_HIGHLIGHTS = PaperPlotTheme.KAPPA_HIGHLIGHTS
 const RIGID_XM_VALUES = collect(range(-0.48, 0.48; length = 2 * N_SWEEP - 1))
 
 # ─── Per-solve extraction ─────────────────────────────────────────────────────
