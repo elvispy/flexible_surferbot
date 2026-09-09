@@ -38,6 +38,11 @@ const ALPHA_CACHE_PATH = joinpath(@__DIR__, "..", "output", "jld2", "alpha_sweep
 const GRID_ALPHA_CSV = joinpath(@__DIR__, "..", "output", "csv", "sweeper_coupled_full_grid.csv")
 const FIG_DIR    = joinpath(@__DIR__, "..", "output", "figures")
 const N_SWEEP    = 50
+# The kappa sweep is resolved more finely than the others: its resonance dips
+# are narrower than the 50-point spacing, which made the plotted curve visibly
+# piecewise linear.  Points already in the cache are reused, so raising this
+# only solves the new ones.
+const N_SWEEP_KAPPA = 201
 const NU_WATER   = 1e-6
 const RIGID_INVISCID_OVERRIDES = (nu = 0.0, EI = Inf)
 const BLUE = RGBf(0.10, 0.30, 0.80)
@@ -61,7 +66,11 @@ const XM_HIGHLIGHTS = [-0.12, -0.1885, -0.272]
 function setup_lm_mathfonts()
     PaperPlotTheme.setup_mathfonts!()
 end
-const KAPPA_HIGHLIGHTS = [2.1209508879201904e-3, 6.8665e-3, 1.698244e-2]
+# Local minima of the thrust curve on the refined 201-point sweep. The outer two
+# moved off their 50-point positions (2.12e-3, 1.698e-2) once the sweep resolved
+# the minima properly. Keep in step with KAPPA_HIGHLIGHTS in plot_kappa_snapshot.jl,
+# which uses the same values to pick the snapshot columns.
+const KAPPA_HIGHLIGHTS = [1.9952623149688789e-3, 6.8665e-3, 1.7575106248547922e-2]
 const RIGID_XM_VALUES = collect(range(-0.48, 0.48; length = 2 * N_SWEEP - 1))
 
 # ─── Per-solve extraction ─────────────────────────────────────────────────────
@@ -132,7 +141,27 @@ const XM_SWEEP_KAPPA = 6.8665e-3   # κ value for the motor-position sweep (Fig 
 # a sweep (e.g. adding a few points to resolve a feature) means re-solving
 # the entire grid, and some points near resonances take ~1 min instead of
 # ~1 s -- the difference between a few minutes and hours.
-function solve_missing_x(existing_x, existing_thrust, existing_Sxx, desired_x, solve_fn; label = "")
+# Partial results are flushed to the cache every CHECKPOINT_EVERY solves.  The
+# cache used to be written only once every sweep had finished, so interrupting a
+# long run threw away every solve it had done.  The write goes to a temporary
+# file and is renamed into place, so an interrupt during the write cannot leave
+# a half-written cache behind.
+const CHECKPOINT_EVERY = 10
+
+function checkpoint_sweep(key_x, key_T, key_S, x, T, S)
+    d = isfile(CACHE_PATH) ? JLD2.load(CACHE_PATH) : Dict{String,Any}()
+    d[key_x] = x; d[key_T] = T; d[key_S] = S
+    mkpath(dirname(CACHE_PATH))
+    # The ".jld2" must stay on the temp name: JLD2.save dispatches on the file
+    # extension and a bare ".tmp" suffix fails with "No applicable_savers found".
+    tmp = CACHE_PATH * ".tmp.jld2"
+    JLD2.save(tmp, d)
+    mv(tmp, CACHE_PATH; force = true)
+    return nothing
+end
+
+function solve_missing_x(existing_x, existing_thrust, existing_Sxx, desired_x, solve_fn;
+                         label = "", checkpoint = nothing)
     new_x = missing_re_values(existing_x, desired_x)
     if isempty(new_x)
         return existing_x, existing_thrust, existing_Sxx
@@ -140,6 +169,10 @@ function solve_missing_x(existing_x, existing_thrust, existing_Sxx, desired_x, s
     println("$(label)Solving $(length(new_x)) new point(s) of $(length(desired_x)) desired, $MAX_WORKERS workers …")
     new_T   = Vector{Float64}(undef, length(new_x))
     new_Sxx = Vector{Float64}(undef, length(new_x))
+    # Vector{Bool}, not BitVector: distinct bits of a BitVector share a word, so
+    # concurrent writes from different tasks would race.
+    solved  = fill(false, length(new_x))
+    ndone   = Threads.Atomic{Int}(0)
     @threads for i in eachindex(new_x)
         Base.acquire(SOLVE_SEM)
         try
@@ -147,8 +180,22 @@ function solve_missing_x(existing_x, existing_thrust, existing_Sxx, desired_x, s
         finally
             Base.release(SOLVE_SEM)
         end
+        solved[i] = true
+        n = Threads.atomic_add!(ndone, 1) + 1
         lock(PRINT_LOCK) do
             @printf "  [%2d/%d]  x=%+.4e   T/d=%+.3e   Sxx=%+.3e\n" i length(new_x) new_x[i] new_T[i] new_Sxx[i]
+            if checkpoint !== nothing && n % CHECKPOINT_EVERY == 0
+                k  = findall(solved)
+                xs = vcat(existing_x, new_x[k])
+                Ts = vcat(existing_thrust, new_T[k])
+                Ss = vcat(existing_Sxx, new_Sxx[k])
+                o  = sortperm(xs)
+                checkpoint(xs[o], Ts[o], Ss[o])
+                @printf "  … checkpointed %d/%d solved points\n" n length(new_x)
+            end
+            # stdout is block-buffered when redirected to a file; without this a
+            # long sweep shows no progress at all until it exits.
+            flush(stdout)
         end
     end
     x_all      = vcat(existing_x, new_x)
@@ -166,7 +213,8 @@ function run_sweep_xM(bp; existing_x = Float64[], existing_thrust = Float64[], e
     xs = collect(range(-0.48, 0.0; length = N_SWEEP))
     println("Sweep 1/4: motor position ($N_SWEEP points) …")
     solve_fn(xM_norm) = solve_one((motor_position = xM_norm * L, nu = 0.0, EI = EI_xM), bp)
-    x, T, Sxx = solve_missing_x(existing_x, existing_thrust, existing_Sxx, xs, solve_fn)
+    x, T, Sxx = solve_missing_x(existing_x, existing_thrust, existing_Sxx, xs, solve_fn;
+        checkpoint = (a, b, c) -> checkpoint_sweep("xM_x", "xM_T", "xM_Sxx", a, b, c))
     return (; x, thrust = T, Sxx)
 end
 
@@ -177,11 +225,12 @@ function run_sweep_kappa(bp; existing_x = Float64[], existing_thrust = Float64[]
     xM       = Float64(bp.motor_position)
     EI_scale = rho_R * L^4 * omega^2
 
-    log10_kappa = collect(range(-4.0, 1.0; length = N_SWEEP))
+    log10_kappa = collect(range(-4.0, 1.0; length = N_SWEEP_KAPPA))
     kappa_vals  = 10.0 .^ log10_kappa
-    println("Sweep 2/4: stiffness κ ($N_SWEEP points) …")
+    println("Sweep 2/4: stiffness κ ($N_SWEEP_KAPPA points) …")
     solve_fn(kappa) = solve_one((EI = kappa * EI_scale, motor_position = xM, nu = 0.0), bp)
-    x, T, Sxx = solve_missing_x(existing_x, existing_thrust, existing_Sxx, kappa_vals, solve_fn)
+    x, T, Sxx = solve_missing_x(existing_x, existing_thrust, existing_Sxx, kappa_vals, solve_fn;
+        checkpoint = (a, b, c) -> checkpoint_sweep("kap_x", "kap_T", "kap_Sxx", a, b, c))
     return (; x, thrust = T, Sxx)
 end
 
@@ -587,8 +636,13 @@ function main()
         xlabel = L"\kappa",
         outfile = joinpath(FIG_DIR, "plot_thrust_sweeps_kappa"),
         xscale = log10,
-        xticks = (10.0 .^ collect(-4:1),
-                  [L"10^{-4}", L"10^{-3}", L"10^{-2}", L"10^{-1}", L"10^{0}", L"10^{1}"]),
+        xticks = (10.0 .^ collect(-3:0),
+                  [L"10^{-3}", L"10^{-2}", L"10^{-1}", L"10^{0}"]),
+        # Same window as the snapshot grid, so the two figures span the same range
+        # of kappa. The lower cut also excludes the narrow resonance at
+        # kappa = 1.06e-4, which reaches 65 and would otherwise run off this panel;
+        # inside the window the maximum is 28.2, so the scale below still holds.
+        xlims = (2e-4, 1e0),
         ylims = (-32.0, 32.0),
         highlight_x = KAPPA_HIGHLIGHTS,
         legend_position = :rb)

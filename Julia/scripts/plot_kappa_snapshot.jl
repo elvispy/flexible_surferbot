@@ -116,7 +116,11 @@ const GRID_ALPHA_CSV = joinpath(@__DIR__, "..", "output", "csv", "sweeper_couple
 # ~-4 on the plotted curve even though the true minimum there is ~-27.
 # kappa=2.1209508879201904e-3 IS an existing sample (F_T/F_T*=-22.1,
 # flanked by +28.4/-10.7), so it shows as a real, visible dip.
-const KAPPA_HIGHLIGHTS = [2.1209508879201904e-3, 6.8665e-3, 1.698244e-2]
+# First and third are local minima of F_T/F_T^* in the kappa sweep at the
+# SurferBot forcing position.  They moved when the sweep was refined from 50
+# to 249 points: the old values sat on the flanks of these dips, not their
+# floors.  The middle value is not an extremum, it is the alpha ~ -1 case.
+const KAPPA_HIGHLIGHTS = [1.9952623149688789e-3, 6.8665e-3, 1.7575106248547922e-2]
 const XM_HIGHLIGHTS = [-0.12, -0.1885, -0.272]
 const SNAPSHOT_CACHE_PATH = joinpath(@__DIR__, "..", "output", "jld2", "kappa_snapshots_cache.jld2")
 
@@ -133,11 +137,11 @@ function paper_snapshot_ops()
     xM_sb    = Float64(bp.motor_position) / Float64(bp.L_raft)
 
     ops = [
-        (kappa=2.1209508879201904e-3, xM=xM_sb,  file_xM=nothing, label="(a)"),
+        (kappa=1.9952623149688789e-3, xM=xM_sb,  file_xM=nothing, label="(a)"),
         (kappa=6.8665e-3, xM=xM_sb,  file_xM=nothing, label="(b)"),
         (kappa=6.8665e-3, xM=-0.1885,  file_xM=-0.1885,   label="(c)"),
         (kappa=6.8665e-3, xM=-0.272,  file_xM=-0.272,   label="(d)"),
-        (kappa=1.698244e-2, xM=xM_sb,  file_xM=nothing, label="(e)"),
+        (kappa=1.7575106248547922e-2, xM=xM_sb,  file_xM=nothing, label="(e)"),
     ]
     return bp, EI_scale, xM_sb, ops
 end
@@ -414,11 +418,32 @@ function draw_sweep_axis!(figpos, labelpos, sweep; legend_position = :rb,
                            sweep_labelsize = 29, sweep_ticksize = 26,
                            legend_labelsize = 28, legend_patchsize = (55, 23),
                            highlight_colors = fill(MAKIE_GRAY, length(sweep.highlights)),
-                           highlight_linewidths = fill(1.5, length(sweep.highlights)))
+                           highlight_linewidths = fill(1.5, length(sweep.highlights)),
+                           ylim_override = nothing, xlim_override = nothing)
     # sweep_labelsize/sweep_ticksize override the column-panel theme defaults
     # for this full-width row (scale 0.416): 22→9.2pt, 19→7.9pt
-    ylim = 1.08 * maximum(abs.(vcat(sweep.y, sweep.ylh, 0.0)))
-    
+    # `ylim_override` clips the vertical range instead of letting it autoscale.
+    # The refined kappa sweep resolves a narrow resonance near the low-kappa end
+    # whose true peak is ~2.3x the tallest previously sampled point; letting it
+    # set the axis compresses every other feature. Clipping keeps the range the
+    # rest of the paper's figures were drawn against. The clipped peak must be
+    # acknowledged in the caption, since the curve then leaves the axis.
+    # Horizontal restriction is resolved first, because the vertical autoscale
+    # below must see only the data that is actually plotted.  Restricting the
+    # low-kappa end is what lets the y axis autoscale sanely: the narrow
+    # resonance below kappa ~ 1.5e-4 peaks at ~65, and if it is included the
+    # axis stretches to fit it and flattens everything else.
+    xlo, xhi = isnothing(xlim_override) ?
+        (minimum(sweep.x), maximum(sweep.x)) : xlim_override
+    vis = (sweep.x .>= xlo) .& (sweep.x .<= xhi)
+    ylim = isnothing(ylim_override) ?
+        1.08 * maximum(abs.(vcat(sweep.y[vis], sweep.ylh[vis], 0.0))) : ylim_override
+    xt = sweep.xticks
+    if !isnothing(xlim_override) && xt isa Tuple
+        keep = findall(v -> xlo <= v <= xhi, xt[1])
+        xt = (xt[1][keep], xt[2][keep])
+    end
+
     ax = CM.Axis(figpos;
         xlabel = sweep.xlabel,
         xlabelsize = sweep_labelsize,
@@ -426,8 +451,8 @@ function draw_sweep_axis!(figpos, labelpos, sweep; legend_position = :rb,
         yticklabelsize = sweep_ticksize,
         ytickformat = vals -> [@sprintf("%.1f", v) for v in vals],
         xscale = sweep.xscale,
-        xticks = sweep.xticks,
-        limits = ((minimum(sweep.x), maximum(sweep.x)), (-ylim, ylim)),
+        xticks = xt,
+        limits = ((xlo, xhi), (-ylim, ylim)),
         alignmode = CM.Mixed(left = CM.Protrusion(150), right = CM.Protrusion(90)))
         
     CM.Label(labelpos, L"\text{Normalized thrust}", rotation = pi/2, fontsize = sweep_labelsize, font = LM_FONT)
@@ -442,7 +467,7 @@ function draw_sweep_axis!(figpos, labelpos, sweep; legend_position = :rb,
 
     axr = CM.Axis(figpos;
         xscale = sweep.xscale,
-        xticks = sweep.xticks,
+        xticks = xt,
         yaxisposition = :right,
         ylabel = L"\alpha",
         ylabelsize = sweep_labelsize,
@@ -456,7 +481,7 @@ function draw_sweep_axis!(figpos, labelpos, sweep; legend_position = :rb,
         xgridvisible = false,
         ygridvisible = false,
         backgroundcolor = :transparent,
-        limits = ((minimum(sweep.x), maximum(sweep.x)), (-1.1, 1.1)),
+        limits = ((xlo, xhi), (-1.1, 1.1)),
         ytickformat = vals -> [@sprintf("%.1f", v) for v in vals],
         alignmode = CM.Mixed(right = CM.Protrusion(90)))
     CM.hidespines!(axr, :l, :b, :t)
@@ -611,7 +636,8 @@ function wave_ylim(results)
 end
 
 function make_snapshot_grid(fig_dir; kind::Symbol, op_indices, filename, column_titles,
-                            modal_energy_ylims = (0.0, 2e-5), global_ylim = nothing)
+                            modal_energy_ylims = (0.0, 2e-5), global_ylim = nothing,
+                            sweep_ylim = nothing, sweep_xlim = nothing)
     setup_lm_mathfonts()
     makie_snapshot_theme!()
     _, _, _, all_ops = paper_snapshot_ops()
@@ -627,7 +653,8 @@ function make_snapshot_grid(fig_dir; kind::Symbol, op_indices, filename, column_
     highlight_colors = kind == :xM ? reverse(COLUMN_COLORS) : COLUMN_COLORS
     highlight_linewidths = kind == :xM ? reverse(COLUMN_LINEWIDTHS) : COLUMN_LINEWIDTHS
     draw_sweep_axis!(fig[1, 1:3], fig[1, 1:3, CM.Left()], sweep; legend_position = :rt,
-        highlight_colors, highlight_linewidths)
+        highlight_colors, highlight_linewidths, ylim_override = sweep_ylim,
+        xlim_override = sweep_xlim)
 
     for j in 1:3
         col = COLUMN_COLORS[j]
@@ -671,10 +698,20 @@ function main_snapshot_grids(fig_dir)
     make_snapshot_grid(fig_dir;
         kind = :kappa,
         op_indices = [1, 2, 5],
+        # The refined sweep resolves a narrow resonance near kappa = 1e-4 that
+        # peaks at 65, well outside the vertical scale the rest of the paper was
+        # drawn against. Restricting the horizontal range excludes it instead of
+        # clipping it, and the autoscale then returns to 30.5, matching the
+        # earlier figures without hiding any data inside the plotted window.
+        sweep_xlim = (2e-4, 1e0),
+        # The refined first highlight sits in a deeper minimum, so its modal
+        # response is larger: max|q| = 2.87e-5 against the old 2e-5 ceiling,
+        # which clipped the mode-3 bar. Raised with ~15% headroom.
+        modal_energy_ylims = (0.0, 3.3e-5),
         filename = "plot_kappa_snapshot_grid_flexibility",
-        column_titles = [L"\kappa=2.12\times10^{-3}",
+        column_titles = [L"\kappa=2.00\times10^{-3}",
                          L"\kappa=6.87\times10^{-3}",
-                         L"\kappa=1.70\times10^{-2}"],
+                         L"\kappa=1.76\times10^{-2}"],
         global_ylim = global_ylim)
     make_snapshot_grid(fig_dir;
         kind = :xM,
