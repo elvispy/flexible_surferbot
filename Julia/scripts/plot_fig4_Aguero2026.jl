@@ -22,12 +22,17 @@ using LaTeXStrings
 include(joinpath(@__DIR__, "paper_plot_theme.jl"))
 using .PaperPlotTheme
 
-const FIG1_FREE_SURFACE = "#1A4DCC"
+const FIG1_FREE_SURFACE = "#194CCC"
 const FIG1_RAFT = "#000000"
 const FIG1_MOTOR = CairoMakie.RGBf(0.66, 0.43, 0.05)
-const FIG3_LABELSIZE = 62
-const FIG3_TICKSIZE = 47
-const FIG3_TEXT_COLOR = RGBf(0.25, 0.25, 0.25)
+const FIG3_LABELSIZE = 56.6
+const FIG3_TICKSIZE = 48.1
+# Panel (a) is a MATLAB figure: text, spines and ticks are all MATLAB's default
+# axis colour 0.15 grey (#252525), and the grid is that colour at alpha 0.15
+# (#dedede on white). Matched here so the two panels read as one figure.
+const FIG3_TEXT_COLOR = RGBf(0.15, 0.15, 0.15)
+const FIG3_AXIS_COLOR = RGBf(0.15, 0.15, 0.15)
+const FIG3_GRID_COLOR = RGBAf(0.15, 0.15, 0.15, 0.15)
 
 function main()
     fig_dir = joinpath(@__DIR__, "..", "output", "figures")
@@ -64,14 +69,33 @@ function main()
 
     fname = joinpath(fig_dir, "plot_fig4_Aguero2026_1.pdf")
     PaperPlotTheme.with_theme() do
-        fig = Figure(size = (1100, 530), backgroundcolor = :white,
-            figure_padding = (28, 8, 14, 18))
-        ax = Axis(fig[1, 1]; xlabel = L"x\;(\mathrm{cm})", ylabel = L"h\;(𝜇\mathrm{m})",
+        # Panel (b) is compared side by side with panel (a), which is reproduced from
+        # Benham et al. (2024) and cannot be regenerated. The canvas aspect and the
+        # plot-box placement below are therefore locked to fractions measured directly
+        # off that figure, so that when both are included at the same \textwidth the
+        # two data areas coincide exactly. Do not replace these with layout padding.
+        CANVAS_W, CANVAS_H = 1100, 532          # aspect 2.0677 (panel (a): 788/381)
+        BOX_L, BOX_R = 0.15127, 0.99716         # fractions of canvas width
+        BOX_T, BOX_B = 0.03989, 0.75247         # fractions of canvas height, from top
+        fig = Figure(size = (CANVAS_W, CANVAS_H), backgroundcolor = :white,
+            figure_padding = 0)
+        ax = Axis(fig; bbox = BBox(BOX_L * CANVAS_W, BOX_R * CANVAS_W,
+                                   (1 - BOX_B) * CANVAS_H, (1 - BOX_T) * CANVAS_H),
+            xlabel = L"x\;(\mathrm{cm})", ylabel = L"h\;(𝜇\mathrm{m})",
             xlabelsize = FIG3_LABELSIZE, ylabelsize = FIG3_LABELSIZE,
             xticklabelsize = FIG3_TICKSIZE, yticklabelsize = FIG3_TICKSIZE,
             xlabelcolor = FIG3_TEXT_COLOR, ylabelcolor = FIG3_TEXT_COLOR,
             xticklabelcolor = FIG3_TEXT_COLOR, yticklabelcolor = FIG3_TEXT_COLOR,
-            xlabelpadding = -20, xticklabelpad = -8,
+            xticksize = 4.4, xtickalign = 0,
+            xticklabelpad = -1.4, xlabelpadding = 5.8,
+            # panel (a) prints ASCII hyphens, not the Unicode minus Makie
+            # defaults to; match it so the two tick rows read identically
+            xtickformat = vs -> [string(round(Int, v)) for v in vs],
+            ytickformat = vs -> [string(round(Int, v)) for v in vs],
+            bottomspinecolor = FIG3_AXIS_COLOR, topspinecolor = FIG3_AXIS_COLOR,
+            leftspinecolor = FIG3_AXIS_COLOR, rightspinecolor = FIG3_AXIS_COLOR,
+            xtickcolor = FIG3_AXIS_COLOR, ytickcolor = FIG3_AXIS_COLOR,
+            xgridcolor = FIG3_GRID_COLOR, ygridcolor = FIG3_GRID_COLOR,
             xticks = -6:2:6, yticks = -300:100:300, xgridvisible = true, ygridvisible = true)
         xlims!(ax, -7, 7)
         ylims!(ax, -300, 300)

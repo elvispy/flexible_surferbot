@@ -48,6 +48,11 @@ const GRAY = RGBf(0.25, 0.25, 0.25)
 const FIG3_LABELSIZE = 62
 const FIG3_TICKSIZE = 47
 const FIG3_LEGENDSIZE = 47
+# Figure 3 panels (a) and (b) draw all text, spines and ticks in MATLAB's
+# default axis grey 0.15 (#252525), with the grid at alpha 0.15 (#dedede on
+# white).  Panel (c) sits beside them, so it uses the same values.
+const FIG3_TEXT_COLOR = RGBf(0.15, 0.15, 0.15)
+const FIG3_GRID_COLOR = RGBAf(0.15, 0.15, 0.15, 0.15)
 const NEWCM_DIR = "/usr/local/texlive/2025/texmf-dist/fonts/opentype/public/newcomputermodern"
 const LM_FONT = joinpath(NEWCM_DIR, "NewCM10-Regular.otf")
 const NEWCM_MATH = joinpath(NEWCM_DIR, "NewCMMath-Regular.otf")
@@ -536,6 +541,12 @@ function make_single_axis_panel(sw, d, F_T_star; xlabel, outfile,
             xlabelsize = FIG3_LABELSIZE, ylabelsize = FIG3_LABELSIZE,
             xticklabelsize = FIG3_TICKSIZE, yticklabelsize = FIG3_TICKSIZE,
             xlabelpadding = 0, xticklabelpad = -8,
+            xlabelcolor = FIG3_TEXT_COLOR, ylabelcolor = FIG3_TEXT_COLOR,
+            xticklabelcolor = FIG3_TEXT_COLOR, yticklabelcolor = FIG3_TEXT_COLOR,
+            bottomspinecolor = FIG3_TEXT_COLOR, topspinecolor = FIG3_TEXT_COLOR,
+            leftspinecolor = FIG3_TEXT_COLOR, rightspinecolor = FIG3_TEXT_COLOR,
+            xtickcolor = FIG3_TEXT_COLOR, ytickcolor = FIG3_TEXT_COLOR,
+            xgridcolor = FIG3_GRID_COLOR, ygridcolor = FIG3_GRID_COLOR,
             xscale = xscale, xticks = xticks, xgridvisible = true, ygridvisible = true)
         xlims!(ax, minimum(sw.x), maximum(sw.x))
         ylims!(ax, ylim...)

@@ -66,9 +66,9 @@ function phase_and_profile(result)
     beam_ends   = [contact_idx[1], contact_idx[end]]
     dom_end     = beam_ends[argmax(abs.(result.eta[beam_ends]))]
     theta       = -angle(result.eta[dom_end])
-    eta_um      = real.(result.eta .* exp(im * theta)) .* 1e6
+    eta_m       = real.(result.eta .* exp(im * theta))
     motor_x_cm  = Float64(result.metadata.args.motor_position) * 1e2
-    return x_cm, contact, eta_um, motor_x_cm
+    return x_cm, contact, eta_m, motor_x_cm
 end
 
 # ─── Wave-profile panel ──────────────────────────────────────────────────────
@@ -168,21 +168,25 @@ end
 
 function make_wave_panel(result; ylim=1500, small=false,
                           show_xlabel=true, show_ylabel=true)
-    x_cm, contact, eta_um, motor_x_cm = phase_and_profile(result)
-    motor_idx = argmin(abs.(x_cm .- motor_x_cm))
+    x_cm, contact, eta_m, motor_x_cm = phase_and_profile(result)
+    L_raft = result.metadata.args.L_raft
+    x_over_L = x_cm ./ (L_raft * 100)
+    motor_x_over_L = motor_x_cm / (L_raft * 100)
+    eta_um = eta_m .* 1e6
+    motor_idx = argmin(abs.(x_over_L .- motor_x_over_L))
 
     fs_guide = small ? 15 : 21
     fs_tick  = small ? 12 : 18
     b_margin = small ?  6Plots.mm : 11Plots.mm
     l_margin = small ?  8Plots.mm : 14Plots.mm
 
-    p = plot(x_cm, eta_um;
+    p = plot(x_over_L, eta_um;
         color     = FIG1_FREE_SURFACE,
         linewidth = 1.5,
         label     = false,
-        xlabel    = show_xlabel ? L"x\;(\mathrm{cm})" : "",
+        xlabel    = show_xlabel ? L"x/L" : "",
         ylabel    = show_ylabel ? L"h\;(\mu\mathrm{m})" : "",
-        xlims     = (-5, 5),
+        xlims     = (-1.0, 1.0),
         ylims     = (-ylim, ylim),
         yticks    = show_ylabel ? (-ylim:500:ylim) : [],
         grid      = true,
@@ -195,9 +199,9 @@ function make_wave_panel(result; ylim=1500, small=false,
         guidefontsize = fs_guide,
         tickfontsize  = fs_tick,
     )
-    plot!(p, x_cm[contact], eta_um[contact];
+    plot!(p, x_over_L[contact], eta_um[contact];
         color = FIG1_RAFT, linewidth = 2.5, label = false)
-    scatter!(p, [x_cm[motor_idx]], [eta_um[motor_idx]];
+    scatter!(p, [x_over_L[motor_idx]], [eta_um[motor_idx]];
         markershape       = :circle,
         markersize        = 9,
         color             = FIG1_LOAD,
@@ -231,7 +235,7 @@ function make_figure(result, modal, kappa_val, fig_dir; xM_norm=nothing,
     p2  = bar(modal.n, mode_energy;
         xticks        = modal.n,
         xlabel        = L"n",
-        ylabel        = L"|q_n|",
+        ylabel        = L"|\bar{q}_n|",
         label         = false,
         fillcolor     = :steelblue,
         linecolor     = :steelblue,
@@ -296,7 +300,8 @@ function main_5panel(fig_dir)
     # Common y-axis limit across all panels
     ylim = 0
     for res in results
-        _, _, eta_um, _ = phase_and_profile(res)
+        _, _, eta_m, _ = phase_and_profile(res)
+        eta_um = eta_m .* 1e6
         ylim = max(ylim, maximum(abs.(eta_um)))
     end
     ylim = ceil(ylim / 500) * 500   # round up to nearest 500 µm
@@ -341,8 +346,9 @@ function makie_snapshot_theme!()
             titlesize = 29,
             xticklabelfont = LM_FONT,
             yticklabelfont = LM_FONT,
-            xlabelfont = LM_FONT,
             ylabelfont = LM_FONT,
+            ylabelrotation = 0,
+            ylabelpadding = 25,
             titlefont = LM_FONT,
             xgridvisible = false,
             ygridvisible = false,
@@ -465,17 +471,22 @@ function draw_sweep_axis!(figpos, labelpos, sweep; legend_position = :rb,
 end
 
 function draw_wave_axis!(ax, result; ylim, show_ylabel, title, F_T_ratio, F_T_raw)
-    x_cm, contact, eta_um, motor_x_cm = phase_and_profile(result)
-    motor_idx = argmin(abs.(x_cm .- motor_x_cm))
-    CM.lines!(ax, x_cm, eta_um; color = MAKIE_BLUE, linewidth = 1.8)
-    CM.lines!(ax, x_cm[contact], eta_um[contact]; color = :black, linewidth = 3.0)
-    CM.scatter!(ax, [x_cm[motor_idx]], [eta_um[motor_idx]];
+    x_cm, contact, eta_m, motor_x_cm = phase_and_profile(result)
+    L_raft = result.metadata.args.L_raft
+    x_over_L = x_cm ./ (L_raft * 100)
+    motor_x_over_L = motor_x_cm / (L_raft * 100)
+    eta_over_L = eta_m ./ L_raft
+    motor_idx = argmin(abs.(x_over_L .- motor_x_over_L))
+    CM.lines!(ax, x_over_L, eta_over_L; color = MAKIE_BLUE, linewidth = 1.8)
+    CM.lines!(ax, x_over_L[contact], eta_over_L[contact]; color = :black, linewidth = 3.0)
+    CM.scatter!(ax, [x_over_L[motor_idx]], [eta_over_L[motor_idx]];
         color = MAKIE_LOAD, strokecolor = MAKIE_LOAD, markersize = 15)
     ax.title = title
-    ax.xlabel = L"x\;(\mathrm{cm})"
-    ax.ylabel = show_ylabel ? L"h\;(\mu\mathrm{m})" : ""
-    CM.xlims!(ax, -5, 5)
+    ax.xlabel = L"x/L"
+    ax.ylabel = show_ylabel ? L"\bar{\eta}" : ""
+    CM.xlims!(ax, -1.0, 1.0)
     CM.ylims!(ax, -ylim, ylim)
+    ax.yticks = [-ylim, 0.0, ylim]
 
     # The raft sits at |x|<2.5 with much smaller amplitude than the free-surface
     # ripples beyond it (which approach +-ylim near the domain edges), so the
@@ -497,21 +508,77 @@ function draw_wave_axis!(ax, result; ylim, show_ylabel, title, F_T_ratio, F_T_ra
     dir = sign(F_T_raw)
     arrow_y = -0.45 * ylim
     label_y = -0.58 * ylim
-    CM.arrows2d!(ax, [-dir * 1.1], [arrow_y], [dir * 2.2], [0.0];
+    arrow_x = -dir * 1.1 / (L_raft * 100)
+    arrow_u = dir * 2.2 / (L_raft * 100)
+    CM.arrows2d!(ax, [arrow_x], [arrow_y], [arrow_u], [0.0];
         shaftcolor = :black, tipcolor = :black, shaftwidth = 3.0, tipwidth = 18, tiplength = 18)
     CM.text!(ax, 0.0, label_y;
         text = LaTeXString(@sprintf("\$F_T/F_T^\\ast = %.1f\$", F_T_ratio)),
         align = (:center, :top), fontsize = 20, color = :black)
 end
 
-function draw_modal_axis!(ax, modal; ylims, show_ylabel)
-    mode_energy = abs.(modal.q)
+_mixc(a, b, w) = CM.RGBf((1-w)*a.r + w*b.r, (1-w)*a.g + w*b.g, (1-w)*a.b + w*b.b)
+
+# Colour the modal bars by arg(q_n), measured in the same phase convention as
+# the wave panel above (the dominant raft edge is taken real).  The map is
+# cyclic and built from the paper's own accents: MAKIE_BLUE in phase, through
+# neutral grey at +-90 deg, to MAKIE_RED anti-phase.  Amplitude sets opacity,
+# because arg(q_n) is meaningless for a mode of negligible amplitude.
+function phase_bar_colors(modal, result)
+    L = result.metadata.args.L_raft
+    ci = findall(abs.(result.x) .<= L/2 + 1e-12)
+    e = [ci[1], ci[end]]
+    th = -angle(result.eta[e[argmax(abs.(result.eta[e]))]])
+    q = modal.q .* exp(im * th)
+    amp = abs.(q); amax = maximum(amp)
+    neutral = CM.RGBf(0.72, 0.72, 0.72)
+    map(eachindex(q)) do i
+        t = abs(angle(q[i])) / pi
+        base = t <= 0.5 ? _mixc(MAKIE_BLUE, neutral, 2t) : _mixc(neutral, MAKIE_RED, 2t - 1)
+        a = 0.35 + 0.65 * clamp(amp[i] / amax, 0, 1)^0.45
+        CM.RGBAf(base.r, base.g, base.b, a)
+    end
+end
+
+# Slim phase key, drawn inside the modal axis in data coordinates.  Modes n>=6
+# are negligible in every panel of both grids, so the upper-right of the axis is
+# dead space and the key costs no layout.
+function draw_phase_key!(ax, ylims_scaled)
+    x0, x1 = 5.5, 9.45
+    lo, hi = ylims_scaled
+    y0 = lo + 0.60 * (hi - lo)
+    y1 = lo + 0.71 * (hi - lo)
+    neutral = CM.RGBf(0.72, 0.72, 0.72)
+    N = 96
+    xs = range(x0, x1, length = N + 1)
+    for i in 1:N
+        t = abs(-pi + 2pi * (i - 0.5) / N) / pi
+        c = t <= 0.5 ? _mixc(MAKIE_BLUE, neutral, 2t) : _mixc(neutral, MAKIE_RED, 2t - 1)
+        CM.poly!(ax, CM.Point2f[(xs[i], y0), (xs[i+1], y0), (xs[i+1], y1), (xs[i], y1)];
+                 color = c, strokewidth = 0)
+    end
+    CM.lines!(ax, [x0, x1, x1, x0, x0], [y0, y0, y1, y1, y0];
+              color = MAKIE_GRAY, linewidth = 0.8)
+    for (xx, lab, al) in ((x0, "-180", :left), (x1, "180", :right))
+        CM.text!(ax, xx, y0; text = lab, fontsize = 24, align = (al, :top),
+                 offset = (0, -2), color = MAKIE_GRAY)
+    end
+    CM.text!(ax, (x0+x1)/2, y1; text = L"\arg\bar{q}_n", fontsize = 26,
+             align = (:center, :bottom), offset = (0, 3), color = MAKIE_GRAY)
+end
+
+function draw_modal_axis!(ax, modal, L_raft; ylims, show_ylabel, result = nothing, show_phase_key = false)
+    mode_energy = abs.(modal.q) ./ L_raft
+    ylims_scaled = (ylims[1] / L_raft, ylims[2] / L_raft)
+    barcol = isnothing(result) ? MAKIE_BLUE : phase_bar_colors(modal, result)
     CM.barplot!(ax, modal.n, mode_energy;
-        color = MAKIE_BLUE, strokecolor = MAKIE_BLUE, fillto = ylims[1])
+        color = barcol, strokecolor = barcol, fillto = ylims_scaled[1])
     ax.xlabel = L"n"
-    ax.ylabel = show_ylabel ? L"|q_n|" : ""
+    ax.ylabel = show_ylabel ? L"|\bar{q}_n|" : ""
     ax.xticks = modal.n
-    CM.ylims!(ax, ylims...)
+    CM.ylims!(ax, ylims_scaled...)
+    ax.yticks = [0.0, ylims_scaled[2]/2, ylims_scaled[2]]
+    show_phase_key && draw_phase_key!(ax, ylims_scaled)
 end
 
 function solve_snapshot_ops(ops)
@@ -529,20 +596,22 @@ end
 function wave_ylim(results)
     ylim = 0.0
     for res in results
-        _, _, eta_um, _ = phase_and_profile(res)
-        ylim = max(ylim, maximum(abs.(eta_um)))
+        _, _, eta_m, _ = phase_and_profile(res)
+        L_raft = res.metadata.args.L_raft
+        eta_over_L = eta_m ./ L_raft
+        ylim = max(ylim, maximum(abs.(eta_over_L)))
     end
-    return ceil(ylim / 500) * 500
+    return ceil(ylim / 0.01) * 0.01
 end
 
 function make_snapshot_grid(fig_dir; kind::Symbol, op_indices, filename, column_titles,
-                            modal_energy_ylims = (0.0, 2e-5))
+                            modal_energy_ylims = (0.0, 2e-5), global_ylim = nothing)
     setup_lm_mathfonts()
     makie_snapshot_theme!()
     _, _, _, all_ops = paper_snapshot_ops()
     ops = all_ops[op_indices]
     results, modals = solve_snapshot_ops(ops)
-    ylim = wave_ylim(results)
+    ylim = isnothing(global_ylim) ? wave_ylim(results) : global_ylim
     sweep = load_sweep_cache_for_grid(kind)
 
     fig = CM.Figure(size = (1500, 995), backgroundcolor = :white)
@@ -557,17 +626,25 @@ function make_snapshot_grid(fig_dir; kind::Symbol, op_indices, filename, column_
     for j in 1:3
         col = COLUMN_COLORS[j]
         sw  = COLUMN_SPINEWIDTHS[j]
+        am  = j == 1 ? CM.Mixed(left = CM.Protrusion(150)) :
+              j == 3 ? CM.Mixed(right = CM.Protrusion(90)) :
+              CM.Mixed()
+              
         axw = CM.Axis(fig[2, j];
+            alignmode = am,
             title = column_titles[j], titlecolor = col,
             leftspinecolor = col, rightspinecolor = col,
             topspinecolor = col, bottomspinecolor = col, spinewidth = sw)
         F_T_ratio = results[j].thrust / abs(sweep.F_T_star)
         draw_wave_axis!(axw, results[j]; ylim, show_ylabel = (j == 1), title = column_titles[j],
             F_T_ratio, F_T_raw = results[j].thrust)
+            
         axm = CM.Axis(fig[3, j];
+            alignmode = am,
             leftspinecolor = col, rightspinecolor = col,
             topspinecolor = col, bottomspinecolor = col, spinewidth = sw)
-        draw_modal_axis!(axm, modals[j]; ylims = modal_energy_ylims, show_ylabel = (j == 1))
+        L_raft = results[j].metadata.args.L_raft
+        draw_modal_axis!(axm, modals[j], L_raft; ylims = modal_energy_ylims, show_ylabel = (j == 1), result = results[j], show_phase_key = (j == 3))
     end
 
     CM.rowgap!(fig.layout, 18)
@@ -580,13 +657,19 @@ function make_snapshot_grid(fig_dir; kind::Symbol, op_indices, filename, column_
 end
 
 function main_snapshot_grids(fig_dir)
+    _, _, _, all_ops = paper_snapshot_ops()
+    results_kappa, _ = solve_snapshot_ops(all_ops[[1, 2, 5]])
+    results_xM, _    = solve_snapshot_ops(all_ops[[4, 3, 2]])
+    global_ylim = max(wave_ylim(results_kappa), wave_ylim(results_xM))
+
     make_snapshot_grid(fig_dir;
         kind = :kappa,
         op_indices = [1, 2, 5],
         filename = "plot_kappa_snapshot_grid_flexibility",
         column_titles = [L"\kappa=2.12\times10^{-3}",
                          L"\kappa=6.87\times10^{-3}",
-                         L"\kappa=1.70\times10^{-2}"])
+                         L"\kappa=1.70\times10^{-2}"],
+        global_ylim = global_ylim)
     make_snapshot_grid(fig_dir;
         kind = :xM,
         # Match the sweep's left-to-right thin-to-thick highlighted lines.
@@ -596,7 +679,8 @@ function main_snapshot_grids(fig_dir)
         column_titles = [L"x_M/L=-0.272",
                          L"x_M/L=-0.1885",
                          L"x_M/L=-0.12"],
-        modal_energy_ylims = (0.0, 3e-6))
+        modal_energy_ylims = (0.0, 3e-6),
+        global_ylim = global_ylim)
 end
 
 # ─── Main ─────────────────────────────────────────────────────────────────────
