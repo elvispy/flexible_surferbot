@@ -366,14 +366,18 @@ function plot_frame(record::SurferbotRunRecord, t::Real; omega::Real, x_contact_
             EI_fin  = [isfinite(e) && e > 0 ? e : 1e30 for e in EI_vec]
             log_EI  = log10.(EI_fin)
 
-            lo, hi  = extrema(log_EI)
-            span    = hi - lo
-            # norm_EI: 0 = most compliant (light grey), 1 = stiffest (dark)
-            norm_EI = span < 1e-10 ? zeros(n_raft) : (log_EI .- lo) ./ span
+            # Fixed reference scale (not per-frame extrema): a uniform raft must
+            # colour according to its actual stiffness, not always fall back to
+            # "most compliant" when there is no spread to normalize against.
+            # Range spans the softest EI used anywhere in this codebase
+            # (1e-6 N·m², see plot_non_uniform_surferbot.jl) up to the Inf
+            # sentinel above.
+            LOG_EI_LO, LOG_EI_HI = -6.0, 30.0
+            norm_EI = clamp.((log_EI .- LOG_EI_LO) ./ (LOG_EI_HI - LOG_EI_LO), 0.0, 1.0)
 
             Base.invokelatest(Plots.scatter!, p, x_raft, y_raft;
                      marker_z          = norm_EI,
-                     colormap          = [:gainsboro, :black],
+                     color             = Base.invokelatest(Plots.cgrad, [:darkgray, :black]),
                      clims             = (0.0, 1.0),
                      colorbar          = false,
                      markersize         = 7,
