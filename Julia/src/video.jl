@@ -325,7 +325,7 @@ function plot_frame(record::SurferbotRunRecord, t::Real; omega::Real, x_contact_
         x_scaled, y;
         fillrange  = -y_limit,
         fillcolor  = :steelblue,
-        fillalpha  = 0.18,
+        fillalpha  = 1.0,
         color      = :steelblue4,
         linewidth  = 2.0,
         label      = false,
@@ -464,7 +464,7 @@ function plot_frame(record::SurferbotRunRecord, t::Real; omega::Real, x_contact_
 
                 Base.invokelatest(Plots.plot!, p, shaft_xs, shaft_ys;
                          color     = :orangered,
-                         linewidth = 1.5,
+                         linewidth = 3.0,
                          label     = false)
             end
         end
