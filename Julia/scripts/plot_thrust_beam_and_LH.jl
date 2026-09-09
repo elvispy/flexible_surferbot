@@ -20,6 +20,8 @@ panel's plotted convention, and opposite α.
 Two colour variants for the LH panel:
   :signed_log — signed-log₁₀ scale (kept for reference)
   :raw_clipped — raw F_T/F_T* with a symmetric clipped color range
+  :symlog     — signed log10(1+|F_T/F_T*|), limits +/-1000; used for the paper panel
+                because the field spans three decades and a linear scale clips it
   :gp         — GP posterior mean (squared-exponential kernel) on a dense 200×200
                 grid, fitted on asinh-transformed values then back-transformed to
                 raw Δ|η|²/L² units for a plain linear colorbar; training set uses
@@ -223,6 +225,21 @@ function render_panel(log10_kappa, xM_axis, delta_grid, fig_title, out_base, bp,
         kp, xp   = log10_kappa, xM_axis
         cbtitle  = L"F_T\,/\,F_T^\ast"
         cbticks  = [-30, -15, 0, 15, 30]
+
+    # The thrust spans three decades across this plane, from a median of 3.6 to a
+    # maximum of 930, so a linear scale clipped at 30 saturated a sixth of the map.
+    # A signed logarithm compresses that range instead of truncating it, and the
+    # colorbar is still labelled in the original units. The limit is set to a round
+    # 1000 rather than to the data maximum so the ticks fall on decades.
+    elseif mode == :symlog
+        squash   = v -> sign(v) * log10(1 + abs(v))
+        cp       = squash.(delta_grid)
+        clim_val = squash(1000.0)
+        kp, xp   = log10_kappa, xM_axis
+        cbtitle  = L"F_T\,/\,F_T^\ast"
+        tickvals = [-1000.0, -100.0, -10.0, 0.0, 10.0, 100.0, 1000.0]
+        cbticks  = (squash.(tickvals),
+                    [L"-1000", L"-100", L"-10", L"0", L"10", L"100", L"1000"])
     end
 
     # Pad heatmap to xM/L = -0.5 by repeating first row (data starts at -0.48)
@@ -307,15 +324,21 @@ function main()
     # LH — raw normalized thrust with a clipped color range.
     lh_title  = LaTeXString("Coupled, \$\\Lambda=$Lambda_val\$ — LH \$\\Delta|\\eta|^2/L^2\$")
     xM_sb     = Float64(bp.motor_position) / Float64(bp.L_raft)
-    # Five operating points matching the kappa_snapshot_5panel figure:
-    #   (a)-(b)-(e)  surferbot xM; (c) α≈0 at κ=6.8665e-3; (d) |α|≈1 at κ=6.8665e-3
-    snap_kappas = [2.1209508879201904e-3, 6.8665e-3, 6.8665e-3, 6.8665e-3, 1.698244e-2]
+    # The five operating points of the two snapshot grids, listed in the order the
+    # panels appear in the paper. The motor-position grid runs (b) = -0.272,
+    # (c) = -0.1885, (d) = -0.12 after its columns were reordered, and its (d)
+    # shares an operating point with (c) of the flexibility grid. The two outer
+    # kappa are the refined local minima of thrust and must stay in step with
+    # KAPPA_HIGHLIGHTS in plot_thrust_sweeps.jl and plot_kappa_snapshot.jl.
+    snap_kappas = [6.8665e-3, 6.8665e-3, 6.8665e-3,
+                   1.9952623149688789e-3, 1.7575106248547922e-2]
     snap_logK   = log10.(snap_kappas)
-    snap_xMs    = [xM_sb,  xM_sb,  -0.1885,  -0.272,  xM_sb]
-    snap_labels = [L"Fig.~6\,(b)", L"Figs.~5\,(b),\,6\,(c)", L"Fig.~5\,(c)", L"Fig.~5\,(d)", L"Fig.~6\,(d)"]
-    println("Rendering LH raw clipped...")
+    snap_xMs    = [-0.272,  -0.1885,  xM_sb,  xM_sb,  xM_sb]
+    snap_labels = [L"Fig.~5\,(b)", L"Fig.~5\,(c)", L"Figs.~5\,(d),\,6\,(c)",
+                   L"Fig.~6\,(b)", L"Fig.~6\,(d)"]
+    println("Rendering LH signed-log...")
     render_panel(log10_kappa, grids.xM, domain_grid_norm, lh_title,
-        joinpath(fig_dir, "plot_thrust_beam_and_LH_LH_cbrt"), bp, shift; mode=:raw_clipped,
+        joinpath(fig_dir, "plot_thrust_beam_and_LH_LH_cbrt"), bp, shift; mode=:symlog,
         snapshot_logK=snap_logK, snapshot_xMs=snap_xMs, snapshot_labels=snap_labels,
         modal_logK)
 end
