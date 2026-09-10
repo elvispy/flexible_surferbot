@@ -464,7 +464,7 @@ end
 #   Pass a vector → use that instead (needed for uncoupled where the artifact
 #                   EI range is narrower than the desired x axis).
 
-function build_LH_plot(artifact, csv_path, output_dir; xlim_min::Float64,
+function compute_LH_plot_data(artifact, csv_path, output_dir; xlim_min::Float64,
                        include_resonance_stripes::Bool=false)
     params = artifact.base_params
     shift  = log10(Float64(params.rho_raft) * Float64(params.L_raft)^4 *
@@ -570,7 +570,7 @@ function build_LH_plot(artifact, csv_path, output_dir; xlim_min::Float64,
         end
     end
 
-    # Build plot
+    # Colors/styles for the overlaid curves.
     okabe_ito    = ["#E69F00", "#56B4E9", "#009E73", "#F0E442",
                     "#0072B2", "#D55E00", "#CC79A7", "#000000"]
     # Pair the two domain-end elevation conditions by color; line styles retain
@@ -581,41 +581,69 @@ function build_LH_plot(artifact, csv_path, output_dir; xlim_min::Float64,
     curve_styles = [:solid, :dashdot, :dash, :solid]
     orthogonality_color = RGBf(0.40, 0.40, 0.40)
 
+    return (; xM_axis, logEI_axis, alpha_LH, shift, XLIMS, YLIMS, results,
+            orth_xM, scatter_logK, orthogonality,
+            curve_colors, curve_styles, orthogonality_color)
+end
+
+# Draws the LH asymmetry panel (heatmap + overlaid root/resonance curves +
+# orthogonality contour) onto a caller-supplied axis. Returns the heatmap plot
+# object so the caller can attach a (possibly shared) colorbar.
+function draw_LH_axis!(ax, data; show_legend::Bool=true, legend_labelsize::Real=14,
+                        linewidth_scale::Real=1.0)
+    (; xM_axis, logEI_axis, alpha_LH, shift, XLIMS, YLIMS, results,
+       orth_xM, scatter_logK, orthogonality,
+       curve_colors, curve_styles, orthogonality_color) = data
+    lw_main  = 4.0 * linewidth_scale
+    lw_orth  = 3.0 * linewidth_scale
+
+    xlims!(ax, YLIMS...)
+    ylims!(ax, XLIMS...)
+    hm = heatmap!(ax, xM_axis, logEI_axis .- shift, alpha_LH;
+        colormap = :balance, colorrange = (-1, 1))
+    for (i, cname) in enumerate(CURVE_NAMES)
+        res = results[cname]
+        mask = (XLIMS[1] .<= res.logK .<= XLIMS[2]) .&
+               (YLIMS[1] .<= res.xM_norm .<= YLIMS[2])
+        isempty(res.logK[mask]) && continue
+        lk_path, xm_path, res_lks = cluster_branches(res.logK[mask], res.xM_norm[mask])
+        isempty(lk_path) || lines!(ax, xm_path, lk_path;
+            color = curve_colors[i], linestyle = curve_styles[i], linewidth = lw_main)
+        for rlk in res_lks
+            XLIMS[1] <= rlk <= XLIMS[2] || continue
+            hlines!(ax, [rlk]; color = curve_colors[i], linewidth = lw_main)
+        end
+    end
+    contour!(ax, orth_xM, scatter_logK, orthogonality; levels = [0.0],
+        color = orthogonality_color, linewidth = lw_orth, linestyle = :dash)
+    if show_legend
+        okabe_ito = ["#E69F00", "#56B4E9", "#009E73", "#F0E442",
+                     "#0072B2", "#D55E00", "#CC79A7", "#000000"]
+        legend_entries = [
+            LineElement(color = :black, linestyle = :solid, linewidth = lw_main),
+            LineElement(color = RGBf(0.20, 0.20, 0.20), linestyle = :dashdot, linewidth = lw_main),
+            LineElement(color = orthogonality_color, linestyle = :dash, linewidth = lw_orth),
+            LineElement(color = okabe_ito[7], linestyle = :dash, linewidth = lw_main),
+            LineElement(color = okabe_ito[7], linestyle = :solid, linewidth = lw_main),
+        ]
+        axislegend(ax, legend_entries, [CURVE_LABELS[1], CURVE_LABELS[2], L"S \perp A",
+            CURVE_LABELS[3], CURVE_LABELS[4]]; position = :lt, labelsize = legend_labelsize,
+            patchsize = (84, 20), framecolor = :black, backgroundcolor = (:white, 0.85))
+    end
+    return hm
+end
+
+function build_LH_plot(artifact, csv_path, output_dir; xlim_min::Float64,
+                       include_resonance_stripes::Bool=false)
+    data = compute_LH_plot_data(artifact, csv_path, output_dir;
+        xlim_min, include_resonance_stripes)
     return PaperPlotTheme.with_theme() do
         fig = Figure(size = (820, 640), backgroundcolor = :white,
             figure_padding = (12, 8, 12, 12))
         ax = Axis(fig[1, 1]; xlabel = L"x_M / L", ylabel = L"\kappa",
             xlabelsize = 16, ylabelsize = 16, xticklabelsize = 14, yticklabelsize = 14,
-            yticks = kappa_exp_xticks(XLIMS), xgridvisible = false, ygridvisible = false)
-        xlims!(ax, YLIMS...)
-        ylims!(ax, XLIMS...)
-        hm = heatmap!(ax, xM_axis, logEI_axis .- shift, alpha_LH;
-            colormap = :balance, colorrange = (-1, 1))
-        for (i, cname) in enumerate(CURVE_NAMES)
-            res = results[cname]
-            mask = (XLIMS[1] .<= res.logK .<= XLIMS[2]) .&
-                   (YLIMS[1] .<= res.xM_norm .<= YLIMS[2])
-            isempty(res.logK[mask]) && continue
-            lk_path, xm_path, res_lks = cluster_branches(res.logK[mask], res.xM_norm[mask])
-            isempty(lk_path) || lines!(ax, xm_path, lk_path;
-                color = curve_colors[i], linestyle = curve_styles[i], linewidth = 4.0)
-            for rlk in res_lks
-                XLIMS[1] <= rlk <= XLIMS[2] || continue
-                hlines!(ax, [rlk]; color = curve_colors[i], linewidth = 4.0)
-            end
-        end
-        contour!(ax, orth_xM, scatter_logK, orthogonality; levels = [0.0],
-            color = orthogonality_color, linewidth = 3.0, linestyle = :dash)
-        legend_entries = [
-            LineElement(color = :black, linestyle = :solid, linewidth = 4.0),
-            LineElement(color = RGBf(0.20, 0.20, 0.20), linestyle = :dashdot, linewidth = 4.0),
-            LineElement(color = orthogonality_color, linestyle = :dash, linewidth = 3.0),
-            LineElement(color = okabe_ito[7], linestyle = :dash, linewidth = 4.0),
-            LineElement(color = okabe_ito[7], linestyle = :solid, linewidth = 4.0),
-        ]
-        axislegend(ax, legend_entries, [CURVE_LABELS[1], CURVE_LABELS[2], L"S \perp A",
-            CURVE_LABELS[3], CURVE_LABELS[4]]; position = :lt, labelsize = 14,
-            patchsize = (84, 20), framecolor = :black, backgroundcolor = (:white, 0.85))
+            yticks = kappa_exp_xticks(data.XLIMS), xgridvisible = false, ygridvisible = false)
+        hm = draw_LH_axis!(ax, data)
         Colorbar(fig[1, 2], hm; label = L"\alpha", labelsize = 16, ticklabelsize = 14)
         return fig
     end
