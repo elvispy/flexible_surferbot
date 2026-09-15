@@ -73,6 +73,18 @@ left, using the mirror-image stencils DxFree[1,:] / DxFree[end,:]). Without
 it, s_vec/s_vec_left coupled opposite-parity modes in the capillary endpoint
 map instead of same-parity ones. v4 cache entries have the wrong sign on
 s_vec and must not be reused.
+A v6 was briefly tried: flipping reconstruct_dynamic_fields's p_dyn sign to
+match src/postprocess.jl's calculate_surferbot_outputs (P1_r = +i*Gamma*phi -
+(2*Gamma/Re)*D2r*phi) literally. That flip was REVERTED. Cross-checked against
+the independent Full Sweep CSV data in fig:modal_maps_3x3 (5 sample points,
+farfield row, N=8 ROM): the ORIGINAL sign (kept here, unchanged from v5)
+matches Full Sweep far better at every point (e.g. at xM=-0.5, kappa=7.8e-4:
+Full Sweep 0.179, original-sign ROM 0.121, flipped-sign ROM 0.9997). The
+apparent agreement with postprocess.jl's formula was misleading, not the
+actual bug. The forced-problem `validate_pressure_map` residual (relerr
+~2.0, p_modal_pred ~= -p_modal, present at every d including the paper's
+reference d=0.03) is therefore a real, still-unexplained discrepancy, but it
+is NOT fixed by negating p_dyn here, and its root cause is unresolved.
 """
 const PRESSURE_CONVENTION_VERSION = 5
 
@@ -356,6 +368,13 @@ function reconstruct_dynamic_fields(params::Surferbot.FlexibleParams, derived, p
 
     phi_raft = ComplexF64.(vec(phi[end, :])[contact])
     eta_contact = ComplexF64.(eta[contact])
+    # This sign was briefly flipped to match src/postprocess.jl's
+    # calculate_surferbot_outputs (P1_r = +i*Gamma*phi - (2*Gamma/Re)*D2r*phi)
+    # literally, on the theory that the two should agree. That was REVERTED:
+    # cross-checked against the independent Full Sweep CSV data in
+    # fig:modal_maps_3x3, this original sign matches ground truth far better
+    # than the flipped one (see PRESSURE_CONVENTION_VERSION history above).
+    # The postprocess.jl agreement was a misleading coincidence, not the bug.
     p_dyn_adim = -(im * args.nd_groups.Gamma) .* phi_raft .+
                  (2 * args.nd_groups.Gamma / args.nd_groups.Re) .* (D2r * phi_raft)
     p_dyn = p_dyn_adim .* derived.F_c ./ derived.L_c^2
