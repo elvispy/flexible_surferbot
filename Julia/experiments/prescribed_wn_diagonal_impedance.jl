@@ -271,6 +271,67 @@ function build_reduced_system(assembled, phi_z_target::AbstractVector{<:Complex}
     )
 end
 
+"""
+    build_reduced_operator(assembled)
+
+One-time setup for prescribing multiple modes against the same `assembled`
+system. `kept_rows`/`kept_cols`/`prescribed_cols` (and hence the reduced
+matrix `A`) depend only on `assembled` and the fixed contact index set, never
+on which mode is being prescribed, so `A` is identical across every mode
+label. `build_reduced_system` above recomputes and refactorizes this same `A`
+from scratch on every call (an 8x-redundant sparse LU factorization across
+the 8 basis modes); this function factorizes it once via `lu(A)` so
+`solve_prescribed_mode_fast` can reuse that factorization for every mode's
+right-hand side.
+"""
+function build_reduced_operator(assembled)
+    NP = assembled.derived.Nx * assembled.derived.Nz
+    idx_contact = assembled.indices.idxContact
+
+    kept_rows = vcat(setdiff(1:NP, idx_contact), (NP + 1):(2 * NP))
+    prescribed_cols = NP .+ idx_contact
+    kept_cols = setdiff(1:(2 * NP), prescribed_cols)
+
+    A_full = assembled.A[1:(2 * NP), 1:(2 * NP)]
+    b_full = assembled.b[1:(2 * NP)]
+
+    A = copy(A_full[kept_rows, kept_cols])
+    dropzeros!(A)
+
+    return (
+        F = lu(A),
+        shift_operator = A_full[kept_rows, prescribed_cols],
+        b_full_kept = b_full[kept_rows],
+        kept_rows = kept_rows,
+        kept_cols = kept_cols,
+        prescribed_cols = prescribed_cols,
+        diagnostics = (
+            reduced_size = size(A),
+            row_count = size(A, 1),
+            column_count = size(A, 2),
+            fluid_unknown_count = 2 * NP - length(idx_contact),
+            prescribed_count = length(idx_contact),
+            is_square = size(A, 1) == size(A, 2) == (2 * NP - length(idx_contact)),
+            contact_constraint_block = :phi_z,
+        ),
+    )
+end
+
+function solve_prescribed_mode_fast(assembled, reduced_op, phi_z_target::AbstractVector{<:Complex})
+    NP = assembled.derived.Nx * assembled.derived.Nz
+    rhs_shift = reduced_op.shift_operator * ComplexF64.(phi_z_target)
+    b = reduced_op.b_full_kept - rhs_shift
+
+    solution = reduced_op.F \ b
+    full_solution = zeros(ComplexF64, 2 * NP)
+    full_solution[reduced_op.kept_cols] = solution
+    full_solution[reduced_op.prescribed_cols] = ComplexF64.(phi_z_target)
+
+    phi = reshape(full_solution[1:NP], assembled.derived.Nz, assembled.derived.Nx)
+    phi_z = reshape(full_solution[(NP + 1):(2 * NP)], assembled.derived.Nz, assembled.derived.Nx)
+    return phi, phi_z
+end
+
 function solve_prescribed_mode(assembled, reduced, phi_z_target::AbstractVector{<:Complex})
     NP = assembled.derived.Nx * assembled.derived.Nz
     solution = solve_tensor_system(reduced.A, reduced.b)
@@ -348,10 +409,9 @@ function edge_slopes(params::Surferbot.FlexibleParams, assembled, phi_z_flat::Ab
     return s_plus, s_minus
 end
 
-function prescribed_column_payload(params::Surferbot.FlexibleParams, assembled, basis_ctx, mode_label::Int)
+function prescribed_column_payload(params::Surferbot.FlexibleParams, assembled, basis_ctx, reduced_op, mode_label::Int)
     target = prescribed_target(basis_ctx, params, assembled.derived, mode_label)
-    reduced = build_reduced_system(assembled, target.phi_z_target)
-    phi, phi_z = solve_prescribed_mode(assembled, reduced, target.phi_z_target)
+    phi, phi_z = solve_prescribed_mode_fast(assembled, reduced_op, target.phi_z_target)
     fields = reconstruct_dynamic_fields(params, assembled.derived, phi, phi_z)
     p_modal = project_modal_pressure(basis_ctx, assembled.derived.d, fields.p_dyn)
     s_plus, s_minus = edge_slopes(params, assembled, vec(phi_z))
@@ -375,7 +435,7 @@ function prescribed_column_payload(params::Surferbot.FlexibleParams, assembled, 
         p_diag = ComplexF64(p_modal[target.column_index]),
         offdiag_ratio = Float64(offdiag_ratio),
         eta_contact_relerr = Float64(eta_contact_relerr),
-        system_diagnostics = reduced.diagnostics,
+        system_diagnostics = reduced_op.diagnostics,
         a_n       = ComplexF64(fields.eta[end]),
         a_n_left  = ComplexF64(fields.eta[1]),
         s_n       = s_plus,
@@ -438,7 +498,8 @@ function empirical_modal_pressure_map(
     basis_ctx = raw_basis_context(params, assembled.derived; num_modes_basis=num_modes_basis)
     labels, indices = resolve_mode_labels(basis_ctx, mode_labels)
 
-    column_payloads = [prescribed_column_payload(params, assembled, basis_ctx, label) for label in labels]
+    reduced_op = build_reduced_operator(assembled)
+    column_payloads = [prescribed_column_payload(params, assembled, basis_ctx, reduced_op, label) for label in labels]
     Z = hcat([payload.p_modal[indices] for payload in column_payloads]...)
     Z_diag = ComplexF64[payload.p_diag for payload in column_payloads]
     offdiag_ratio = Float64[payload.offdiag_ratio for payload in column_payloads]
