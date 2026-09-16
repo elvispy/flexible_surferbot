@@ -2,19 +2,30 @@
 render_bare_q_d_sweep_frames.jl
 
 Supplementary-material video source: sweeps the raft width d (equivalently
-Lambda = d/L) from 0 up to 3x the SurferBot reference value, and renders one
-Figure-10-style 2x2 frame per d. The left (uncoupled) column is fixed
-throughout (it's the Lambda=0 reference and doesn't depend on d at all); only
-the right (coupled) column evolves per frame. Axis and colorbar limits are
-fixed across all frames (computed from the strongest-coupling frame) so the
-viewer can see amplitudes actually change rather than axes silently rescaling.
+Lambda = d/L) from 0 up to 3x the SurferBot reference value, and renders the
+COUPLED response only, split by parity (2 panels: even, odd), overlaying the
+fixed Lambda=0 (uncoupled) reference as a thin gray underlay in the SAME two
+panels rather than devoting two more (unchanging) panels to it.
 
-Resonance vlines are found automatically per frame (max-over-modes envelope,
-local-maxima detection with a minimum prominence), since hand-tuned exact
-root locations aren't practical across 25 different d values.
+Two-stage design:
+  1. PHYSICS: solve at K log-spaced d keyframes (log-spacing because the
+     response changes fast just above d=0 and slowly at large d; a linear d
+     grid wastes frames on the slow part and starves the fast part). Costs
+     ~47s/keyframe (the expensive part is building each d's modal pressure
+     map, not the kappa sweep itself).
+  2. RENDER: interpolate M frames between each pair of keyframes by linearly
+     interpolating the COMPLEX q(kappa) arrays (not magnitude and phase
+     separately -- interpolating angle directly produces artifacts at the
+     +-180 deg wrap; interpolating the underlying real/imaginary parts does
+     not), so playback is smooth without paying for extra physics solves.
+
+Axis/colorbar limits are fixed across all frames (from the strongest-
+coupling keyframe) so amplitude changes are real, not axis rescaling.
+Resonance vlines are recomputed per rendered frame (interpolated or not) via
+automatic peak detection on that frame's own magnitude envelope.
 
 Usage: julia --project=. experiments/render_bare_q_d_sweep_frames.jl
-Then:  ffmpeg -framerate 3 -i frame_%03d.png -vf "fps=3,format=yuv420p" out.mp4
+Then:  ffmpeg -framerate 12 -i frame_%03d.png -vf "pad=ceil(iw/2)*2:ceil(ih/2)*2,fps=12,format=yuv420p" -c:v libx264 out.mp4
 """
 
 using CairoMakie, LaTeXStrings, LinearAlgebra, Printf
@@ -29,11 +40,13 @@ mkpath(FRAME_DIR)
 art = Surferbot.Sweep.load_sweep(joinpath(WC, "output", "jld2", "sweep_motor_position_EI_coupled_from_matlab.jld2"))
 p0 = art.base_params
 xM = -0.12
-const NFRAMES = 25
 const D_REF = Float64(p0.d)
 const L_RAFT = Float64(p0.L_raft)
 const D_MAX = 3 * D_REF
-const D_VALUES = collect(range(0.0, D_MAX; length=NFRAMES))
+const D_MIN_LOG = D_MAX * 1e-3   # smallest nonzero d in the log-spaced part
+const N_KEYFRAMES = 15           # physics solves: d=0, then N_KEYFRAMES-1 log-spaced up to D_MAX
+const N_INTERP = 4               # interpolated frames inserted between each pair of keyframes
+const D_KEYFRAMES = vcat([0.0], 10 .^ range(log10(D_MIN_LOG), log10(D_MAX); length=N_KEYFRAMES - 1))
 
 function with_d(p0, dnew)
     return Surferbot.FlexibleParams(; sigma=p0.sigma, rho=p0.rho, omega=p0.omega, nu=p0.nu, g=p0.g,
@@ -51,31 +64,32 @@ function solve_uncoupled(EI, xM_norm, c)
 end
 
 kappa_grid = 10 .^ range(log10(3e-6), log10(1.0); length=2500)
+EI_scale = Float64(p0.rho_raft) * Float64(p0.L_raft)^4 * Float64(p0.omega)^2
 
-function sweep(solver, ctx, EI_scale)
+function sweep_complex(solver, ctx)
     nmodes = length(ctx.mode_numbers)
-    mag = zeros(Float64, nmodes, length(kappa_grid))
-    phase = zeros(Float64, nmodes, length(kappa_grid))
+    Q = zeros(ComplexF64, nmodes, length(kappa_grid))
     for (ik, k) in enumerate(kappa_grid)
-        q = solver(k * EI_scale, xM, ctx)
-        mag[:, ik] = abs.(q) ./ L_RAFT
-        phase[:, ik] = rad2deg.(angle.(q))
+        Q[:, ik] = solver(k * EI_scale, xM, ctx) ./ L_RAFT
     end
-    return mag, phase
+    return Q
 end
 
 # --- fixed uncoupled (Lambda=0) reference, computed once ---
 ctx0 = theoretical_modal_context_LH(p0; output_dir=joinpath(WC, "output"))
-EI_scale = Float64(p0.rho_raft) * Float64(p0.L_raft)^4 * Float64(p0.omega)^2
-mag_u, phase_u = sweep(solve_uncoupled, ctx0, EI_scale)
+const MODE_NUMBERS = ctx0.mode_numbers
+Q_u = sweep_complex(solve_uncoupled, ctx0)
+mag_u, phase_u = abs.(Q_u), rad2deg.(angle.(Q_u))
 
 kpole_dry_all = [(m, Float64(p0.rho_raft) * Float64(p0.omega)^2 / (EI_scale * b^4))
                  for (m, b) in zip(ctx0.mode_numbers, ctx0.beta) if b > 0]
 kpole_dry_even = [k for (m, k) in kpole_dry_all if iseven(m)]
 kpole_dry_odd  = [k for (m, k) in kpole_dry_all if isodd(m)]
 
-const EVEN_MODES = [m for m in ctx0.mode_numbers if iseven(m)]
-const ODD_MODES  = [m for m in ctx0.mode_numbers if isodd(m)]
+const EVEN_MODES = [m for m in MODE_NUMBERS if iseven(m)]
+const ODD_MODES  = [m for m in MODE_NUMBERS if isodd(m)]
+const EVEN_IDX = [j for (j, m) in enumerate(MODE_NUMBERS) if iseven(m)]
+const ODD_IDX  = [j for (j, m) in enumerate(MODE_NUMBERS) if isodd(m)]
 
 const PHASE_CMAP = cgrad(:balance)
 const PHASE_T_MAX = 0.92
@@ -92,7 +106,7 @@ function auto_resonance_kappas(mag, modes_idx; min_prominence_db=6.0, merge_log_
         if logenv[i] > logenv[i-1] && logenv[i] >= logenv[i+1]
             lo = max(1, i-30); hi = min(length(logenv), i+30)
             background = minimum(logenv[lo:hi])
-            if (logenv[i] - background) * 20 >= min_prominence_db  # crude dB-like prominence
+            if (logenv[i] - background) * 20 >= min_prominence_db
                 push!(peaks, kappa_grid[i])
             end
         end
@@ -106,86 +120,73 @@ function auto_resonance_kappas(mag, modes_idx; min_prominence_db=6.0, merge_log_
     return merged
 end
 
-function draw_panel!(ax, mag, phase, kpoles, parity_modes, ctx_modes)
-    for (j, m) in enumerate(ctx_modes)
-        m in parity_modes || continue
+function draw_panel!(ax, mag_ref, phase_ref, mag, phase, kpoles, parity_idx)
+    # thin gray uncoupled reference underlay (no phase color -- it's fixed context)
+    for j in parity_idx
+        lines!(ax, kappa_grid, mag_ref[j, :]; color=(:gray70, 0.9), linewidth=1.0)
+    end
+    for j in parity_idx
         cols = phase_color(phase[j, :])
         lw = 1.0 + 1.1 * j
         lines!(ax, kappa_grid, mag[j, :]; color=cols, linewidth=lw)
     end
-    vlines!(ax, kpoles; color=:gray50, linestyle=:dashdot, linewidth=1.0)
+    vlines!(ax, kpoles; color=:gray30, linestyle=:dashdot, linewidth=1.2)
     xlims!(ax, extrema(kappa_grid))
 end
 
-# --- pass 1: find the strongest-coupling frame's data to fix axis limits ---
-p_max = with_d(p0, D_MAX)
-ctx_max = theoretical_modal_context_LH(p_max; output_dir=joinpath(WC, "output"))
-mag_c_max, _ = sweep((EI, xm, c) -> solve_theoretical_modal_response(EI, xm, c), ctx_max, EI_scale)
-YMIN = 10.0^floor(log10(minimum(filter(x -> x > 0, vcat(vec(mag_u), vec(mag_c_max))))))
-YMAX = 10.0^ceil(log10(maximum(vcat(vec(mag_u), vec(mag_c_max)))))
+# --- phase 1: physics at log-spaced keyframes ---
+println("Phase 1: solving $(N_KEYFRAMES) keyframes (d=0 + $(N_KEYFRAMES-1) log-spaced up to $D_MAX)...")
+Q_keyframes = Vector{Matrix{ComplexF64}}(undef, N_KEYFRAMES)
+for (ki, d) in enumerate(D_KEYFRAMES)
+    ctx_d = iszero(d) ? ctx0 : theoretical_modal_context_LH(with_d(p0, d); output_dir=joinpath(WC, "output"))
+    Q_keyframes[ki] = iszero(d) ? Q_u : sweep_complex((EI, xm, c) -> solve_theoretical_modal_response(EI, xm, c), ctx_d)
+    println("  keyframe $ki/$N_KEYFRAMES done (d=$d, Lambda=$(d/L_RAFT))")
+end
+
+all_mags = vcat(vec(mag_u), (vec(abs.(Q)) for Q in Q_keyframes)...)
+YMIN = 10.0^floor(log10(minimum(filter(x -> x > 0, all_mags))))
+YMAX = 10.0^ceil(log10(maximum(all_mags)))
 println("Fixed y-limits: ", (YMIN, YMAX))
 
-# --- pass 2: render one frame per d ---
-for (fi, d) in enumerate(D_VALUES)
+# --- phase 2: interpolate + render ---
+function render_frame(fi, d, Q)
+    mag = abs.(Q); phase = rad2deg.(angle.(Q))
     Lambda = d / L_RAFT
-    ctx_d = d == D_MAX ? ctx_max : theoretical_modal_context_LH(with_d(p0, d); output_dir=joinpath(WC, "output"))
-    mag_c, phase_c = d == D_MAX ? (mag_c_max, sweep((EI, xm, c) -> solve_theoretical_modal_response(EI, xm, c), ctx_max, EI_scale)[2]) :
-                                   sweep((EI, xm, c) -> solve_theoretical_modal_response(EI, xm, c), ctx_d, EI_scale)
-
-    validated_even = auto_resonance_kappas(mag_c, [j for (j,m) in enumerate(ctx_d.mode_numbers) if iseven(m)])
-    validated_odd  = auto_resonance_kappas(mag_c, [j for (j,m) in enumerate(ctx_d.mode_numbers) if isodd(m)])
+    validated_even = auto_resonance_kappas(mag, EVEN_IDX)
+    validated_odd  = auto_resonance_kappas(mag, ODD_IDX)
 
     fig = PaperPlotTheme.with_theme() do
-        fig = Figure(size=(880, 820), backgroundcolor=:white, fontsize=18, figure_padding=(6, 8, 4, 4))
-
-        header_kw = (fontsize=18, tellwidth=false, tellheight=true)
-        Label(fig[1,1], "Uncoupled (Λ=0)"; header_kw...)
-        Label(fig[1,2], "Coupled"; header_kw...)
-        Label(fig[2,0], "Even modes"; rotation=pi/2, fontsize=18, tellwidth=true, tellheight=false)
-        Label(fig[3,0], "Odd modes"; rotation=pi/2, fontsize=18, tellwidth=true, tellheight=false)
-        Label(fig[0,1:2], @sprintf("d = %.4f m   (Λ = %.3f)", d, Lambda); fontsize=20, font=:bold, tellwidth=false)
+        fig = Figure(size=(620, 820), backgroundcolor=:white, fontsize=18, figure_padding=(6, 8, 4, 4))
+        Label(fig[0,1], @sprintf("d = %.5f m   (Λ = %.3f)", d, Lambda); fontsize=20, font=:bold, tellwidth=false)
 
         axis_kw = (xlabelsize=18, ylabelsize=18, xticklabelsize=16, yticklabelsize=16,
             xminorticksvisible=false, xminorgridvisible=false, yminorgridvisible=false)
-        ax_ue = Axis(fig[2,1]; xscale=log10, yscale=log10, ylabel=L"|\bar{q}_n|", axis_kw...)
-        ax_ce = Axis(fig[2,2]; xscale=log10, yscale=log10, axis_kw...)
-        ax_uo = Axis(fig[3,1]; xscale=log10, yscale=log10, xlabel=L"\kappa", ylabel=L"|\bar{q}_n|", axis_kw...)
-        ax_co = Axis(fig[3,2]; xscale=log10, yscale=log10, xlabel=L"\kappa", axis_kw...)
+        ax_e = Axis(fig[1,1]; xscale=log10, yscale=log10, ylabel=L"|\bar{q}_n|", title="Even modes", axis_kw...)
+        ax_o = Axis(fig[2,1]; xscale=log10, yscale=log10, xlabel=L"\kappa", ylabel=L"|\bar{q}_n|", title="Odd modes", axis_kw...)
 
-        draw_panel!(ax_ue, mag_u, phase_u, kpole_dry_even, EVEN_MODES, ctx0.mode_numbers)
-        draw_panel!(ax_ce, mag_c, phase_c, validated_even, EVEN_MODES, ctx_d.mode_numbers)
-        draw_panel!(ax_uo, mag_u, phase_u, kpole_dry_odd,  ODD_MODES, ctx0.mode_numbers)
-        draw_panel!(ax_co, mag_c, phase_c, validated_odd,  ODD_MODES, ctx_d.mode_numbers)
-
-        # Set limits on every axis BEFORE linking: linkyaxes! autolimits any
-        # axis whose limits aren't already fixed, and autolimits on a frame
-        # with any non-finite plotted value crashes ("reducing over an empty
-        # collection") rather than just ignoring it.
-        for ax in (ax_ue, ax_ce, ax_uo, ax_co)
+        draw_panel!(ax_e, mag_u, phase_u, mag, phase, kpole_dry_even, EVEN_IDX)
+        draw_panel!(ax_o, mag_u, phase_u, mag, phase, kpole_dry_odd,  ODD_IDX)
+        for ax in (ax_e, ax_o)
             xlims!(ax, extrema(kappa_grid))
             ylims!(ax, YMIN, YMAX)
         end
-        linkxaxes!(ax_ue, ax_uo, ax_ce, ax_co)
-        linkyaxes!(ax_ue, ax_uo, ax_ce, ax_co)
-        ax_ue.xticklabelsvisible = false
-        ax_ce.xticklabelsvisible = false
-        ax_ce.yticklabelsvisible = false
-        ax_co.yticklabelsvisible = false
+        linkxaxes!(ax_e, ax_o)
+        ax_e.xticklabelsvisible = false
 
         phase_ticks_deg = -180:90:180
-        Colorbar(fig[2:3, 3];
+        Colorbar(fig[1:2, 2];
             colormap = cgrad([PHASE_CMAP[t] for t in phase_t(collect(-180.0:1.0:180.0))]),
             limits = (-180, 180), ticks = collect(phase_ticks_deg),
             label = "phase (deg)", labelsize=18, ticklabelsize=16)
 
         legend_elems = Any[]; legend_labels = String[]
-        for (j, m) in enumerate(ctx0.mode_numbers)
+        for (j, m) in enumerate(MODE_NUMBERS)
             lw = 1.0 + 1.1 * j
             push!(legend_elems, LineElement(color=:gray20, linewidth=lw))
             push!(legend_labels, "mode $m")
         end
-        Legend(fig[4, 1:2], legend_elems, legend_labels; orientation=:horizontal,
-            framevisible=false, labelsize=16, patchsize=(24, 10), tellheight=true, nbanks=1)
+        Legend(fig[3, 1:2], legend_elems, legend_labels; orientation=:horizontal,
+            framevisible=false, labelsize=16, patchsize=(24, 10), tellheight=true, nbanks=2)
 
         colgap!(fig.layout, 6)
         rowgap!(fig.layout, 4)
@@ -194,6 +195,26 @@ for (fi, d) in enumerate(D_VALUES)
     end
 
     out = joinpath(FRAME_DIR, @sprintf("frame_%03d.png", fi))
-    save(out, fig; px_per_unit=4)
-    println("Saved $out  (d=$d, Lambda=$Lambda, $fi/$NFRAMES)")
+    save(out, fig; px_per_unit=6)
+    return out
 end
+
+println("Phase 2: rendering $(N_KEYFRAMES + (N_KEYFRAMES-1)*N_INTERP) frames (keyframes + interpolated)...")
+fi = 0
+for ki in 1:N_KEYFRAMES
+    global fi += 1
+    out = render_frame(fi, D_KEYFRAMES[ki], Q_keyframes[ki])
+    println("  Saved $out  (keyframe $ki/$N_KEYFRAMES)")
+    ki == N_KEYFRAMES && break
+    d0, d1 = D_KEYFRAMES[ki], D_KEYFRAMES[ki+1]
+    Q0, Q1 = Q_keyframes[ki], Q_keyframes[ki+1]
+    for s in 1:N_INTERP
+        t = s / (N_INTERP + 1)
+        d_t = (1 - t) * d0 + t * d1
+        Q_t = (1 - t) .* Q0 .+ t .* Q1
+        global fi += 1
+        out = render_frame(fi, d_t, Q_t)
+        println("  Saved $out  (interp $s/$N_INTERP between keyframes $ki,$(ki+1))")
+    end
+end
+println("Done: $fi frames in $FRAME_DIR")
