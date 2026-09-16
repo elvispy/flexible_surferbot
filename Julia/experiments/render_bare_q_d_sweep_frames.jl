@@ -44,8 +44,12 @@ const D_REF = Float64(p0.d)
 const L_RAFT = Float64(p0.L_raft)
 const D_MAX = 3 * D_REF
 const D_MIN_LOG = D_MAX * 1e-3   # smallest nonzero d in the log-spaced part
-const N_KEYFRAMES = 15           # physics solves: d=0, then N_KEYFRAMES-1 log-spaced up to D_MAX
-const N_INTERP = 4               # interpolated frames inserted between each pair of keyframes
+const N_KEYFRAMES = 25           # physics solves: d=0, then N_KEYFRAMES-1 log-spaced up to D_MAX
+const N_INTERP = 0               # interpolating q(kappa) linearly between keyframes was tried and
+# reverted: resonance peaks genuinely shift position with d (not just amplitude), so blending two
+# keyframes whose peaks sit at different kappa produces phantom secondary bumps/dips that exist in
+# neither true state (worse, differing phase at the same kappa can partially cancel in the complex
+# linear blend, adding dynamics that were never there). Real keyframes only; no shortcuts.
 const D_KEYFRAMES = vcat([0.0], 10 .^ range(log10(D_MIN_LOG), log10(D_MAX); length=N_KEYFRAMES - 1))
 
 function with_d(p0, dnew)
