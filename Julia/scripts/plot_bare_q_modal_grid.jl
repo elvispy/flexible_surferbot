@@ -7,9 +7,9 @@ Bare modal response |q_n| vs kappa, 2x2 grid:
 
 Companion to the Uncoupled limit Lambda=0 appendix section: shows the free-free
 beam's own resonant modal geometry alongside the fully coupled case, split by
-parity.  Vertical lines mark where the plotted response peaks, which at
-Lambda=0 is exactly the dry pole kappa=(beta_n*L)^-4 and with coupling on is
-found from the curves themselves.
+parity.  Vertical lines mark the zero-thrust stiffnesses G(kappa)=0, found by
+bisecting the paper's scalar calP(kappa); in the uncoupled column that
+condition degenerates to the dry poles kappa=(beta_n*L)^-4.
 
   x = kappa (log), y = |q_n| (log)
   color = phase, period 360 deg: phase_t(theta) = (1-cosd(theta))/2 * 0.92
@@ -65,25 +65,30 @@ kpole_dry_all = [(m, Float64(params.rho_raft) * Float64(params.omega)^2 / (EI_sc
 kpole_dry_even = [k for (m, k) in kpole_dry_all if iseven(m)]
 kpole_dry_odd  = [k for (m, k) in kpole_dry_all if isodd(m)]
 
-# Coupled resonances, computed live from the curves actually plotted, so they
-# cannot go stale when the impedance maps change.  The line marks the peak of
-# the response, which is the same thing the uncoupled column marks: with
-# Lambda=0 the response is |F_n| / |EI*beta^4 - rho_R*omega^2|, which diverges
-# exactly at the dry pole kappa=(beta_n*L)^-4.  Both columns therefore annotate
-# "where the plotted curves peak", and no separate resonance condition is
-# needed.
+# The vertical lines mark G(kappa) = 0, the zero-thrust condition of the main
+# text: at these stiffnesses Re(S A*) = 0 for every forcing profile.
 #
-# Two things measured on this figure's own data back that up.  (i) At each peak
-# the dominant mode sits within a few degrees of quadrature, matching the
-# body text's "the dominant mode's phase approaches +-90 deg" -- so the reader
-# can verify the line position against the phase colour without leaving the
-# figure.  (ii) The peaks barely move with forcing: sweeping xM/L from -0.05 to
-# -0.49 shifts them by under 0.22%, against 2-4% spread between competing
-# definitions (det H_p = 0, min|P_p|), so the xM dependence is immaterial here.
+# G = cos(delta_e - delta_o) * b_e b_o', so G vanishes where the even and odd
+# transfer phases are in quadrature.  Evaluating that condition through the
+# delta_p directly is not robust: b_p is real but its entries change sign, and
+# each sign change injects a spurious pi jump (it yields 11 crossings here, of
+# which only 6 are genuine).  The paper's own scalar
 #
-# Peaks are taken on the max-over-modes envelope of the block, with a minimum
-# log-prominence so a mode that the forcing happens to excite near a node
-# cannot contribute a spurious local maximum.
+#     calP(kappa) = Re[ e^{i(theta_e - theta_o)} P_e(kappa)* P_o(kappa) ]
+#
+# (eq:modal_kappa_polynomial) carries no such branch problem, is real, and
+# changes sign at each root, so it is bisected instead.  theta_p is the common
+# phase of the radiation vector a_p (eq:modal_radiation_direction, verified
+# here to 5e-7 degrees across each block).
+#
+# The roots are JOINT: calP mixes both parity blocks, so there is one set of
+# six, not three per parity.  Each root is placed in the panel whose block
+# supplies it, determined from the response peak it accompanies -- the pairing
+# is 1:1 and strictly parity-alternating, because a block's phase swings by
+# ~pi across its own resonance (measured 124-147 deg here) and that swing is
+# what drives delta_e - delta_o through pi/2.  In the uncoupled column the same
+# condition degenerates to the dry poles kappa=(beta_n*L)^-4 already drawn
+# there, which is the Lambda -> 0 statement made in the main text.
 function response_peaks(mag, idx; minprom=0.30)
     env = vec(maximum(mag[idx, :], dims=1))
     peaks = Float64[]
@@ -97,11 +102,54 @@ function response_peaks(mag, idx; minprom=0.30)
     return peaks
 end
 
+function modal_block(kappa, idx)
+    D = ComplexF64.(kappa * EI_scale .* ctx.beta .^ 4
+                    .- Float64(params.rho_raft) * Float64(params.omega)^2
+                    .+ ctx.c_hydro)
+    return (Diagonal(D) .- ctx.Z_psi .+ ctx.C_sigma)[idx, idx]
+end
+
+# roots of calP(kappa) = 0, i.e. G(kappa) = 0
+function zero_thrust_roots(even_idx, odd_idx; klo=3e-6, khi=1.0, ngrid=40000, nbisect=80)
+    th(idx) = angle(ComplexF64(ctx.a_vec[idx][argmax(abs.(ctx.a_vec[idx]))]))
+    dth = th(even_idx) - th(odd_idx)
+    calP(k) = real(cis(dth) * conj(det(modal_block(k, even_idx))) * det(modal_block(k, odd_idx)))
+    kg = 10 .^ range(log10(klo), log10(khi); length=ngrid)
+    v = calP.(kg)
+    roots = Float64[]
+    for i in 1:length(kg)-1
+        (isfinite(v[i]) && isfinite(v[i+1]) && sign(v[i]) != sign(v[i+1])) || continue
+        a, b, sa = kg[i], kg[i+1], sign(v[i])
+        for _ in 1:nbisect
+            m = sqrt(a * b)
+            sign(calP(m)) == sa ? (a = m) : (b = m)
+        end
+        push!(roots, sqrt(a * b))
+    end
+    return roots
+end
+
 const EVEN_IDX = [i for (i, m) in enumerate(ctx.mode_numbers) if iseven(m)]
 const ODD_IDX  = [i for (i, m) in enumerate(ctx.mode_numbers) if isodd(m)]
-validated_even = response_peaks(mag_c, EVEN_IDX)
-validated_odd  = response_peaks(mag_c, ODD_IDX)
-@info "coupled response peaks" even=validated_even odd=validated_odd
+
+# Assign each joint G=0 root to the parity block whose resonance it accompanies.
+let pk_e = response_peaks(mag_c, EVEN_IDX), pk_o = response_peaks(mag_c, ODD_IDX)
+    roots = zero_thrust_roots(EVEN_IDX, ODD_IDX)
+    global validated_even = Float64[]
+    global validated_odd  = Float64[]
+    for r in roots
+        de = isempty(pk_e) ? Inf : minimum(abs.(log10.(pk_e ./ r)))
+        do_ = isempty(pk_o) ? Inf : minimum(abs.(log10.(pk_o ./ r)))
+        push!(de <= do_ ? validated_even : validated_odd, r)
+    end
+    @info "G(kappa)=0 roots" all=roots even=validated_even odd=validated_odd
+    for (nm, rs, pk) in (("even", validated_even, pk_e), ("odd", validated_odd, pk_o))
+        for r in rs
+            j = argmin(abs.(log10.(pk ./ r)))
+            @info "  $nm G-root vs accompanying resonance" root=r resonance=pk[j] reldiff=abs(pk[j]-r)/r
+        end
+    end
+end
 
 # Phase -> ONE shared colorbar, raw phase degrees, period 360 deg. t=0 (phase=0)
 # and t=1 (phase=+-180) are the two endpoints of :balance, both nearly-black
