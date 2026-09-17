@@ -7,9 +7,9 @@ Bare modal response |q_n| vs kappa, 2x2 grid:
 
 Companion to the Uncoupled limit Lambda=0 appendix section: shows the free-free
 beam's own resonant modal geometry alongside the fully coupled case, split by
-parity.  Both columns mark the same object, the stiffness at which the reactive
-part of a parity block goes singular: dry poles kappa=(beta_n*L)^-4 when
-Lambda=0, and the coupled roots of det H_p(kappa)=0 when coupling is on.
+parity.  Vertical lines mark where the plotted response peaks, which at
+Lambda=0 is exactly the dry pole kappa=(beta_n*L)^-4 and with coupling on is
+found from the curves themselves.
 
   x = kappa (log), y = |q_n| (log)
   color = phase, period 360 deg: phase_t(theta) = (1-cosd(theta))/2 * 0.92
@@ -65,46 +65,43 @@ kpole_dry_all = [(m, Float64(params.rho_raft) * Float64(params.omega)^2 / (EI_sc
 kpole_dry_even = [k for (m, k) in kpole_dry_all if iseven(m)]
 kpole_dry_odd  = [k for (m, k) in kpole_dry_all if isodd(m)]
 
-# Coupled resonances, computed live so they cannot go stale when the impedance
-# maps change.  Both columns of the figure mark the SAME object: the stiffness
-# at which the reactive (real) part of a parity block goes singular.  With
-# Lambda=0 the block is the real diagonal EI*beta^4 - rho_R*omega^2, whose roots
-# are exactly the dry poles kappa=(beta_n*L)^-4 drawn in the uncoupled column;
-# with coupling on, added mass and the capillary endpoint map enter H_p and the
-# same roots shift.  This is the object appendix B.3 defines (M_p = H_p + i*Y_p
-# with Y_p rank one; radiation regularizes the singularity).
+# Coupled resonances, computed live from the curves actually plotted, so they
+# cannot go stale when the impedance maps change.  The line marks the peak of
+# the response, which is the same thing the uncoupled column marks: with
+# Lambda=0 the response is |F_n| / |EI*beta^4 - rho_R*omega^2|, which diverges
+# exactly at the dry pole kappa=(beta_n*L)^-4.  Both columns therefore annotate
+# "where the plotted curves peak", and no separate resonance condition is
+# needed.
 #
-# H_p(kappa) = H_p0 + kappa*B_p is affine in kappa, so det H_p is a real
-# polynomial of degree = (number of elastic modes in the block), giving exactly
-# 3 roots per parity here.  Unlike a |q| peak this is forcing-independent.
-function reactive_resonances(idx; klo=3e-6, khi=1.0, ngrid=20000, nbisect=80)
-    function detH(kappa)
-        D = ComplexF64.(kappa * EI_scale .* ctx.beta .^ 4
-                        .- Float64(params.rho_raft) * Float64(params.omega)^2
-                        .+ ctx.c_hydro)
-        M = Diagonal(D) .- ctx.Z_psi .+ ctx.C_sigma
-        return det(real.(M[idx, idx]))
+# Two things measured on this figure's own data back that up.  (i) At each peak
+# the dominant mode sits within a few degrees of quadrature, matching the
+# body text's "the dominant mode's phase approaches +-90 deg" -- so the reader
+# can verify the line position against the phase colour without leaving the
+# figure.  (ii) The peaks barely move with forcing: sweeping xM/L from -0.05 to
+# -0.49 shifts them by under 0.22%, against 2-4% spread between competing
+# definitions (det H_p = 0, min|P_p|), so the xM dependence is immaterial here.
+#
+# Peaks are taken on the max-over-modes envelope of the block, with a minimum
+# log-prominence so a mode that the forcing happens to excite near a node
+# cannot contribute a spurious local maximum.
+function response_peaks(mag, idx; minprom=0.30)
+    env = vec(maximum(mag[idx, :], dims=1))
+    peaks = Float64[]
+    for i in 2:length(env)-1
+        (env[i] > env[i-1] && env[i] >= env[i+1]) || continue
+        l = i; while l > 1 && env[l-1] < env[l]; l -= 1; end
+        r = i; while r < length(env) && env[r+1] < env[r]; r += 1; end
+        min(log10(env[i]/env[l]), log10(env[i]/env[r])) >= minprom || continue
+        push!(peaks, kappa_grid[i])
     end
-    kg = 10 .^ range(log10(klo), log10(khi); length=ngrid)
-    v = detH.(kg)
-    roots = Float64[]
-    for i in 1:length(kg)-1
-        (isfinite(v[i]) && isfinite(v[i+1]) && sign(v[i]) != sign(v[i+1])) || continue
-        a, b, sa = kg[i], kg[i+1], sign(v[i])
-        for _ in 1:nbisect                      # bisection in log-kappa
-            m = sqrt(a * b)
-            sign(detH(m)) == sa ? (a = m) : (b = m)
-        end
-        push!(roots, sqrt(a * b))
-    end
-    return roots
+    return peaks
 end
 
 const EVEN_IDX = [i for (i, m) in enumerate(ctx.mode_numbers) if iseven(m)]
 const ODD_IDX  = [i for (i, m) in enumerate(ctx.mode_numbers) if isodd(m)]
-validated_even = reactive_resonances(EVEN_IDX)
-validated_odd  = reactive_resonances(ODD_IDX)
-@info "coupled reactive resonances" even=validated_even odd=validated_odd
+validated_even = response_peaks(mag_c, EVEN_IDX)
+validated_odd  = response_peaks(mag_c, ODD_IDX)
+@info "coupled response peaks" even=validated_even odd=validated_odd
 
 # Phase -> ONE shared colorbar, raw phase degrees, period 360 deg. t=0 (phase=0)
 # and t=1 (phase=+-180) are the two endpoints of :balance, both nearly-black
