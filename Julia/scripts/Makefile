@@ -34,6 +34,7 @@ FIGURES := \
 	$(FIG_DIR)/plot_freefree_modes.pdf \
 	$(FIG_DIR)/plot_beam_num_modes_cmp_cpl.pdf \
 	$(FIG_DIR)/plot_fig10_modal_maps_3x3.pdf \
+	$(FIG_DIR)/plot_bare_q_modal_grid.png \
 	$(FIG_DIR)/plot_fig4_Aguero2026_1.pdf
 
 MSG ?= regenerate figures
@@ -73,6 +74,12 @@ $(FIG_DIR)/plot_beam_num_modes_cmp_cpl.pdf: plot_beam_num_modes_cmp.jl \
 
 $(FIG_DIR)/plot_fig10_modal_maps_3x3.pdf: plot_fig10_modal_maps_3x3.jl $(PAPER_THEME) \
 		$(SWEEP_CPL_JLD2) $(SWEEP_UCPL_JLD2) $(SWEEP_CPL_CSV) $(SWEEP_UCPL_CSV)
+	$(JULIA) --threads auto $<
+
+# PNG rather than PDF: the phase-coloured lines stay vector polygons in PDF and
+# re-rasterize with antialiasing haze at the viewer's zoom (see the script).
+$(FIG_DIR)/plot_bare_q_modal_grid.png: plot_bare_q_modal_grid.jl $(PAPER_THEME) \
+		plot_dimensionless_diagnostics_LH.jl $(SWEEP_CPL_JLD2)
 	$(JULIA) --threads auto $<
 
 $(FIG_DIR)/plot_fig4_Aguero2026_1.pdf: plot_fig4_Aguero2026.jl $(PAPER_THEME)

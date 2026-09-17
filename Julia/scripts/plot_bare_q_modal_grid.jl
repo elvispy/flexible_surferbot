@@ -6,8 +6,10 @@ Bare modal response |q_n| vs kappa, 2x2 grid:
     columns = uncoupled (Lambda=0), coupled
 
 Companion to the Uncoupled limit Lambda=0 appendix section: shows the free-free
-beam's own resonant modal geometry (dry poles kappa=beta_n^-4) alongside the
-fully coupled case (S-perp-A roots), split by parity.
+beam's own resonant modal geometry alongside the fully coupled case, split by
+parity.  Both columns mark the same object, the stiffness at which the reactive
+part of a parity block goes singular: dry poles kappa=(beta_n*L)^-4 when
+Lambda=0, and the coupled roots of det H_p(kappa)=0 when coupling is on.
 
   x = kappa (log), y = |q_n| (log)
   color = phase, period 360 deg: phase_t(theta) = (1-cosd(theta))/2 * 0.92
@@ -63,14 +65,46 @@ kpole_dry_all = [(m, Float64(params.rho_raft) * Float64(params.omega)^2 / (EI_sc
 kpole_dry_even = [k for (m, k) in kpole_dry_all if iseven(m)]
 kpole_dry_odd  = [k for (m, k) in kpole_dry_all if isodd(m)]
 
-# Coupled (S-perp-A) resonance roots, split by parity. The 4 roots originally
-# found (via root search on the coupled modal system) missed the lowest-kappa
-# (most-flexible) resonance for both parities; refined by local log-grid
-# maximization of |q| (200000 points) around the observed peaks in mag_c,
-# giving 3.7638e-5 (even) and 1.6602e-5 (odd) in addition to the 3 already
-# found per parity (odd/even alternate with increasing kappa).
-validated_even = sort([3.7637590044590734e-5, 3.5877272926336350e-4, 1.9567552784652463e-2])
-validated_odd  = sort([1.6601568914776633e-5, 1.0274283400507156e-4, 1.8552764122338056e-3])
+# Coupled resonances, computed live so they cannot go stale when the impedance
+# maps change.  Both columns of the figure mark the SAME object: the stiffness
+# at which the reactive (real) part of a parity block goes singular.  With
+# Lambda=0 the block is the real diagonal EI*beta^4 - rho_R*omega^2, whose roots
+# are exactly the dry poles kappa=(beta_n*L)^-4 drawn in the uncoupled column;
+# with coupling on, added mass and the capillary endpoint map enter H_p and the
+# same roots shift.  This is the object appendix B.3 defines (M_p = H_p + i*Y_p
+# with Y_p rank one; radiation regularizes the singularity).
+#
+# H_p(kappa) = H_p0 + kappa*B_p is affine in kappa, so det H_p is a real
+# polynomial of degree = (number of elastic modes in the block), giving exactly
+# 3 roots per parity here.  Unlike a |q| peak this is forcing-independent.
+function reactive_resonances(idx; klo=3e-6, khi=1.0, ngrid=20000, nbisect=80)
+    function detH(kappa)
+        D = ComplexF64.(kappa * EI_scale .* ctx.beta .^ 4
+                        .- Float64(params.rho_raft) * Float64(params.omega)^2
+                        .+ ctx.c_hydro)
+        M = Diagonal(D) .- ctx.Z_psi .+ ctx.C_sigma
+        return det(real.(M[idx, idx]))
+    end
+    kg = 10 .^ range(log10(klo), log10(khi); length=ngrid)
+    v = detH.(kg)
+    roots = Float64[]
+    for i in 1:length(kg)-1
+        (isfinite(v[i]) && isfinite(v[i+1]) && sign(v[i]) != sign(v[i+1])) || continue
+        a, b, sa = kg[i], kg[i+1], sign(v[i])
+        for _ in 1:nbisect                      # bisection in log-kappa
+            m = sqrt(a * b)
+            sign(detH(m)) == sa ? (a = m) : (b = m)
+        end
+        push!(roots, sqrt(a * b))
+    end
+    return roots
+end
+
+const EVEN_IDX = [i for (i, m) in enumerate(ctx.mode_numbers) if iseven(m)]
+const ODD_IDX  = [i for (i, m) in enumerate(ctx.mode_numbers) if isodd(m)]
+validated_even = reactive_resonances(EVEN_IDX)
+validated_odd  = reactive_resonances(ODD_IDX)
+@info "coupled reactive resonances" even=validated_even odd=validated_odd
 
 # Phase -> ONE shared colorbar, raw phase degrees, period 360 deg. t=0 (phase=0)
 # and t=1 (phase=+-180) are the two endpoints of :balance, both nearly-black
