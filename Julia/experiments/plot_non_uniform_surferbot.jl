@@ -52,8 +52,10 @@ function main()
     paths = Surferbot.render_surferbot_run(result;
         outdir          = output_dir,
         basename        = "non_uniform_surferbot",
-        fps             = 30,
+        fps             = 60,
         duration_periods = 10,
+        seconds         = 20,
+        nondim          = true,
         script_name     = Base.basename(@__FILE__))
 
     println("Saved: $(paths.mp4)")

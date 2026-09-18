@@ -3,6 +3,7 @@ module RunVideo
 using Dates
 using JLD2
 using Printf
+using LaTeXStrings
 
 if !haskey(ENV, "GKSwstype") || isempty(ENV["GKSwstype"])
     ENV["GKSwstype"] = "100"
@@ -313,12 +314,75 @@ end
 Generate a single frame plot for the simulation at time `t`.
 The raft is colour-coded by log₁₀(EI): dark = stiff, light grey = compliant.
 """
-function plot_frame(record::SurferbotRunRecord, t::Real; omega::Real, x_contact_mask, motor_idx::Union{Nothing,Int}, show_motor::Bool)
+_first_scalar(v) = v isa AbstractVector ? float(first(v)) : float(v)
+
+# Mantissa/exponent as a LaTeX fragment, matching how the paper writes these
+# values (kappa = 2.00 \times 10^{-3}).  The title is built as a LaTeXString
+# rather than a plain string: GR renders a bare Unicode kappa with Computer
+# Modern's variant glyph (U+03F0, the curly one) and shows "x_M" with a
+# literal underscore, so the math has to be typeset rather than spelled out.
+function _sci_tex(x::Real; digits::Int = 2)
+    isfinite(x) || return "\\infty"
+    x == 0 && return "0"
+    e = floor(Int, log10(abs(x)))
+    m = x / 10.0^e
+    return @sprintf("%.*f", digits, m) * "\\times 10^{" * string(e) * "}"
+end
+
+# kappa = EI / (rho_R L^4 omega^2).  A non-uniform raft has no single kappa, so
+# report the range rather than silently showing one end of it.
+function _kappa_label(record, L_raft::Real, omega::Real)
+    EI  = maybe_get(record.args, :EI, nothing)
+    rho = maybe_get(record.args, :rho_raft, nothing)
+    (EI === nothing || rho === nothing) && return nothing
+    scale = _first_scalar(rho) * L_raft^4 * omega^2
+    if EI isa AbstractVector
+        k  = Float64.(EI) ./ scale
+        kf = k[isfinite.(k)]
+        # A rigid section is stored as EI = Inf.  Dropping it would report the
+        # compliant material's kappa as if it described the whole raft, so the
+        # infinite branch is listed explicitly alongside the finite one.
+        has_rigid = any(!isfinite, k)
+        isempty(kf) && return "\\infty"
+        lo, hi = extrema(kf)
+        finite_part = isapprox(lo, hi; rtol = 1e-9) ? _sci_tex(lo) :
+                      "[" * _sci_tex(lo) * ",\\; " * _sci_tex(hi) * "]"
+        return has_rigid ? "\\{" * finite_part * ",\\; \\infty\\}" : finite_part
+    end
+    return _sci_tex(float(EI) / scale)
+end
+
+function plot_frame(record::SurferbotRunRecord, t::Real; omega::Real, x_contact_mask, motor_idx::Union{Nothing,Int}, show_motor::Bool, nondim::Bool = false)
     Plots = ensure_plots_backend!()
-    scaleY = 1e6
-    y        = real.(record.eta .* exp.(1im * omega * t)) .* scaleY
-    x_scaled = record.x .* 1e2
-    y_limit  = maximum(abs.(record.eta)) * scaleY * 1.1
+    L_raft = maybe_get(record.args, :L_raft, nothing)
+    nondim && L_raft === nothing && error("Non-dimensional rendering needs L_raft in the run metadata.")
+
+    if nondim
+        Lr       = _first_scalar(L_raft)
+        scaleY   = 1 / Lr
+        x_scaled = record.x ./ Lr
+        xlab, ylab = L"x/L", L"\eta/L"
+        xM  = maybe_get(record.args, :motor_position, nothing)
+        kap = _kappa_label(record, Lr, omega)
+        parts = [@sprintf("t/T = %.2f", t * omega / (2π))]
+        xM  === nothing || push!(parts, @sprintf("x_M/L = %+.3f", _first_scalar(xM) / Lr))
+        kap === nothing || push!(parts, "\\kappa = " * kap)
+        # Drawn as an annotation inside the axes rather than as a title: GR
+        # places a title on its baseline and ignores the descender, so the
+        # subscript of x_M lands on the frame.  top_margin does not help, it
+        # shifts the whole subplot without changing the title-to-frame gap.
+        ann_text = latexstring(join(parts, "\\qquad "))
+        ttl = ""
+    else
+        scaleY   = 1e6
+        x_scaled = record.x .* 1e2
+        xlab, ylab = "x  (cm)", "η  (μm)"
+        ann_text = nothing
+        ttl = @sprintf("f = %.1f Hz     t = %.3f s", omega / (2π), t)
+    end
+
+    y       = real.(record.eta .* exp.(1im * omega * t)) .* scaleY
+    y_limit = maximum(abs.(record.eta)) * scaleY * 1.1
 
     # ── Water surface ─────────────────────────────────────────────────────────
     p = Base.invokelatest(Plots.plot,
@@ -329,12 +393,11 @@ function plot_frame(record::SurferbotRunRecord, t::Real; omega::Real, x_contact_
         color      = :steelblue4,
         linewidth  = 2.0,
         label      = false,
-        xlabel     = "x  (cm)",
-        ylabel     = "η  (μm)",
+        xlabel     = xlab,
+        ylabel     = ylab,
         ylim       = (-y_limit, y_limit * 1.45),
         xlim       = (first(x_scaled), last(x_scaled)),
-        title      = @sprintf("f = %.1f Hz     t = %.3f s     U = %.3f mm/s",
-                               omega / (2π), t, record.U * 1e3),
+        title      = ttl,
         legend     = false,
         background_color_legend = :white,
         size       = (1400, 520),
@@ -351,6 +414,13 @@ function plot_frame(record::SurferbotRunRecord, t::Real; omega::Real, x_contact_
         top_margin     = Base.invokelatest(*, 4, Plots.mm),
         bottom_margin  = Base.invokelatest(*, 18, Plots.mm),
     )
+
+    if ann_text !== nothing
+        x_mid = (first(x_scaled) + last(x_scaled)) / 2
+        Base.invokelatest(Plots.annotate!, p, x_mid, y_limit * 1.27,
+            Base.invokelatest(Plots.text, ann_text,
+                Base.invokelatest(Plots.font, "Computer Modern", 26), :center))
+    end
 
     # ── Raft coloured by log₁₀(EI): dark = stiff, light grey = compliant ─────
     if !isempty(x_contact_mask) && any(x_contact_mask)
@@ -490,7 +560,7 @@ Render a simulation run as an MP4 video with provenance metadata.
 # Returns
 - A NamedTuple `(mp4 = path, json = path)`.
 """
-function render_surferbot_run(input; outdir::AbstractString=pwd(), basename::AbstractString="waves", fps::Int=30, duration_periods::Real=10, nframes::Union{Nothing,Int}=nothing, script_name::AbstractString=Base.basename(PROGRAM_FILE))
+function render_surferbot_run(input; outdir::AbstractString=pwd(), basename::AbstractString="waves", fps::Int=30, duration_periods::Real=10, nframes::Union{Nothing,Int}=nothing, seconds::Union{Nothing,Real}=nothing, nondim::Bool=false, script_name::AbstractString=Base.basename(PROGRAM_FILE))
     Plots = ensure_plots_backend!()
     record = normalize_run(input)
     mkpath(outdir)
@@ -511,12 +581,17 @@ function render_surferbot_run(input; outdir::AbstractString=pwd(), basename::Abs
     motor_position = maybe_get(record.args, :motor_position, nothing)
     motor_idx = motor_position === nothing ? nothing : argmin(abs.(record.x .- float(motor_position)))
 
-    total_frames = something(nframes, Int(round(duration_periods * fps)))
+    # `seconds` sets the playback length independently of how many forcing
+    # periods are shown, so the animation can be slowed without dropping
+    # physical cycles: frames = seconds * fps, still spanning duration_periods.
+    total_frames = something(nframes,
+                             seconds === nothing ? Int(round(duration_periods * fps)) :
+                                                   Int(round(seconds * fps)))
     tvec = range(0, stop = duration_periods * (2π / omega), length = total_frames)
 
     anim = Base.invokelatest(Plots.Animation)
     for t in tvec
-        frame_plot = plot_frame(record, t; omega = omega, x_contact_mask = contact_mask, motor_idx = motor_idx, show_motor = motor_idx !== nothing)
+        frame_plot = plot_frame(record, t; omega = omega, x_contact_mask = contact_mask, motor_idx = motor_idx, show_motor = motor_idx !== nothing, nondim = nondim)
         Base.invokelatest(Plots.frame, anim, frame_plot)
     end
 

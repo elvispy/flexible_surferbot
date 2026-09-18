@@ -32,8 +32,12 @@ function main()
     paths = Surferbot.render_surferbot_run(result;
         outdir           = output_dir,
         basename         = "fig3b_rigid_validation",
-        fps              = 30,
+        fps              = 60,
         duration_periods = 10,
+        seconds          = 20,
+        # Dimensional on purpose: this is the validation against the physical
+        # SurferBot of Rhee et al., so cm / um / Hz are the comparable units.
+        nondim           = false,
         script_name      = Base.basename(@__FILE__))
 
     println("Saved: $(paths.mp4)")

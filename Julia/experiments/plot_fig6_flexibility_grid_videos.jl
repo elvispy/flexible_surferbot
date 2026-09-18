@@ -10,7 +10,7 @@ at the three highlighted stiffnesses (KAPPA_HIGHLIGHTS, paper_theme.jl):
   (e) kappa = 1.7575e-2  (mode 2 dominant, large peak thrust)
 Same convention as the existing fig3b_rigid_validation.mp4 and
 non_uniform_surferbot.mp4: Surferbot.flexible_solver + render_surferbot_run,
-fps=30, duration_periods=10.
+fps=60, seconds=20, nondim=true.
 """
 
 using Surferbot
@@ -39,8 +39,10 @@ function main()
         paths = Surferbot.render_surferbot_run(result;
             outdir           = output_dir,
             basename         = basename,
-            fps              = 30,
+            fps              = 60,
             duration_periods = 10,
+            seconds          = 20,
+            nondim           = true,
             script_name      = Base.basename(@__FILE__))
         println("Saved: $(paths.mp4)")
     end
