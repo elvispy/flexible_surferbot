@@ -81,7 +81,7 @@ SIGN CONVENTION (matches the paper, Sec. 2.6):
 
 with `eta_left` = eta(-l) the LEFT (-x) domain-edge amplitude and `eta_right` =
 eta(+l) the RIGHT one. By momentum balance this equals the mean horizontal thrust
-on the raft, `F_T = DeltaS_xx`, positive in +x. The left-minus-right ordering
+on the raft, `F_T = d * DeltaS_xx`, positive in +x. The left-minus-right ordering
 encodes recoil: the raft is propelled opposite to its stronger radiation. Note
 this is MINUS the Longuet-Higgins radiation-stress difference (which is the force
 needed to hold the raft fixed, not the thrust). Same sign as `beam_asymmetry`
@@ -516,7 +516,7 @@ function add_dual_axis!(fig, sw, alpha_sw, d, F_T_star; xlabel, xscale=identity,
     labels = [L"F_T/F_T^\ast"]
     if show_Sxx
         l2 = lines!(ax, sw.x[order], yS[order]; color = RED, linewidth = 3, linestyle = :dash)
-        push!(handles, l2); push!(labels, L"\Delta S_{xx}/F_T^\ast")
+        push!(handles, l2); push!(labels, L"d\,\Delta S_{xx}/F_T^\ast")
     end
     if show_zero
         hlines!(ax, [0.0]; color = (:black, 0.55), linewidth = 1)

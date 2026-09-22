@@ -22,7 +22,7 @@ Compute thrust, drift speed, input power, and surface fields from the harmonic s
 # Thrust sign convention (matches the paper, Sec. 2.6)
 `thrust` is the mean horizontal thrust on the raft, positive in the +x direction.
 By momentum balance it equals the far-field measure `DeltaS_xx` (see `compute_Sxx`),
-`F_T = DeltaS_xx = pref*(|eta(-l)|^2 - |eta(+l)|^2)` (left minus right): the raft is
+`F_T = d * DeltaS_xx`, with `DeltaS_xx = pref*(|eta(-l)|^2 - |eta(+l)|^2)` (left minus right): the raft is
 propelled opposite to its stronger radiation (recoil). This is the same sign
 convention as the asymmetry factor `alpha` (`beam_asymmetry`).
 """

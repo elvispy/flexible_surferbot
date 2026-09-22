@@ -478,7 +478,7 @@ function draw_sweep_axis!(figpos, labelpos, sweep; legend_position = :rb,
     aorder = sortperm(sweep.alpha_x)
     l3 = CM.lines!(axr, sweep.alpha_x[aorder], sweep.alpha[aorder]; color = MAKIE_ALPHA, linewidth = 2.6)
 
-    CM.axislegend(ax, [l1, l2, l3], [L"F_T/F_T^\ast", L"\Delta S_{xx}/F_T^\ast", L"\alpha"];
+    CM.axislegend(ax, [l1, l2, l3], [L"F_T/F_T^\ast", L"d\,\Delta S_{xx}/F_T^\ast", L"\alpha"];
         position = legend_position, backgroundcolor = (:white, 0.86), framecolor = (:black, 0.45),
         labelsize = legend_labelsize, patchsize = legend_patchsize)
     return ax
