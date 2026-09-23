@@ -460,6 +460,15 @@ function plot_frame(record::SurferbotRunRecord, t::Real; omega::Real, x_contact_
             LOG_EI_LO, LOG_EI_HI = -6.0, 30.0
             norm_EI = clamp.((log_EI .- LOG_EI_LO) ./ (LOG_EI_HI - LOG_EI_LO), 0.0, 1.0)
 
+            ## A raft of one material has no stiffness variation to encode, so
+            ## the colour scale says nothing and only makes the body harder to
+            ## read. Draw it as a single dark line instead.
+            if all(isapprox(first(log_EI)), log_EI)
+                Base.invokelatest(Plots.plot!, p, x_raft, y_raft;
+                                  color = :black, linewidth = 8 * lw, label = false)
+                @goto raft_done
+            end
+
             Base.invokelatest(Plots.scatter!, p, x_raft, y_raft;
                      marker_z          = norm_EI,
                      color             = Base.invokelatest(Plots.cgrad, [:darkgray, :black]),
@@ -472,6 +481,7 @@ function plot_frame(record::SurferbotRunRecord, t::Real; omega::Real, x_contact_
             # Fallback for scalar or missing EI
             Base.invokelatest(Plots.plot!, p, x_raft, y_raft; color = :black, linewidth = 8 * lw, label = false)
         end
+        @label raft_done
     end
 
     # ── Motor forcing: Re{f̂(x) e^{iωt}}, nondimensionalized, as arrows ────────
