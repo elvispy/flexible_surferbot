@@ -1,24 +1,18 @@
 # # Symbolic derivations behind the paper
 #
 # This file re-derives, in a computer algebra system, every analytical step of
-# *Wave-driven propulsion of a flexible raft*. Each printed relation is obtained
-# from the equations it is claimed to follow from, and is then compared with what
-# the paper prints. Nothing is assumed: where the paper asserts that a term
-# vanishes, the term is constructed and shown to vanish.
-#
-# Structural claims carry a negative control. A check that passes for the right
-# reason must fail when a sign or a factor is changed, so each such claim is
-# paired with a deliberately broken variant that has to fail. Without the control
-# a passing test says nothing.
+# *Wave-driven propulsion of a flexible raft*.
 #
 # Equation numbers refer to the submitted manuscript. The sections below follow
 # the paper in order: the governing system of Section 2, the thrust and asymmetry
 # diagnostics, the reduced-order modal model, and Appendices A to C.
-#
-# Coverage. The file certifies Sections 2.2 to 2.6 and Appendices A, B and C.
-# It does not cover the numerical discretisation, which the rest of the test
-# suite exercises, nor the Longuet-Higgins prefactor of (2.30), which is taken
-# from the cited literature.
+
+## Structural claims carry a negative control: the same check with one sign or
+## factor changed has to fail, otherwise a passing test says nothing.
+##
+## Covers Sections 2.2 to 2.6 and Appendices A, B and C. Not covered: the
+## discretisation, which the rest of the suite exercises, and the
+## Longuet-Higgins prefactor of (2.30), which is taken from the literature.
 
 using Test
 using LinearAlgebra
@@ -30,10 +24,14 @@ setprecision(BigFloat, 220)
 
 # ## Working with the imaginary unit
 #
-# Symbolics simplifies expressions over `Complex{Num}` unreliably, so the
-# imaginary unit is carried as an ordinary symbol `Iu` and reduced by hand
-# through the rules below. Viscous terms enter as `eps = 1/Re`, and the paper
-# retains only first order in viscosity, so higher powers of `eps` are dropped.
+# The imaginary unit is carried as an ordinary symbol and reduced by hand, since
+# Symbolics simplifies `Complex{Num}` unreliably:
+#
+# $$\mathrm{i}^2=-1,\qquad \mathrm{i}^3=-\mathrm{i},\qquad \mathrm{i}^4=1,\qquad \mathrm{i}^{-1}=-\mathrm{i}.$$
+#
+# Viscosity enters through $\varepsilon = 1/Re$. The paper keeps terms to first
+# order in viscosity and drops $O(\nu^2)$, so $\varepsilon^2$ and above are set to
+# zero here.
 
 @variables Iu eps
 
@@ -63,8 +61,11 @@ zz(e) = iszero0(redI(e)) ||
 zp(e) = (v = Symbolics.value(Symbolics.simplify(expand(e), expand = true));
          v isa Number ? isapprox(Float64(real(v)), 0.0; atol = 1e-13) : isequal(v, 0))
 
-# Exact integration of a polynomial over the raft, used wherever the paper
-# projects onto the modal basis.
+# Projections onto the modal basis are integrals over the raft,
+#
+# $$\bar q_m=\int_{-1/2}^{1/2}\bar\eta\,W_m\,\mathrm{d}x ,$$
+#
+# which are evaluated exactly for polynomial integrands by the two helpers below.
 
 @variables x
 
@@ -89,20 +90,42 @@ at(e, p) = Symbolics.simplify(substitute(e, Dict(x => p)))
 
 # ## Section 2.4: the harmonic operators
 #
-# The paper defines the operator of the kinematic condition and its approximate
-# inverse. The inverse is exact only to first order in viscosity, and the
-# residual of the product fixes the order of the error.
+# The kinematic condition is written with the operator
+#
+# $$\bar{\mathcal K}=\mathrm{i}-\frac{2}{Re}\partial_{xx},\qquad
+#   \bar{\mathcal K}^{-1}=-\mathrm{i}-\frac{2}{Re}\partial_{xx},$$
+#
+# the second being an inverse only to first order in viscosity. Writing
+# $a=\tfrac{2}{Re}\partial_{xx}$ for one Fourier mode, the product is
+#
+# $$(\mathrm{i}-a)(-\mathrm{i}-a)=1+a^{2},$$
+#
+# so the error is $O(Re^{-2})$ and its sign is positive.
 
 @testset "2.4 the operator K and its approximate inverse" begin
     @variables a
-    ## Kbar = i - 2a, Kbarinv = -i - 2a with a standing for (2/Re) d_xx acting on
-    ## a single Fourier mode. Their product differs from unity at second order.
+    ## a stands for (2/Re) d_xx acting on a single Fourier mode.
     prod = redI((Iu - a) * (-Iu - a))
     @test zz(prod - (1 + a^2))
     ## The error term is +a^2, not -a^2. A sign error here would be invisible in
     ## the leading behaviour, so it is pinned separately.
     @test !zz(prod - (1 - a^2))
 end
+
+# Off the raft the free-surface row (2.26b) reads
+#
+# $$\bar\phi+\frac{4\mathrm{i}}{Re}\bar\phi_{xx}-\frac{1}{Fr^{2}}\bar\phi_{z}
+#   +\frac{1}{\Gamma We}\bar\phi_{zxx}=0 .$$
+#
+# It is assembled from the dynamic pressure, the hydrostatic part, the capillary
+# condition and the kinematic relation,
+#
+# $$\bar p_{\mathrm{dyn}}=-\left(\mathrm{i}\bar\phi-\frac{2}{Re}\bar\phi_{xx}\right),\qquad
+#   \bar p=\Gamma\left(\bar p_{\mathrm{dyn}}-\frac{\bar\eta}{Fr^{2}}\right),\qquad
+#   \bar p=-\frac{\bar\eta_{xx}}{We},\qquad
+#   \bar\eta=\bar{\mathcal K}^{-1}\bar\phi_{z}.$$
+#
+# Applying $\bar{\mathcal K}$ clears the inverse operator and leaves the row above.
 
 @testset "2.4 the free-surface row (2.26b)" begin
     ## Towers of x-derivatives, closed under d_xx up to the truncation order.
@@ -137,9 +160,17 @@ end
 
 # ## Section 2.5: mean thrust and radiation asymmetry
 #
-# Splitting the boundary elevations into symmetric and antisymmetric parts turns
-# the difference of outgoing intensities into a single interference term. Both
-# the thrust numerator and the asymmetry factor follow from it.
+# Splitting the boundary elevations into symmetric and antisymmetric parts,
+#
+# $$S=\frac{\bar\eta(\bar\ell)+\bar\eta(-\bar\ell)}{2},\qquad
+#   A=\frac{\bar\eta(\bar\ell)-\bar\eta(-\bar\ell)}{2},$$
+#
+# turns the difference of outgoing intensities into one interference term,
+#
+# $$|\bar\eta(-\bar\ell)|^{2}-|\bar\eta(\bar\ell)|^{2}=-4\,\Re(SA^{*}),\qquad
+#   \alpha=\frac{-2\,\Re(SA^{*})}{|S|^{2}+|A|^{2}} .$$
+#
+# The thrust therefore vanishes in three ways: $A=0$, $S=0$, or $S\perp A$.
 
 @testset "2.5 the S and A decomposition (2.32) and alpha (2.31)" begin
     @variables Sr Si Ar Ai
@@ -162,9 +193,32 @@ end
 
 # ## Section 2.6: the reduced-order modal model
 #
-# The raft balance is non-dimensionalised with the scales of Section 2.5, then
-# projected onto the modal basis. The projection produces the modal balance, and
-# substituting the two linear maps produces the impedance matrix.
+# The raft balance in non-dimensional form (2.33) is
+#
+# $$\kappa\bar\eta_{xxxx}+\left(\frac{\Lambda\Gamma}{Fr^{2}}-1\right)\bar\eta
+#   =\Lambda\Gamma\,\bar p_{\mathrm{dyn}}-\bar f .$$
+#
+# Projecting it onto $W_m$ gives the modal balance (2.34),
+#
+# $$\left(\kappa\beta_m^{4}+\frac{\Lambda\Gamma}{Fr^{2}}-1\right)\bar q_m
+#   =\Lambda\Gamma\,\bar p_m-\bar f_m-\frac{\Lambda}{We}\bar K_m^{\sigma},$$
+#
+# and substituting the two linear maps $\bar p_m=\bar Z_{mn}\bar q_n$ and
+# $\bar K^{\sigma}_m=\bar C^{\sigma}_{mn}\bar q_n$ collects the system into
+# $\bar{\mathbf M}\bar{\boldsymbol q}=-\bar{\boldsymbol f}$ with
+#
+# $$\bar{\mathbf M}=\bar{\mathbf D}-\Lambda\left(\Gamma\bar{\mathbf Z}
+#   -\frac{1}{We}\bar{\mathbf C}^{\sigma}\right),\qquad
+#   \bar D_{mn}=\left(\kappa\beta_m^{4}+\frac{\Lambda\Gamma}{Fr^{2}}-1\right)\delta_{mn}.$$
+#
+# Reflection symmetry then empties half of it: with
+# $W_m(-x)=(-1)^mW_m(x)$ and a load of the same parity as the mode that produced it,
+#
+# $$\bar Z_{mn}=(-1)^{m+n}\bar Z_{mn},$$
+#
+# so entries of opposite parity vanish and the system is block diagonal. The far-field
+# coefficients obey $\bar a_n^{-}=(-1)^n\bar a_n^{+}$, which puts the even modes in
+# $S$ and the odd modes in $A$.
 
 @testset "2.6 the non-dimensional raft balance (2.33)" begin
     @variables rho rhoR g om nu L dd EI etb pdynb fb
@@ -245,9 +299,41 @@ end
 
 # ## Appendix B.1: the free-free modal basis
 #
-# The paper writes the modes about the centre of the raft, while the textbook
-# form is written on [0, L]. The two are the same functions, and the two
-# half-angle conditions of the paper factor the textbook frequency equation.
+# The basis solves the free-free eigenproblem
+#
+# $$W_n''''=\beta_n^{4}W_n,\qquad W_n''(\pm 1/2)=W_n'''(\pm 1/2)=0,\qquad
+#   \int_{-1/2}^{1/2}W_mW_n\,\mathrm{d}x=\delta_{mn},$$
+#
+# with the rigid pair $W_0=1$, $W_1=\sqrt{12}\,x$ and, for the elastic modes,
+#
+# $$\widetilde W_n=\frac{\cosh\beta_nx}{\cosh(\beta_n/2)}+\frac{\cos\beta_nx}{\cos(\beta_n/2)}
+#   \quad (n\ \text{even}),\qquad
+#   \widetilde W_n=\frac{\sinh\beta_nx}{\sinh(\beta_n/2)}+\frac{\sin\beta_nx}{\sin(\beta_n/2)}
+#   \quad (n\ \text{odd}).$$
+#
+# The moment condition holds for any $\beta$; the shear condition selects it, and
+# splits by parity into
+#
+# $$\tan(\beta/2)=-\tanh(\beta/2)\ \ (\text{even}),\qquad
+#   \tan(\beta/2)=+\tanh(\beta/2)\ \ (\text{odd}).$$
+#
+# The paper writes these about the centre of the raft, the textbook form is written
+# on $[0,L]$ with the single frequency equation $\cos\beta\cosh\beta=1$. The two
+# agree, because that equation factors into the two conditions above:
+#
+# $$\cos\beta\cosh\beta-1=-2\left(\sin\tfrac{\beta}{2}\cosh\tfrac{\beta}{2}+\cos\tfrac{\beta}{2}\sinh\tfrac{\beta}{2}\right)
+#   \left(\sin\tfrac{\beta}{2}\cosh\tfrac{\beta}{2}-\cos\tfrac{\beta}{2}\sinh\tfrac{\beta}{2}\right).$$
+#
+# Projecting the bending term needs four integrations by parts (B7),
+#
+# $$\int_{-1/2}^{1/2}W_m\bar\eta_{xxxx}\,\mathrm{d}x=\beta_m^{4}\bar q_m
+#   +\left[W_m\bar\eta_{xxx}-W_m'\bar\eta_{xx}+W_m''\bar\eta_x-W_m'''\bar\eta\right]_{-1/2}^{1/2},$$
+#
+# of which only the first boundary term survives, and the shear edge condition turns
+# it into the capillary endpoint map (B8),
+#
+# $$\kappa\left[W_m\bar\eta_{xxx}\right]_{-1/2}^{1/2}=\frac{\Lambda}{We}\bar K^{\sigma}_m,\qquad
+#   \bar K^{\sigma}_m=W_m(1/2)\,\bar\eta_x(1/2^{+})+W_m(-1/2)\,\bar\eta_x(-1/2^{-}).$$
 
 const TOLF = 1e-11
 
@@ -370,11 +456,54 @@ end
 
 # ## Appendix B.3: the zero-thrust condition
 #
-# The starting point is the mechanical power the actuator delivers to the raft.
-# Orthonormality of the basis carries it into the modal amplitudes, the
-# cycle-average identity of Appendix A turns it into a real part, and the
-# symmetry of the two parity blocks separates the reactive forces from the
-# radiated power.
+# The starting point is the mechanical power the actuator delivers to the raft,
+#
+# $$\langle P_{\mathrm{in}}\rangle=-\left\langle\int_{-1/2}^{1/2}f\,\eta_t\,\mathrm{d}x\right\rangle .$$
+#
+# Orthonormality of the basis carries it into the modal amplitudes, the cycle-average
+# identity of Appendix A,
+#
+# $$\left\langle\Re\{\hat a\mathrm{e}^{\mathrm{i}t}\}\,\Re\{\hat b\mathrm{e}^{\mathrm{i}t}\}\right\rangle
+#   =\tfrac12\Re\{\hat a\hat b^{*}\}
+#   =\tfrac12|\hat a||\hat b|\cos(\arg\hat a-\arg\hat b),$$
+#
+# turns it into a real part, and $\bar{\mathbf M}_p\bar{\boldsymbol q}_p=-\bar{\boldsymbol f}_p$
+# eliminates the forcing, giving (B17):
+#
+# $$\langle P_{\mathrm{in}}\rangle=\tfrac12\Re\left\{\left[(\bar{\mathbf M}_p\bar{\boldsymbol q}_p)^{*}\right]^{\mathsf T}
+#   \mathrm{i}\bar{\boldsymbol q}_p\right\}
+#   =\tfrac12(\bar{\boldsymbol q}_p^{*})^{\mathsf T}\bar{\mathbf Y}_p\bar{\boldsymbol q}_p .$$
+#
+# The second equality uses $\bar{\mathbf M}_p=\bar{\mathbf H}_p+\mathrm{i}\bar{\mathbf Y}_p$
+# and the symmetry of both blocks: for real $\mathbf A$ the form
+# $(\bar{\boldsymbol q}^{*})^{\mathsf T}\mathbf A\bar{\boldsymbol q}$ is real when
+# $\mathbf A=\mathbf A^{\mathsf T}$ and imaginary when $\mathbf A=-\mathbf A^{\mathsf T}$, so
+# the reactive block contributes $\mathrm{i}$ times a real number and drops out.
+#
+# Equating with the radiated power $\langle P_{\mathrm{rad}}\rangle=\bar J_p|\boldsymbol{\bar a}_p^{\mathsf T}\bar{\boldsymbol q}_p|^{2}$
+# for every $\bar{\boldsymbol q}_p$ gives (B19),
+#
+# $$\bar{\mathbf Y}_p=2\bar J_p\,\boldsymbol{\bar a}_p^{*}\boldsymbol{\bar a}_p^{\mathsf T},$$
+#
+# which is real only if every $\bar a_{p,m}^{*}\bar a_{p,n}$ is real, hence
+# $\boldsymbol{\bar a}_p=\mathrm{e}^{\mathrm{i}\theta_p}\boldsymbol{\bar c}_p$ with
+# $\boldsymbol{\bar c}_p$ real. Sherman-Morrison then gives the transfer row,
+#
+# $$\boldsymbol{\bar r}_p=-\boldsymbol{\bar a}_p^{\mathsf T}\bar{\mathbf M}_p^{-1}
+#   =-\mathrm{e}^{\mathrm{i}\theta_p}
+#   \frac{\boldsymbol{\bar c}_p^{\mathsf T}\bar{\mathbf H}_p^{-1}}
+#   {1+\mathrm{i}\gamma_p\boldsymbol{\bar c}_p^{\mathsf T}\bar{\mathbf H}_p^{-1}\boldsymbol{\bar c}_p}
+#   =\mathrm{e}^{\mathrm{i}\delta_p}\boldsymbol{\bar b}_p^{\mathsf T},$$
+#
+# a real row times one phase, so that
+# $\mathbf G=\cos(\delta_e-\delta_o)\,\boldsymbol{\bar b}_e\boldsymbol{\bar b}_o^{\mathsf T}$
+# and $\Re(SA^{*})=\bar{\boldsymbol f}_e^{\mathsf T}\mathbf G\bar{\boldsymbol f}_o$. The matrix
+# determinant lemma turns the quarter-cycle condition into a real polynomial in the
+# stiffness,
+#
+# $$P_p(\kappa)=\det\bar{\mathbf H}_p+\mathrm{i}\gamma_p\boldsymbol{\bar c}_p^{\mathsf T}
+#   \operatorname{adj}(\bar{\mathbf H}_p)\boldsymbol{\bar c}_p,\qquad
+#   \mathcal P(\kappa)=\Re\left[\mathrm{e}^{\mathrm{i}(\theta_e-\theta_o)}P_e^{*}P_o\right]=0 .$$
 
 const TOL = BigFloat(10)^-40
 nz(A) = maximum(abs.(A)) < TOL
@@ -662,9 +791,13 @@ end
 
 # ## Appendix C: the uncoupled rigid limit
 #
-# With the fluid coupling removed and the raft rigid, only the two rigid modes
-# respond, and the motor position that nulls one end of the raft can be found in
-# closed form.
+# With $\Lambda=0$ and $\kappa\to\infty$ only the rigid pair responds. A point load at
+# $X=x_M/L$ projects as $\bar f_0=F$ and $\bar f_1=F\sqrt{12}X$, so
+# $\bar q_1=\sqrt{12}X\bar q_0$ and the raft ends move by
+#
+# $$\bar\eta(\pm 1/2)=\bar q_0\pm\frac{\sqrt{12}}{2}\bar q_1=\bar q_0\left(1\pm 6X\right),$$
+#
+# which vanishes at $X=\mp 1/6$.
 
 @testset "C.1 the motor position that nulls one raft end" begin
     @variables X q0 s12
