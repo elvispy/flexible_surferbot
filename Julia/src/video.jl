@@ -352,7 +352,7 @@ function _kappa_label(record, L_raft::Real, omega::Real)
     return _sci_tex(float(EI) / scale)
 end
 
-function plot_frame(record::SurferbotRunRecord, t::Real; omega::Real, x_contact_mask, motor_idx::Union{Nothing,Int}, show_motor::Bool, nondim::Bool = false, bare::Bool = false, figsize::Tuple{Int,Int} = (1400, 520), figdpi::Int = 150, background = :white)
+function plot_frame(record::SurferbotRunRecord, t::Real; omega::Real, x_contact_mask, motor_idx::Union{Nothing,Int}, show_motor::Bool, nondim::Bool = false, bare::Bool = false, figsize::Tuple{Int,Int} = (1400, 520), figdpi::Int = 150, background = :white, depth::Real = 1.0)
     Plots = ensure_plots_backend!()
     L_raft = maybe_get(record.args, :L_raft, nothing)
     nondim && L_raft === nothing && error("Non-dimensional rendering needs L_raft in the run metadata.")
@@ -398,7 +398,7 @@ function plot_frame(record::SurferbotRunRecord, t::Real; omega::Real, x_contact_
     # ── Water surface ─────────────────────────────────────────────────────────
     p = Base.invokelatest(Plots.plot,
         x_scaled, y;
-        fillrange  = -y_limit,
+        fillrange  = -y_limit * depth,
         fillcolor  = :steelblue,
         fillalpha  = 1.0,
         color      = :steelblue4,
@@ -406,7 +406,7 @@ function plot_frame(record::SurferbotRunRecord, t::Real; omega::Real, x_contact_
         label      = false,
         xlabel     = xlab,
         ylabel     = ylab,
-        ylim       = (-y_limit, y_limit * headroom),
+        ylim       = (-y_limit * depth, y_limit * headroom),
         xlim       = (first(x_scaled), last(x_scaled)),
         title      = ttl,
         legend     = false,
@@ -571,7 +571,7 @@ Render a simulation run as an MP4 video with provenance metadata.
 # Returns
 - A NamedTuple `(mp4 = path, json = path)`.
 """
-function render_surferbot_run(input; outdir::AbstractString=pwd(), basename::AbstractString="waves", fps::Int=30, duration_periods::Real=10, nframes::Union{Nothing,Int}=nothing, seconds::Union{Nothing,Real}=nothing, nondim::Bool=false, bare::Bool=false, figsize::Tuple{Int,Int}=(1400, 520), figdpi::Int=150, background=:white, script_name::AbstractString=Base.basename(PROGRAM_FILE))
+function render_surferbot_run(input; outdir::AbstractString=pwd(), basename::AbstractString="waves", fps::Int=30, duration_periods::Real=10, nframes::Union{Nothing,Int}=nothing, seconds::Union{Nothing,Real}=nothing, nondim::Bool=false, bare::Bool=false, figsize::Tuple{Int,Int}=(1400, 520), figdpi::Int=150, background=:white, depth::Real=1.0, script_name::AbstractString=Base.basename(PROGRAM_FILE))
     Plots = ensure_plots_backend!()
     record = normalize_run(input)
     mkpath(outdir)
@@ -602,7 +602,7 @@ function render_surferbot_run(input; outdir::AbstractString=pwd(), basename::Abs
 
     anim = Base.invokelatest(Plots.Animation)
     for t in tvec
-        frame_plot = plot_frame(record, t; omega = omega, x_contact_mask = contact_mask, motor_idx = motor_idx, show_motor = motor_idx !== nothing, nondim = nondim, bare = bare, figsize = figsize, figdpi = figdpi, background = background)
+        frame_plot = plot_frame(record, t; omega = omega, x_contact_mask = contact_mask, motor_idx = motor_idx, show_motor = motor_idx !== nothing, nondim = nondim, bare = bare, figsize = figsize, figdpi = figdpi, background = background, depth = depth)
         Base.invokelatest(Plots.frame, anim, frame_plot)
     end
 

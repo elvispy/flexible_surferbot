@@ -14,8 +14,8 @@ larger than those leaving to the left, and that imbalance is the thrust. Produce
 
 | Path | Contents |
 |---|---|
-| `Julia/` | Solver, sweeps, figure scripts. The active code. |
-| `MATLAB/old_code/` | Original implementation, following Benham, Devauchelle & Thomson (2024, *JFM* **987**, A44), *On wave-driven propulsion*. `Julia/` targets numerical parity with it. |
+| `Julia/` | Solver, sweeps, figure scripts. The active code; see `Julia/README.md`. |
+| `MATLAB/` | Original implementation, following Benham, Devauchelle & Thomson (2024, *JFM* **987**, A44), *On wave-driven propulsion*. `Julia/` targets numerical parity with it. |
 | `python/` | Earlier JAX prototype: DtN operators and a rigid-raft solver. Not maintained as of Sep 2026. |
 
 ## Installation
@@ -25,8 +25,8 @@ CairoMakie plotting scripts (optional), kept apart so the test suite does not pa
 precompilation cost.
 
 ```bash
-git clone (insert fork's link)
-cd Julia && julia --project=. -e 'using Pkg; Pkg.instantiate()'
+git clone https://github.com/harrislab-brown/flexible_surferbot.git
+cd flexible_surferbot/Julia && julia --project=. -e 'using Pkg; Pkg.instantiate()'
 cd scripts && julia --project=. -e 'using Pkg; Pkg.instantiate()'
 ```
 That will install all required packages. 
