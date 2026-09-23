@@ -352,7 +352,7 @@ function _kappa_label(record, L_raft::Real, omega::Real)
     return _sci_tex(float(EI) / scale)
 end
 
-function plot_frame(record::SurferbotRunRecord, t::Real; omega::Real, x_contact_mask, motor_idx::Union{Nothing,Int}, show_motor::Bool, nondim::Bool = false, bare::Bool = false, figsize::Tuple{Int,Int} = (1400, 520), figdpi::Int = 150, background = :white, depth::Real = 1.0)
+function plot_frame(record::SurferbotRunRecord, t::Real; omega::Real, x_contact_mask, motor_idx::Union{Nothing,Int}, show_motor::Bool, nondim::Bool = false, bare::Bool = false, figsize::Tuple{Int,Int} = (1400, 520), figdpi::Int = 150, background = :white, depth::Real = 1.0, xwindow = nothing)
     Plots = ensure_plots_backend!()
     L_raft = maybe_get(record.args, :L_raft, nothing)
     nondim && L_raft === nothing && error("Non-dimensional rendering needs L_raft in the run metadata.")
@@ -410,7 +410,7 @@ function plot_frame(record::SurferbotRunRecord, t::Real; omega::Real, x_contact_
         xlabel     = xlab,
         ylabel     = ylab,
         ylim       = (-y_limit * depth, y_limit * headroom),
-        xlim       = (first(x_scaled), last(x_scaled)),
+        xlim       = xwindow === nothing ? (first(x_scaled), last(x_scaled)) : xwindow,
         title      = ttl,
         legend     = false,
         background_color_legend = :white,
