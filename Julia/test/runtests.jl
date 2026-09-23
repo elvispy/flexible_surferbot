@@ -19,3 +19,6 @@ include("test_edge_bc_physics.jl")
 include("test_system_residual.jl")
 include("test_beam_bcs.jl")
 include("test_symmetry.jl")
+
+# Symbolic re-derivation of the analytical results reported in the paper.
+include("test_paper_derivations.jl")

@@ -22,6 +22,7 @@ SHA = "ea8e919c-243c-51af-8825-aaa63cd721ce"
 SparseArrays = "2f01184e-e22b-5df5-ae63-d93ebab69eaf"
 SpecialFunctions = "276daf66-3868-5448-9aa4-cd146d93841b"
 Statistics = "10745b16-79ce-11e8-11f9-7d13ad32a3b2"
+Symbolics = "0c5d862f-8b57-4792-8d23-62f2024744c7"
 
 [compat]
 CSV = "0.10.16"
@@ -38,6 +39,7 @@ QuadGK = "2.11.3"
 SHA = "0.7.0"
 SpecialFunctions = "2.7.2"
 Statistics = "1.11.1"
+Symbolics = "7.29.0"
 
 [extras]
 Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
