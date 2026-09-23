@@ -392,8 +392,11 @@ function plot_frame(record::SurferbotRunRecord, t::Real; omega::Real, x_contact_
         xlab = ""
         ylab = ""
     end
-    headroom = bare ? 1.05 : 1.45
+    headroom = bare ? depth : 1.45
     margin_mm = bare ? 0 : nothing
+    # Line weights are set in pixels, so a larger canvas would otherwise draw
+    # them proportionally thinner. Scale them with the width.
+    lw = bare ? figsize[1] / 1400 : 1.0
 
     # ── Water surface ─────────────────────────────────────────────────────────
     p = Base.invokelatest(Plots.plot,
@@ -402,7 +405,7 @@ function plot_frame(record::SurferbotRunRecord, t::Real; omega::Real, x_contact_
         fillcolor  = :steelblue,
         fillalpha  = 1.0,
         color      = :steelblue4,
-        linewidth  = 2.0,
+        linewidth  = 2.0 * lw,
         label      = false,
         xlabel     = xlab,
         ylabel     = ylab,
@@ -415,6 +418,7 @@ function plot_frame(record::SurferbotRunRecord, t::Real; omega::Real, x_contact_
         dpi        = figdpi,
         background_color = background,
         framestyle = bare ? :none : :box,
+        widen      = !bare,
         grid       = false,
         guidefontsize  = 29,
         tickfontsize   = 24,
@@ -461,12 +465,12 @@ function plot_frame(record::SurferbotRunRecord, t::Real; omega::Real, x_contact_
                      color             = Base.invokelatest(Plots.cgrad, [:darkgray, :black]),
                      clims             = (0.0, 1.0),
                      colorbar          = false,
-                     markersize         = 7,
+                     markersize         = 7 * lw,
                      markerstrokewidth  = 0,
                      label              = false)
         else
             # Fallback for scalar or missing EI
-            Base.invokelatest(Plots.plot!, p, x_raft, y_raft; color = :black, linewidth = 8, label = false)
+            Base.invokelatest(Plots.plot!, p, x_raft, y_raft; color = :black, linewidth = 8 * lw, label = false)
         end
     end
 
@@ -545,7 +549,7 @@ function plot_frame(record::SurferbotRunRecord, t::Real; omega::Real, x_contact_
 
                 Base.invokelatest(Plots.plot!, p, shaft_xs, shaft_ys;
                          color     = :orangered,
-                         linewidth = 3.0,
+                         linewidth = 3.0 * lw,
                          label     = false)
             end
         end
