@@ -1,3 +1,8 @@
+[![CI](https://github.com/elvis-aguero/km-disk-vibrating/actions/workflows/julia-ci.yml/badge.svg?branch=master)](https://github.com/elvispy/flexible_surferbot/blob/main/.github/workflows/julia-tests.yml)
+[![arXiv](https://shields.io)]([https://arxiv.org](https://arxiv.org/abs/2609.28884))
+
+
+
 # Wave-driven propulsion of a flexible raft
 
 Numerical companion to *Wave-driven propulsion of a flexible raft*. A raft floating at a
