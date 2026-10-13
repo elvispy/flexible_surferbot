@@ -1,6 +1,5 @@
 [![CI](https://github.com/elvis-aguero/km-disk-vibrating/actions/workflows/julia-ci.yml/badge.svg?branch=master)](https://github.com/elvispy/flexible_surferbot/blob/main/.github/workflows/julia-tests.yml)
-[![arXiv](https://shields.io)](https://arxiv.org/abs/2609.28884)
-
+[![arXiv](https://img.shields.io/badge/arXiv-1234.56789-b31b1b.svg)](https://arxiv.org/abs/2609.28884)
 
 
 
