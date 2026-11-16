@@ -165,7 +165,7 @@ Base.@kwdef struct FlexibleParams{T<:Real}
     # radiated flux is 0.003..0.2 times eps (point-dependent prefactor), and at L_domain = 2H the
     # depth and width errors cancel at leading order, so the end-to-end thrust error is
     # typically 25-250 times below eps. Use the extrapolation in docs/deep_water.md for an estimate.
-    deep_tol::T = T(parse(Float64, get(ENV, "SURFERBOT_DEEP_TOL", "1e-2")))
+    deep_tol::T = parse(Float64, get(ENV, "SURFERBOT_DEEP_TOL", "1e-2"))
     # Place the raft edges exactly on grid nodes (spacing 1/(n-1) in units of L, node at x=0).
     # The default grid has spacing ~1/n, so the edges generally fall between nodes.
     align_raft_edges::Bool = false
