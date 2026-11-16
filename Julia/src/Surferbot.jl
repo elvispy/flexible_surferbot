@@ -149,6 +149,9 @@ Base.@kwdef struct FlexibleParams{T<:Real}
     # keeps the uniform grid.
     dz_surface::Union{Nothing, T} = nothing
     z_growth::T = 1.05
+    # Place the raft edges exactly on grid nodes (spacing 1/(n-1) in units of L, node at x=0).
+    # The default grid has spacing ~1/n, so the edges generally fall between nodes.
+    align_raft_edges::Bool = false
     ooa::Int = 4
     motor_inertia::T = 0.13e-3 * 2.5e-3
     motor_force::Union{Nothing, T} = nothing
@@ -272,7 +275,12 @@ function derive_params(params::FlexibleParams{T}) where {T<:Real}
     end
 
     Nx = round(Int, (n - 1) * L_domain / params.L_raft) + 1
-    L_domain_adim = T(Nx / n)
+    if params.align_raft_edges
+        iseven(Nx) && (Nx += 1)
+        L_domain_adim = T((Nx - 1) / (n - 1))
+    else
+        L_domain_adim = T(Nx / n)
+    end
 
     x = collect(range(-L_domain_adim / 2, stop = L_domain_adim / 2, length = Nx))
     dx = x[2] - x[1]
@@ -295,8 +303,9 @@ function derive_params(params::FlexibleParams{T}) where {T<:Real}
         zfac = zero(dz)
     end
 
-    x_contact = abs.(x) .<= params.L_raft / (2 * L_c)
-    x_free = abs.(x) .> params.L_raft / (2 * L_c)
+    edge_tol = params.align_raft_edges ? T(1e-9) : zero(T)
+    x_contact = abs.(x) .<= params.L_raft / (2 * L_c) + edge_tol
+    x_free = abs.(x) .> params.L_raft / (2 * L_c) + edge_tol
     x_free[1] = false
     x_free[end] = false
 
