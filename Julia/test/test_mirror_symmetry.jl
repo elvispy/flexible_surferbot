@@ -8,9 +8,8 @@ using Surferbot
 # the mirror-image response when the motor is moved to -x_M. Nothing in these tests
 # uses a sign convention from the manuscript: they only use the reflection x -> -x.
 #
-# Cases marked @test_broken document a known failure (right-edge capillary shear
-# condition is not the mirror image of the left-edge one). Convert them to @test when
-# the edge condition is fixed; Julia reports an unexpected pass until then.
+# The right-edge capillary shear condition must be the mirror image of the left-edge one;
+# a sign error there breaks exact reflection symmetry.
 
 const _EI0 = 3.0e9 * 3e-2 * 9e-4^3 / 12
 
@@ -30,8 +29,8 @@ _raft_eta(r) = r.eta[Bool.(r.metadata.args.x_contact)]
         ep, em = _raft_eta(rp), _raft_eta(rm)
         eta_err = norm(ep .- reverse(em)) / norm(ep)
         @info "mirror equivalence sigma x$sf: thrust_err=$thrust_err eta_err=$eta_err"
-        @test_broken thrust_err < 1e-6
-        @test_broken eta_err < 1e-6
+        @test thrust_err < 1e-6
+        @test eta_err < 1e-6
     end
 end
 
@@ -44,6 +43,6 @@ end
     sym_err = norm(eta_c .- reverse(eta_c)) / norm(eta_c)
     thrust_ratio = abs(r0.thrust) / abs(rref.thrust)
     @info "centred motor sigma x$sf: sym_err=$sym_err thrust_ratio=$thrust_ratio"
-    @test_broken sym_err < 1e-8
-    @test_broken thrust_ratio < 1e-8
+    @test sym_err < 1e-8
+    @test thrust_ratio < 1e-8
 end

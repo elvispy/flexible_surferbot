@@ -407,14 +407,18 @@ function assemble_flexible_system(params::FlexibleParams{T}) where {T<:Real}
     S12[CC[boundary_contact], :] .= 0
     S13[CC[boundary_contact], :] .= 0
 
-    # Fix 2: exact K̄ in edge condition — K̄·M_x = ∓(Λ/We)·φ_zx
+    # Exact K̄ in the edge condition. M_x = -σd η_x at BOTH edges: the capillary force on the
+    # raft is +σd η_x at the right edge and -σd η_x at the left, and the shear just inside
+    # the end is minus that force at the right edge, plus it at the left.
     # Left edge:  K̄·M_x + (Λ/We)·φ_zx = 0  →  S12 coeff = +(Λ/We)
-    # Right edge: K̄·M_x − (Λ/We)·φ_zx = 0  →  S12 coeff = −(Λ/We)
+    # Right edge: K̄·M_x + (Λ/We)·φ_zx = 0  →  S12 coeff = +(Λ/We)
+    # (Energy balance independent of σ and mirror symmetry of the thrust single this pair out;
+    # see test_energy_balance.jl and test_mirror_symmetry.jl.)
     edge_visc = Complex{T}(T(2) * inv_Re / derived.dx^2)
     S13[CC[1], :]   = Complex{T}(1im) .* DxRaft[1, :]   .- edge_visc .* Dx3Raft[1, :]
     S12[CC[1], L]   = (Lambda * inv_We) .* DxFree[end, :]
     S13[CC[end], :] = Complex{T}(1im) .* DxRaft[end, :] .- edge_visc .* Dx3Raft[end, :]
-    S12[CC[end], R] = (-Lambda * inv_We) .* DxFree[1, :]
+    S12[CC[end], R] = (Lambda * inv_We) .* DxFree[1, :]
 
     # K̄(M/κ) = φ_zxx — exact form; avoids the K̄⁻¹ ≈ -i approximation (valid only for Re → ∞)
     kappa_inv = T(1) ./ derived.kappa_vec

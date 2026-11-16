@@ -65,7 +65,8 @@ function calculate_surferbot_outputs(args, phi, phi_z, getNonCompactFDmatrix, ge
     thrust_factor = 4 / 9 * args.nu * (args.rho * args.d)^2 * args.L_raft
     U = cbrt(thrust^2 / thrust_factor)
 
-    power = real(-(0.5 * args.omega * args.L_c * F_c) * trapz(x_contact, imag.(eta_raft) .* args.loads))
+    # args.loads is the dimensional load per unit length (downward positive), so no further F_c.
+    power = real((0.5 * args.omega * args.L_c^2) * trapz(x_contact, imag.(eta_raft) .* args.loads))
     eta = eta_adim .* args.L_c
     p = p_adim .* F_c / args.L_c^2
     

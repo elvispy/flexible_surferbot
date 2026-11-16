@@ -2,12 +2,10 @@ using Test
 using LinearAlgebra
 using Surferbot
 
-@testset "Edge BC — Newton's 2nd law (right edge sign)" begin
+@testset "Edge BC — shear equals minus the capillary force at both edges" begin
     # At sigma_scale = 1000, Lambda/We ≈ 0.066 — edge condition dominates.
-    # Right edge: M_x and eta_x at the free surface must be CO-DIRECTED (cos_theta > 0).
-    # Left  edge: they are ANTI-DIRECTED (cos_theta < 0) — this is correct per paper.
-    #
-    # This test FAILS before Fix 2 (sign error) and PASSES after.
+    # Both edges: M_x = -σd η_x, so M_x and eta_x at the free surface are ANTI-DIRECTED
+    # (cos_theta < 0) at the left and at the right edge.
     # Method: cos_theta = Re(Mx * conj(eta_x)) / (|Mx| * |eta_x|)
     #   eta from kinematic BC (independent of edge condition)
     #   M_x from bending moment block (independent of eta)
@@ -57,8 +55,8 @@ using Surferbot
 
     @info "Edge BC sign check  cos_L=$(round(cos_L, sigdigits=4))  cos_R=$(round(cos_R, sigdigits=4))"
 
-    # Left edge: force OPPOSES slope (anti-aligned)
+    # Both edges: M_x = -σd η_x (anti-aligned). Convention-free evidence: energy balance
+    # independent of σ and mirror symmetry (test_energy_balance.jl, test_mirror_symmetry.jl).
     @test cos_L < -0.9
-    # Right edge: force FOLLOWS slope (aligned) — fails before Fix 2
-    @test cos_R > 0.9
+    @test cos_R < -0.9
 end
