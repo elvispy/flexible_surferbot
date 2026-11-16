@@ -19,6 +19,10 @@ include("test_edge_bc_physics.jl")
 include("test_system_residual.jl")
 include("test_beam_bcs.jl")
 include("test_symmetry.jl")
+include("test_mirror_symmetry.jl")
+include("test_energy_balance.jl")
+include("test_momentum_balance.jl")
+include("test_depth_convergence.jl")
 
 # Symbolic re-derivation of the analytical results reported in the paper.
 include("test_paper_derivations.jl")
