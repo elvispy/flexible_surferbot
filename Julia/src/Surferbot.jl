@@ -275,7 +275,9 @@ function derive_params(params::FlexibleParams{T}) where {T<:Real}
     graded = !isnothing(dz_surface_eff)
     Nz = if graded
         r_g = params.z_growth
-        1 + ceil(Int, log(1 + domain_depth * log(r_g) / dz_surface_eff) / log(r_g))
+        # at least 16 nodes: a very shallow bath with a coarse dz_surface would otherwise leave
+        # fewer points than the finite-difference stencil needs
+        max(16, 1 + ceil(Int, log(1 + domain_depth * log(r_g) / dz_surface_eff) / log(r_g)))
     else
         isnothing(params.Nz) ? ceil(Int, res * k_real * domain_depth) : params.Nz
     end
