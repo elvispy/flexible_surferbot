@@ -149,11 +149,17 @@ Base.@kwdef struct FlexibleParams{T<:Real}
     # keeps the uniform grid.
     dz_surface::Union{Nothing, T} = nothing
     z_growth::T = 1.1
-    # `:legacy` keeps the original uniform grid and the tanh(kH) >= 0.99 depth. `:deep` sets
-    # depth H = max(that depth, 3 L), a geometric vertical grid with k*dz_surface = 0.1 and
-    # growth z_growth, and raft edges on grid nodes (explicit settings still take precedence;
-    # see the depth-convergence tests).
+    # `:legacy` keeps the original uniform grid and the tanh(kH) >= 0.99 depth. `:deep` picks
+    # depth, domain width and grid from a tolerance eps = deep_tol (see docs/deep_water.md):
+    #   raft:  H >= pi L / sqrt(192 eps)         (eps_Z = (pi^2/48)(a/H)^2, a = L/2)
+    #   width: L_domain >= pi L / sqrt(48 eps)   (same law with the lateral distance)
+    #   wave:  4 kH (1+B)/((1+3B) sinh 2kH) <= eps,  B = sigma k^2/(rho g)
+    # with a geometric vertical grid (k*dz_surface = 0.1, growth z_growth) and raft edges on
+    # grid nodes. Explicit domain_depth / L_domain / dz_surface take precedence.
     grid::Symbol = :legacy
+    # Tolerance of `grid = :deep`: relative error of the raft's hydrodynamic load (an
+    # approximate upper bound on the thrust error) due to finite depth and domain width.
+    deep_tol::T = 1e-2
     # Place the raft edges exactly on grid nodes (spacing 1/(n-1) in units of L, node at x=0).
     # The default grid has spacing ~1/n, so the edges generally fall between nodes.
     align_raft_edges::Bool = false
@@ -257,7 +263,16 @@ function derive_params(params::FlexibleParams{T}) where {T<:Real}
     end
     deep = params.grid === :deep
     if deep && isnothing(params.domain_depth)
-        domain_depth = max(domain_depth, T(3) * params.L_raft)
+        eps_d = params.deep_tol
+        k_dp = real(dispersion_k(params.omega, params.g, one(params.g), params.nu, params.sigma, params.rho; deep = true))
+        Bn = iszero(params.g) ? T(Inf) : params.sigma * k_dp^2 / (params.rho * params.g)
+        c_w = isinf(Bn) ? T(1) / 3 : (1 + Bn) / (1 + 3Bn)
+        # solve 4 x c exp(-2x) = eps for x = kH by Newton on log(4 x c / eps) - 2x
+        x_w = max(one(T), log(4c_w / eps_d) / 2)
+        for _ in 1:40
+            x_w -= (log(4x_w * c_w / eps_d) - 2x_w) / (1 / x_w - 2)
+        end
+        domain_depth = max(T(pi) * params.L_raft / sqrt(192 * eps_d), x_w / k_dp)
     end
     k = dispersion_k(params.omega, params.g, domain_depth, params.nu, params.sigma, params.rho)
 
@@ -282,7 +297,8 @@ function derive_params(params::FlexibleParams{T}) where {T<:Real}
         isnothing(params.Nz) ? ceil(Int, res * k_real * domain_depth) : params.Nz
     end
     L_domain = if isnothing(params.L_domain)
-        min(3 * params.L_raft, round(20 * 2 * pi / k_real + params.L_raft; sigdigits=2))
+        L_def = min(3 * params.L_raft, round(20 * 2 * pi / k_real + params.L_raft; sigdigits=2))
+        deep ? max(L_def, T(pi) * params.L_raft / sqrt(48 * params.deep_tol)) : L_def
     else
         params.L_domain
     end
