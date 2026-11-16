@@ -144,6 +144,11 @@ Base.@kwdef struct FlexibleParams{T<:Real}
     domain_depth::Union{Nothing, T} = nothing
     n::Union{Nothing, Int} = nothing
     Nz::Union{Nothing, Int} = nothing
+    # Geometric vertical grid: spacing `dz_surface` (m) at the free surface, growing by the
+    # factor `z_growth` per node down to `domain_depth`. `Nz` is then derived. `nothing`
+    # keeps the uniform grid.
+    dz_surface::Union{Nothing, T} = nothing
+    z_growth::T = 1.05
     ooa::Int = 4
     motor_inertia::T = 0.13e-3 * 2.5e-3
     motor_force::Union{Nothing, T} = nothing
@@ -253,7 +258,13 @@ function derive_params(params::FlexibleParams{T}) where {T<:Real}
         params.n
     end
 
-    Nz = isnothing(params.Nz) ? ceil(Int, res * k_real * domain_depth) : params.Nz
+    graded = !isnothing(params.dz_surface)
+    Nz = if graded
+        r_g = params.z_growth
+        1 + ceil(Int, log(1 + domain_depth * log(r_g) / params.dz_surface) / log(r_g))
+    else
+        isnothing(params.Nz) ? ceil(Int, res * k_real * domain_depth) : params.Nz
+    end
     L_domain = if isnothing(params.L_domain)
         min(3 * params.L_raft, round(20 * 2 * pi / k_real + params.L_raft; sigdigits=2))
     else
@@ -266,8 +277,23 @@ function derive_params(params::FlexibleParams{T}) where {T<:Real}
     x = collect(range(-L_domain_adim / 2, stop = L_domain_adim / 2, length = Nx))
     dx = x[2] - x[1]
 
-    z = collect(range(-domain_depth, stop = 0.0, length = Nz)) ./ L_c
-    dz = abs(z[2] - z[1])
+    if graded
+        # z(zeta) = -H (e^{beta(1-zeta)} - 1)/(e^beta - 1), zeta uniform on [0,1] (row 1 =
+        # bottom, row Nz = surface). dz_vec is dz/dm per node (m = row index), zfac = beta/(Nz-1)
+        # enters phi_zz = (phi_mm + zfac*phi_m)/dz_vec^2.
+        beta = (Nz - 1) * log(params.z_growth)
+        zeta = range(zero(beta), one(beta); length = Nz)
+        H_nd = domain_depth / L_c
+        z = collect(-H_nd .* (exp.(beta .* (1 .- zeta)) .- 1) ./ (exp(beta) - 1))
+        dz_vec = collect(H_nd * beta / (exp(beta) - 1) .* exp.(beta .* (1 .- zeta)) ./ (Nz - 1))
+        zfac = beta / (Nz - 1)
+        dz = dz_vec[end]
+    else
+        z = collect(range(-domain_depth, stop = 0.0, length = Nz)) ./ L_c
+        dz = abs(z[2] - z[1])
+        dz_vec = fill(dz, Nz)
+        zfac = zero(dz)
+    end
 
     x_contact = abs.(x) .<= params.L_raft / (2 * L_c)
     x_free = abs.(x) .> params.L_raft / (2 * L_c)
@@ -308,6 +334,8 @@ function derive_params(params::FlexibleParams{T}) where {T<:Real}
         z = z,
         dx = dx,
         dz = dz,
+        dz_vec = dz_vec,
+        zfac = zfac,
         x_contact = x_contact,
         x_free = x_free,
         loads = loads,
@@ -428,8 +456,14 @@ function assemble_flexible_system(params::FlexibleParams{T}) where {T<:Real}
 
     Dx, Dz = getNonCompactFDmatrix2D(derived.Nx, derived.Nz, T(1.0), T(1.0), 1, derived.params.ooa)
     Dxx, Dzz = getNonCompactFDmatrix2D(derived.Nx, derived.Nz, T(1.0), T(1.0), 2, derived.params.ooa)
-    ratio_sq = (derived.dx / derived.dz)^2
-    S11[idxBulk, :] = Dxx[idxBulk, :] + Dzz[idxBulk, :] * ratio_sq
+    hv = repeat(derived.dz_vec, derived.Nx)   # dz/dm at every node (z index runs fastest)
+    if iszero(derived.zfac)
+        ratio_sq = (derived.dx / derived.dz)^2
+        S11[idxBulk, :] = Dxx[idxBulk, :] + Dzz[idxBulk, :] * ratio_sq
+    else
+        Rz = Diagonal((derived.dx ./ hv[idxBulk]) .^ 2)
+        S11[idxBulk, :] = Dxx[idxBulk, :] + Rz * (Dzz[idxBulk, :] + derived.zfac * Dz[idxBulk, :])
+    end
     S12[idxBottom, :] = I_NP[idxBottom, :]
 
     S12[idxLeftEdge, :] .= 0
@@ -443,7 +477,7 @@ function assemble_flexible_system(params::FlexibleParams{T}) where {T<:Real}
     end
 
     S21 = Dz
-    S22 = -derived.dz .* I_NP
+    S22 = iszero(derived.zfac) ? -derived.dz .* I_NP : -sparse(Diagonal(hv))
 
     b = zeros(Complex{T}, system_size)
     b[CC] = -derived.dx^2 .* Complex{T}.(derived.loads)
