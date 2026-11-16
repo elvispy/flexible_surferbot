@@ -14,9 +14,13 @@ using Surferbot
 const _EN_EI0 = 3.0e9 * 3e-2 * 9e-4^3 / 12
 
 function _energy_ratio(sigma_factor, ei_factor)
+    p00 = FlexibleParams(motor_position = -0.012, EI = _EN_EI0 * ei_factor,
+                         sigma = 72.2e-3 * sigma_factor, nu = 0.0)
+    dd = Surferbot.derive_params(p00)
+    H = dd.domain_depth
     p0 = FlexibleParams(motor_position = -0.012, EI = _EN_EI0 * ei_factor,
-                        sigma = 72.2e-3 * sigma_factor, nu = 0.0)
-    H = Surferbot.derive_params(p0).domain_depth
+                        sigma = 72.2e-3 * sigma_factor, nu = 0.0,
+                        dz_surface = 0.1 / real(dd.k), z_growth = 1.1)
     r = solve_cached(p0)
     a = r.metadata.args
     m = beam_edge_metrics(r)

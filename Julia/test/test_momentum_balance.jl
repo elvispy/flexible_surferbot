@@ -10,7 +10,7 @@ using Surferbot
 # Setup notes (measured): the cut must lie in the far field of a long domain, otherwise the
 # first evanescent vertical mode contaminates it; the bath must be deep enough that the
 # finite-depth part of S is negligible, otherwise the comparison also depends on depth.
-# Coarse grids are enough: the residual is converged to ~0.2% from 0.35x to 1x resolution.
+# Coarse horizontal grids and a geometric vertical grid are enough (residual converged to ~0.2%).
 
 const _MB_EI0 = 3.0e9 * 3e-2 * 9e-4^3 / 12
 
@@ -19,21 +19,22 @@ function _momentum_case(; ei_factor, sigma_factor, depth_factor, L_domain, scale
                         sigma = 72.2e-3 * sigma_factor, nu = 0.0)
     dd = Surferbot.derive_params(p0)
     n = round(Int, dd.n * scale); n += iseven(n) ? 1 : 0
-    Nz = round(Int, dd.Nz * scale * depth_factor)
     p = FlexibleParams(motor_position = -0.012, EI = _MB_EI0 * ei_factor,
-                       sigma = 72.2e-3 * sigma_factor, nu = 0.0, n = n, Nz = Nz,
-                       domain_depth = depth_factor * dd.domain_depth, L_domain = L_domain)
+                       sigma = 72.2e-3 * sigma_factor, nu = 0.0, n = n,
+                       domain_depth = depth_factor * dd.domain_depth, L_domain = L_domain,
+                       dz_surface = 0.1 / real(dd.k), z_growth = 1.1)
     r = solve_cached(p)
     a = r.metadata.args
     x, z, phi, phiz, eta = r.x, r.z, r.phi, r.phi_z, r.eta
     rho, g, sig = Float64(a.rho), Float64(a.g), Float64(a.sigma)
-    dx, dz = x[2] - x[1], abs(z[2] - z[1])
+    dx = x[2] - x[1]
+    dzv = diff(z)    # graded vertical grid: node spacings differ
     function S(i)
         D(f) = (-f[i + 2] + 8f[i + 1] - 8f[i - 1] + f[i - 2]) / (12dx)
         u2 = [abs2(D(view(phi, j, :))) for j in 1:size(phi, 1)]
         w2 = abs2.(phiz[:, i])
         integrand = u2 .- w2
-        I = sum(integrand[1:(end - 1)] .+ integrand[2:end]) / 2 * dz
+        I = sum((integrand[1:(end - 1)] .+ integrand[2:end]) .* dzv) / 2
         return 0.5rho * I + 0.25rho * g * abs2(eta[i]) + 0.75sig * abs2(D(eta))
     end
     Lx = x[end]

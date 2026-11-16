@@ -22,6 +22,9 @@ include("test_symmetry.jl")
 
 include("solve_cache.jl")
 include("test_depth_convergence.jl")
+include("test_mirror_symmetry.jl")
+include("test_energy_balance.jl")
+include("test_momentum_balance.jl")
 
 # Heavy solves (1.5-8 GB each, minutes): off by default so a plain Pkg.test() cannot exhaust
 # memory. Enable on a cluster node with
@@ -31,9 +34,6 @@ if get(ENV, "SURFERBOT_HEAVY_TESTS", "0") == "1"
     if Sys.total_memory() >= 24 * 2^30
         # One enclosing testset so a failure in one file does not abort the others.
         @testset "Heavy physics tests" begin
-            include("test_mirror_symmetry.jl")
-            include("test_energy_balance.jl")
-            include("test_momentum_balance.jl")
             include("test_graded_z.jl")
         end
     else

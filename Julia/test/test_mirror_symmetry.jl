@@ -13,9 +13,13 @@ using Surferbot
 
 const _EI0 = 3.0e9 * 3e-2 * 9e-4^3 / 12
 
-_params(xm; sf = 1.0, nu = 0.0, kwargs...) = FlexibleParams(
-    motor_position = xm, EI = _EI0 * 3e-4, sigma = 72.2e-3 * sf, nu = nu; kwargs...,
-)
+function _params(xm; sf = 1.0, nu = 0.0, kwargs...)
+    p0 = FlexibleParams(motor_position = xm, EI = _EI0 * 3e-4, sigma = 72.2e-3 * sf, nu = nu)
+    k = real(Surferbot.derive_params(p0).k)
+    # Geometric vertical grid: well conditioned, so the mirror error is at roundoff level.
+    return FlexibleParams(motor_position = xm, EI = _EI0 * 3e-4, sigma = 72.2e-3 * sf, nu = nu,
+                          dz_surface = 0.1 / k, z_growth = 1.1; kwargs...)
+end
 
 _raft_eta(r) = r.eta[Bool.(r.metadata.args.x_contact)]
 
