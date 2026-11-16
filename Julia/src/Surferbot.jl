@@ -148,7 +148,12 @@ Base.@kwdef struct FlexibleParams{T<:Real}
     # factor `z_growth` per node down to `domain_depth`. `Nz` is then derived. `nothing`
     # keeps the uniform grid.
     dz_surface::Union{Nothing, T} = nothing
-    z_growth::T = 1.05
+    z_growth::T = 1.1
+    # `:legacy` keeps the original uniform grid and the tanh(kH) >= 0.99 depth. `:deep` sets
+    # depth H = max(that depth, 3 L), a geometric vertical grid with k*dz_surface = 0.1 and
+    # growth z_growth, and raft edges on grid nodes (explicit settings still take precedence;
+    # see the depth-convergence tests).
+    grid::Symbol = :legacy
     # Place the raft edges exactly on grid nodes (spacing 1/(n-1) in units of L, node at x=0).
     # The default grid has spacing ~1/n, so the edges generally fall between nodes.
     align_raft_edges::Bool = false
@@ -250,6 +255,10 @@ function derive_params(params::FlexibleParams{T}) where {T<:Real}
     else
         params.domain_depth
     end
+    deep = params.grid === :deep
+    if deep && isnothing(params.domain_depth)
+        domain_depth = max(domain_depth, T(3) * params.L_raft)
+    end
     k = dispersion_k(params.omega, params.g, domain_depth, params.nu, params.sigma, params.rho)
 
     res = 80
@@ -261,10 +270,12 @@ function derive_params(params::FlexibleParams{T}) where {T<:Real}
         params.n
     end
 
-    graded = !isnothing(params.dz_surface)
+    dz_surface_eff = isnothing(params.dz_surface) ? (deep ? T(0.1) / k_real : nothing) : params.dz_surface
+    align_eff = params.align_raft_edges || deep
+    graded = !isnothing(dz_surface_eff)
     Nz = if graded
         r_g = params.z_growth
-        1 + ceil(Int, log(1 + domain_depth * log(r_g) / params.dz_surface) / log(r_g))
+        1 + ceil(Int, log(1 + domain_depth * log(r_g) / dz_surface_eff) / log(r_g))
     else
         isnothing(params.Nz) ? ceil(Int, res * k_real * domain_depth) : params.Nz
     end
@@ -275,7 +286,7 @@ function derive_params(params::FlexibleParams{T}) where {T<:Real}
     end
 
     Nx = round(Int, (n - 1) * L_domain / params.L_raft) + 1
-    if params.align_raft_edges
+    if align_eff
         iseven(Nx) && (Nx += 1)
         L_domain_adim = T((Nx - 1) / (n - 1))
     else
@@ -303,7 +314,7 @@ function derive_params(params::FlexibleParams{T}) where {T<:Real}
         zfac = zero(dz)
     end
 
-    edge_tol = params.align_raft_edges ? T(1e-9) : zero(T)
+    edge_tol = align_eff ? T(1e-9) : zero(T)
     x_contact = abs.(x) .<= params.L_raft / (2 * L_c) + edge_tol
     x_free = abs.(x) .> params.L_raft / (2 * L_c) + edge_tol
     x_free[1] = false

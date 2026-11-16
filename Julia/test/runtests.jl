@@ -25,6 +25,7 @@ include("test_depth_convergence.jl")
 include("test_mirror_symmetry.jl")
 include("test_energy_balance.jl")
 include("test_momentum_balance.jl")
+include("test_deep_grid.jl")
 
 # Heavy solves (1.5-8 GB each, minutes): off by default so a plain Pkg.test() cannot exhaust
 # memory. Enable on a cluster node with
