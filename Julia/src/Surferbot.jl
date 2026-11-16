@@ -157,8 +157,12 @@ Base.@kwdef struct FlexibleParams{T<:Real}
     # with a geometric vertical grid (k*dz_surface = 0.1, growth z_growth) and raft edges on
     # grid nodes. Explicit domain_depth / L_domain / dz_surface take precedence.
     grid::Symbol = :legacy
-    # Tolerance of `grid = :deep`: relative error of the raft's hydrodynamic load (an
-    # approximate upper bound on the thrust error) due to finite depth and domain width.
+    # Design parameter of `grid = :deep`: the leading-order relative error eps_Z of the raft's
+    # hydrodynamic load from finite depth (+) and finite domain width (-). It is an ENVELOPE, not
+    # an error estimate: on 20 points of the paper's map the thrust error relative to the
+    # radiated flux is 0.003..0.2 times eps (point-dependent prefactor), and at L_domain = 2H the
+    # depth and width errors cancel at leading order, so the end-to-end thrust error is
+    # typically 25-250 times below eps. Use the extrapolation in docs/deep_water.md for an estimate.
     deep_tol::T = 1e-2
     # Place the raft edges exactly on grid nodes (spacing 1/(n-1) in units of L, node at x=0).
     # The default grid has spacing ~1/n, so the edges generally fall between nodes.

@@ -43,3 +43,21 @@ The condition `tanh(kH) >= 0.99` of the legacy grid corresponds to `kH = 2.65`, 
 
 `FlexibleParams(grid = :deep, deep_tol = eps)` applies all three conditions together with a
 geometric vertical grid and raft edges on grid nodes.
+
+## What `deep_tol` is, and is not
+
+`eps` bounds the leading-order impedance error; it is an envelope, not an error estimate.
+Measured on 20 points of the (EI, x_M/L) map (aligned edges, graded z, half horizontal resolution):
+
+* Depth only (width 12 L, reference H = 24 L): the thrust error divided by `(pi^2/192)(L/H)^2` has a
+  maximum of 0.97-1.00 for H/L = 2..4 (relative to |T|) and a median of 0.04-0.09. Relative to the
+  radiated flux `Sigma = T/alpha` the maximum is 0.19-0.20 and the per-point prefactor spans 0.003-0.2.
+  The scaling is `H^-p` with a per-point exponent `p` between 1.2 and 2.0 (median 1.66) at H/L = 2..4.
+* Width only (depth 8 L, reference L_domain = 48 L): median 0.10, maximum 0.45-1.4 times the law.
+* The depth error makes the load too large and the width error too small, with the same coefficient,
+  so `L_domain = 2H` (the `:deep` rule) cancels the leading-order error: end-to-end thrust errors are
+  25-250 times below `eps`.
+* Extrapolating `T(H, X)`, `T(2H, X)`, `T(H, 2X)` with exponent 2 in both directions gives the correct
+  sign of the error at 19/19 points and an estimate 1.48 times the true error (16-84 %: 1.45-1.66)
+  at base (H, L_domain) = (1 L, 2 L). The factor is not explained by the depth exponent (using 1.66
+  leaves it unchanged); errors below about 1e-4 are not resolved by the reference used.
