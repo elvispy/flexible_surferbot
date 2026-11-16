@@ -26,10 +26,13 @@ include("test_symmetry.jl")
 # The guard below refuses to run them on a machine with under 24 GB of RAM.
 if get(ENV, "SURFERBOT_HEAVY_TESTS", "0") == "1"
     if Sys.total_memory() >= 24 * 2^30
-        include("test_mirror_symmetry.jl")
-        include("test_energy_balance.jl")
-        include("test_momentum_balance.jl")
-        include("test_depth_convergence.jl")
+        # One enclosing testset so a failure in one file does not abort the others.
+        @testset "Heavy physics tests" begin
+            include("test_mirror_symmetry.jl")
+            include("test_energy_balance.jl")
+            include("test_momentum_balance.jl")
+            include("test_depth_convergence.jl")
+        end
     else
         @warn "Skipping heavy physics tests: less than 24 GB of RAM"
     end

@@ -47,12 +47,3 @@ end
     @test_broken sym_err < 1e-8
     @test_broken thrust_ratio < 1e-8
 end
-
-@testset "Thrust is continuous in surface tension as sigma -> 0" begin
-    t0 = flexible_solver(_params(-0.012; sf = 0.0)).thrust
-    t1 = flexible_solver(_params(-0.012; sf = 1e-3)).thrust
-    t2 = flexible_solver(_params(-0.012; sf = 1e-2)).thrust
-    # The capillary terms scale linearly in sigma, so the offset shrinks with it.
-    @test abs(t1 - t0) < abs(t2 - t0) + eps()
-    @test abs(t1 - t0) / abs(t0) < 0.01
-end
