@@ -152,6 +152,10 @@ Base.@kwdef struct FlexibleParams{T<:Real}
     # Place the raft edges exactly on grid nodes (spacing 1/(n-1) in units of L, node at x=0).
     # The default grid has spacing ~1/n, so the edges generally fall between nodes.
     align_raft_edges::Bool = false
+    # Keep the in-plane tension T = sigma*d the capillary pulls impose on the raft: adds
+    # -T eta_xx to the beam equation and replaces the edge slope by (free-surface slope -
+    # raft slope) in the shear condition. Off by default (model of the manuscript).
+    raft_tension::Bool = false
     ooa::Int = 4
     motor_inertia::T = 0.13e-3 * 2.5e-3
     motor_force::Union{Nothing, T} = nothing
@@ -438,6 +442,10 @@ function assemble_flexible_system(params::FlexibleParams{T}) where {T<:Real}
     S11[CC, CC] = (Complex{T}(1im) * Lambda * Gamma * derived.dx^2) .* I_NP[CC, CC] .- (T(2) * Gamma * Lambda * inv_Re) .* Dx2Raft
     S12[CC, CC] = derived.dx^2 .* inertia_diag .+ (T(2) * inv_Re) .* (Diagonal(Complex{T}.(inertia_coeff)) * Dx2Raft)
     S13[CC, :] = Dx2Raft
+    if derived.params.raft_tension
+        # -T eta_xx with T-bar = Lambda/We and eta = phi_z/i  ->  +i (Lambda/We) d_xx phi_z
+        S12[CC, CC] = S12[CC, CC] .+ (Complex{T}(1im) * Lambda * inv_We) .* Dx2Raft
+    end
 
     boundary_contact = [1, nb_contact]
     S11[CC[boundary_contact], :] .= 0
@@ -456,6 +464,11 @@ function assemble_flexible_system(params::FlexibleParams{T}) where {T<:Real}
     S12[CC[1], L]   = (Lambda * inv_We) .* DxFree[end, :]
     S13[CC[end], :] = Complex{T}(1im) .* DxRaft[end, :] .- edge_visc .* Dx3Raft[end, :]
     S12[CC[end], R] = (Lambda * inv_We) .* DxFree[1, :]
+    if derived.params.raft_tension
+        # shear driven by the kink: slope of the free surface minus slope of the raft
+        S12[CC[1], CC] = S12[CC[1], CC] .- (Lambda * inv_We) .* DxRaft[1, :]
+        S12[CC[end], CC] = S12[CC[end], CC] .- (Lambda * inv_We) .* DxRaft[end, :]
+    end
 
     # K̄(M/κ) = φ_zxx — exact form; avoids the K̄⁻¹ ≈ -i approximation (valid only for Re → ∞)
     kappa_inv = T(1) ./ derived.kappa_vec
