@@ -44,17 +44,13 @@ using .PaperPlotTheme
 
 function build_params(; EI=nothing, xM_norm=nothing)
     bp = Surferbot.Analysis.default_coupled_motor_position_EI_sweep().base_params
-    if isnothing(EI) && isnothing(xM_norm)
-        return Surferbot.Sweep.apply_parameter_overrides(bp, (L_domain = 0.10,))
-    elseif isnothing(xM_norm)
-        return Surferbot.Sweep.apply_parameter_overrides(bp, (L_domain = 0.10, EI = EI))
-    elseif isnothing(EI)
-        return Surferbot.Sweep.apply_parameter_overrides(bp,
-            (L_domain = 0.10, motor_position = xM_norm * Float64(bp.L_raft)))
-    else
-        return Surferbot.Sweep.apply_parameter_overrides(bp,
-            (L_domain = 0.10, EI = EI, motor_position = xM_norm * Float64(bp.L_raft)))
-    end
+    # With SURFERBOT_GRID=deep the domain width follows from the tolerance, so the legacy
+    # L_domain = 0.10 override is dropped.
+    dom = get(ENV, "SURFERBOT_GRID", "legacy") == "deep" ? (;) : (L_domain = 0.10,)
+    ov = (; dom...)
+    isnothing(EI) || (ov = (; ov..., EI = EI))
+    isnothing(xM_norm) || (ov = (; ov..., motor_position = xM_norm * Float64(bp.L_raft)))
+    return Surferbot.Sweep.apply_parameter_overrides(bp, ov)
 end
 
 # ─── Phase convention ────────────────────────────────────────────────────────

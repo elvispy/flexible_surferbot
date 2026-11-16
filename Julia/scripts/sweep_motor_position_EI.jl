@@ -88,7 +88,7 @@ function run_sweep(output_path, is_coupled; nx=100, nei=300, num_modes=8, task_i
     indices = isnothing(task_id) ? (1:nei) : (task_id:task_id)
 
     # Initialize CSV only if starting from scratch (no task_id or task_id=1)
-    if isnothing(task_id) || task_id == 1
+    if isnothing(task_id) || task_id == 1 || get(ENV, "SB_PER_TASK", "0") == "1"
         open(output_path, "w") do io
             println(io, generate_header(num_modes))
         end
@@ -151,19 +151,21 @@ function main()
     task_id = isempty(task_id_str) ? nothing : parse(Int, task_id_str)
     
     mode = get(ARGS, 2, "both")
+    # SB_PER_TASK=1: one CSV per array task (no concurrent appends to a shared file)
+    task_suffix = (get(ENV, "SB_PER_TASK", "0") == "1" && !isnothing(task_id)) ? "_t$(task_id)" : ""
 
-    output_dir = joinpath(@__DIR__, "..", "output", "csv")
+    output_dir = get(ENV, "SB_OUT", joinpath(@__DIR__, "..", "output", "csv"))
     mkpath(output_dir)
 
     # 1. Uncoupled Sweep
     if mode == "both" || mode == "uncoupled"
-        uncoupled_path = joinpath(output_dir, "sweeper_uncoupled_full_grid.csv")
+        uncoupled_path = joinpath(output_dir, "sweeper_uncoupled_full_grid" * task_suffix * ".csv")
         run_sweep(uncoupled_path, false; task_id=task_id)
     end
 
     # 2. Coupled Sweep
     if mode == "both" || mode == "coupled"
-        coupled_path = joinpath(output_dir, "sweeper_coupled_full_grid.csv")
+        coupled_path = joinpath(output_dir, "sweeper_coupled_full_grid" * task_suffix * ".csv")
         run_sweep(coupled_path, true; task_id=task_id)
     end
     
