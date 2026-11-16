@@ -27,6 +27,7 @@ include("test_symmetry.jl")
 if get(ENV, "SURFERBOT_HEAVY_TESTS", "0") == "1"
     if Sys.total_memory() >= 24 * 2^30
         # One enclosing testset so a failure in one file does not abort the others.
+        include("solve_cache.jl")
         @testset "Heavy physics tests" begin
             include("test_mirror_symmetry.jl")
             include("test_energy_balance.jl")

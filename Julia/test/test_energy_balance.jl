@@ -26,7 +26,7 @@ function _energy_ratio(sigma_factor, ei_factor)
     p0 = FlexibleParams(motor_position = -0.012, EI = _EN_EI0 * ei_factor,
                         sigma = 72.2e-3 * sigma_factor, nu = 0.0)
     H = Surferbot.derive_params(p0).domain_depth
-    r = flexible_solver(p0)
+    r = solve_cached(p0)
     a = r.metadata.args
     m = beam_edge_metrics(r)
     k = Float64(real(a.k))

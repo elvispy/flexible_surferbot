@@ -22,7 +22,7 @@ function _thrust_at_depth(; ei_factor, x_M, depth_factor, scale = 0.5)
     Nz = round(Int, dd.Nz * scale * depth_factor)
     p = FlexibleParams(motor_position = x_M, EI = _DC_EI0 * ei_factor, nu = 0.0, n = n, Nz = Nz,
                        domain_depth = depth_factor * dd.domain_depth)
-    r = flexible_solver(p)
+    r = solve_cached(p)
     return r.thrust
 end
 

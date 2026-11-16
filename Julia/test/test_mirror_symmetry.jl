@@ -22,8 +22,8 @@ _raft_eta(r) = r.eta[Bool.(r.metadata.args.x_contact)]
 
 @testset "Mirror equivalence: motor at -x_M is the reflection of motor at +x_M" begin
     for sf in (1.0, 300.0)
-        rp = flexible_solver(_params(+0.012; sf = sf))
-        rm = flexible_solver(_params(-0.012; sf = sf))
+        rp = solve_cached(_params(+0.012; sf = sf))
+        rm = solve_cached(_params(-0.012; sf = sf))
         # Thrust is odd in x_M.
         thrust_err = abs(rp.thrust + rm.thrust) / max(abs(rp.thrust), abs(rm.thrust))
         # Raft displacement of the mirrored solve is the reversed displacement.
@@ -37,8 +37,8 @@ end
 
 @testset "Symmetric forcing gives zero thrust at large surface tension" begin
     sf = 300.0
-    r0 = flexible_solver(_params(0.0; sf = sf))
-    rref = flexible_solver(_params(0.012; sf = sf))
+    r0 = solve_cached(_params(0.0; sf = sf))
+    rref = solve_cached(_params(0.012; sf = sf))
     contact = Bool.(r0.metadata.args.x_contact)
     eta_c = r0.eta[contact]
     sym_err = norm(eta_c .- reverse(eta_c)) / norm(eta_c)

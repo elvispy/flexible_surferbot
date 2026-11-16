@@ -23,7 +23,7 @@ function _momentum_case(; ei_factor, sigma_factor, depth_factor, L_domain, scale
     p = FlexibleParams(motor_position = -0.012, EI = _MB_EI0 * ei_factor,
                        sigma = 72.2e-3 * sigma_factor, nu = 0.0, n = n, Nz = Nz,
                        domain_depth = depth_factor * dd.domain_depth, L_domain = L_domain)
-    r = flexible_solver(p)
+    r = solve_cached(p)
     a = r.metadata.args
     x, z, phi, phiz, eta = r.x, r.z, r.phi, r.phi_z, r.eta
     rho, g, sig = Float64(a.rho), Float64(a.g), Float64(a.sigma)
