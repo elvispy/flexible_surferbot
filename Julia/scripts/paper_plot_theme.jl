@@ -2,7 +2,7 @@ module PaperPlotTheme
 
 using CairoMakie
 
-const NEWCM_DIR = "/usr/local/texlive/2025/texmf-dist/fonts/opentype/public/newcomputermodern"
+const NEWCM_DIR = get(ENV, "SB_FONT_DIR", "/usr/local/texlive/2025/texmf-dist/fonts/opentype/public/newcomputermodern")
 const REGULAR = joinpath(NEWCM_DIR, "NewCM10-Regular.otf")
 const ITALIC = joinpath(NEWCM_DIR, "NewCM10-Italic.otf")
 const BOLD = joinpath(NEWCM_DIR, "NewCM10-Bold.otf")
