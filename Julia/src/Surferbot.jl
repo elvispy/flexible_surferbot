@@ -149,23 +149,16 @@ Base.@kwdef struct FlexibleParams{T<:Real}
     # keeps the uniform grid.
     dz_surface::Union{Nothing, T} = nothing
     z_growth::T = 1.1
-    # `:legacy` keeps the original uniform grid and the tanh(kH) >= 0.99 depth. `:deep` picks
-    # depth, domain width and grid from a tolerance eps = deep_tol (see docs/deep_water.md):
-    #   raft:  H >= pi L / sqrt(192 eps)         (eps_Z = (pi^2/48)(a/H)^2, a = L/2)
-    #   width: L_domain >= pi L / sqrt(48 eps)   (same law with the lateral distance)
-    #   wave:  4 kH (1+B)/((1+3B) sinh 2kH) <= eps,  B = sigma k^2/(rho g)
-    # with a geometric vertical grid (k*dz_surface = 0.1, growth z_growth) and raft edges on
-    # grid nodes. Explicit domain_depth / L_domain / dz_surface take precedence.
-    # The defaults can be switched globally for scripts that build parameters through
-    # Sweep.apply_parameter_overrides: SURFERBOT_GRID=deep and SURFERBOT_DEEP_TOL=<eps>.
+    # `:legacy` keeps the original uniform grid and the tanh(kH) >= 0.99 depth. `:deep` sets
+    #   H = deep_X / min(k1, k2),   L_domain = 2H  (lateral walls at the distance H),
+    # with k1 the deep-water gravity-capillary wavenumber and k2 = 1/(L_raft/2) the raft seen as
+    # a volume source, so that e^{-deep_X} ~ 1% of the field is left at the bottom. The grid is a
+    # geometric vertical grid (k*dz_surface = 0.1, growth z_growth) with raft edges on nodes.
+    # Explicit domain_depth / L_domain / dz_surface take precedence (docs/deep_water.md).
+    # Global switches for scripts using Sweep.apply_parameter_overrides:
+    # SURFERBOT_GRID=deep and SURFERBOT_DEEP_X=<X>.
     grid::Symbol = Symbol(get(ENV, "SURFERBOT_GRID", "legacy"))
-    # Design parameter of `grid = :deep`: the leading-order relative error eps_Z of the raft's
-    # hydrodynamic load from finite depth (+) and finite domain width (-). It is an ENVELOPE, not
-    # an error estimate: on 20 points of the paper's map the thrust error relative to the
-    # radiated flux is 0.003..0.2 times eps (point-dependent prefactor), and at L_domain = 2H the
-    # depth and width errors cancel at leading order, so the end-to-end thrust error is
-    # typically 25-250 times below eps. Use the extrapolation in docs/deep_water.md for an estimate.
-    deep_tol::T = parse(Float64, get(ENV, "SURFERBOT_DEEP_TOL", "1e-2"))
+    deep_X::T = parse(Float64, get(ENV, "SURFERBOT_DEEP_X", "4.5"))
     # Place the raft edges exactly on grid nodes (spacing 1/(n-1) in units of L, node at x=0).
     # The default grid has spacing ~1/n, so the edges generally fall between nodes.
     align_raft_edges::Bool = false
@@ -269,16 +262,9 @@ function derive_params(params::FlexibleParams{T}) where {T<:Real}
     end
     deep = params.grid === :deep
     if deep && isnothing(params.domain_depth)
-        eps_d = params.deep_tol
+        # H = X / min(k1, k2): k1 deep-water wavenumber, k2 = 1/(L/2) the raft as a volume source
         k_dp = real(dispersion_k(params.omega, params.g, one(params.g), params.nu, params.sigma, params.rho; deep = true))
-        Bn = iszero(params.g) ? T(Inf) : params.sigma * k_dp^2 / (params.rho * params.g)
-        c_w = isinf(Bn) ? T(1) / 3 : (1 + Bn) / (1 + 3Bn)
-        # solve 4 x c exp(-2x) = eps for x = kH by Newton on log(4 x c / eps) - 2x
-        x_w = max(one(T), log(4c_w / eps_d) / 2)
-        for _ in 1:40
-            x_w -= (log(4x_w * c_w / eps_d) - 2x_w) / (1 / x_w - 2)
-        end
-        domain_depth = max(T(pi) * params.L_raft / sqrt(192 * eps_d), x_w / k_dp)
+        domain_depth = params.deep_X / min(k_dp, 2 / params.L_raft)
     end
     k = dispersion_k(params.omega, params.g, domain_depth, params.nu, params.sigma, params.rho)
 
@@ -304,7 +290,7 @@ function derive_params(params::FlexibleParams{T}) where {T<:Real}
     end
     L_domain = if isnothing(params.L_domain)
         L_def = min(3 * params.L_raft, round(20 * 2 * pi / k_real + params.L_raft; sigdigits=2))
-        deep ? max(L_def, T(pi) * params.L_raft / sqrt(48 * params.deep_tol)) : L_def
+        deep ? max(L_def, 2 * domain_depth) : L_def
     else
         params.L_domain
     end

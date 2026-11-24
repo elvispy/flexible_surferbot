@@ -22,13 +22,12 @@ and for `H >> a`
 
     eps_Z = (pi^2 / 48) (a/H)^2          (int_0^inf u/(e^u+1) du = pi^2/12).
 
-The same law with `H` replaced by the half-width `X = L_domain/2` describes the truncation by the
-lateral boundaries (observed, not derived). Solving `eps_Z = eps`:
-
-    H >= pi L / sqrt(192 eps),    L_domain >= pi L / sqrt(48 eps).
+The raft acts as a volume source of wavenumber `k2 = 1/a = 1/(L/2)`; its field decays algebraically in
+all directions, so the lateral walls follow the same law with the distance `H` (observed, not derived).
+With `X = H/a`, `eps_Z = (pi^2/48)/X^2`, i.e. 1.0 % for `X = 4.5`.
 
 Measured on 20 points of the (EI, x_M/L) map, the thrust error from a finite width is 0.1 (median)
-to about 1 (maximum) times `eps_Z`; `eps` is therefore an approximate upper bound on the thrust error.
+to about 1 (maximum) times `eps_Z`; `eps_Z` is therefore an approximate upper bound on the thrust error.
 
 ## Wave scale (radiation stress)
 
@@ -37,16 +36,22 @@ part is
 
     S_fd / S_main = 4 kH (1 + B) / ((1 + 3B) sinh 2kH).
 
-Setting it equal to `eps` gives `kH = -W_{-1}(-eps (1+3B) / (2 (1+B))) / 2`, with `W_{-1}` the lower
-real branch of the Lambert W function (`kH >= 3.0..3.6` for `eps = 1e-2`, `4.3..5.0` for `1e-3`).
-The condition `tanh(kH) >= 0.99` of the legacy grid corresponds to `kH = 2.65`, i.e. 3.6 %.
+For `kH = X` the ratio is of order `4X e^-2X`; the fields themselves decay as `e^-X` (1 % for `X = 4.5`).
+The legacy condition `tanh(kH) >= 0.99` corresponds to `kH = 2.65`, i.e. 3.6 %.
 
-`FlexibleParams(grid = :deep, deep_tol = eps)` applies all three conditions together with a
-geometric vertical grid and raft edges on grid nodes.
+## The `:deep` rule
 
-## What `deep_tol` is, and is not
+`FlexibleParams(grid = :deep, deep_X = X)` (default `X = 4.5`, env `SURFERBOT_DEEP_X`) sets
 
-`eps` bounds the leading-order impedance error; it is an envelope, not an error estimate.
+    H = X / min(k1, k2),    L_domain = 2H,
+
+with `k1` the deep-water gravity-capillary wavenumber (including viscosity) and `k2 = 1/(L_raft/2)`,
+together with a geometric vertical grid (`k dz_surface = 0.1`, growth 1.1) and raft edges on grid nodes.
+At the reference case `H = 2.25 L` and `Nz` is about 55.
+
+## What `X` is, and is not
+
+`eps_Z = (pi^2/48)/X^2` bounds the leading-order impedance error; it is an envelope, not an error estimate.
 Measured on 20 points of the (EI, x_M/L) map (aligned edges, graded z, half horizontal resolution):
 
 * Depth only (width 12 L, reference H = 24 L): the thrust error divided by `(pi^2/192)(L/H)^2` has a
@@ -55,8 +60,8 @@ Measured on 20 points of the (EI, x_M/L) map (aligned edges, graded z, half hori
   The scaling is `H^-p` with a per-point exponent `p` between 1.2 and 2.0 (median 1.66) at H/L = 2..4.
 * Width only (depth 8 L, reference L_domain = 48 L): median 0.10, maximum 0.45-1.4 times the law.
 * The depth error makes the load too large and the width error too small, with the same coefficient,
-  so `L_domain = 2H` (the `:deep` rule) cancels the leading-order error: end-to-end thrust errors are
-  25-250 times below `eps`.
+  so `L_domain = 2H` cancels the leading-order error: end-to-end thrust errors are
+  25-250 times below `eps_Z`.
 * Extrapolating `T(H, X)`, `T(2H, X)`, `T(H, 2X)` with exponent 2 in both directions gives the correct
   sign of the error at 19/19 points and an estimate 1.48 times the true error (16-84 %: 1.45-1.66)
   at base (H, L_domain) = (1 L, 2 L). The factor is not explained by the depth exponent (using 1.66

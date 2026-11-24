@@ -4,7 +4,7 @@ using Surferbot, JLD2
 module TS; include(joinpath(@__DIR__, "plot_thrust_sweeps.jl")); end
 module AL; include(joinpath(@__DIR__, "plot_alpha_sweep_kappa.jl")); end
 bp = Surferbot.Analysis.default_coupled_motor_position_EI_sweep().base_params
-println("grid = ", get(ENV, "SURFERBOT_GRID", "legacy"), "  deep_tol = ", get(ENV, "SURFERBOT_DEEP_TOL", "1e-2"))
+println("grid = ", get(ENV, "SURFERBOT_GRID", "legacy"), "  deep_X = ", get(ENV, "SURFERBOT_DEEP_X", "4.5"))
 F = TS.compute_F_T_star(bp)
 println("F_T_star = ", F)
 sw2 = TS.run_sweep_kappa(bp)
