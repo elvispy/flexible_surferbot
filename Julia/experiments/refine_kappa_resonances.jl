@@ -24,9 +24,9 @@ EI_scale = rho_R * L^4 * omega^2
 # Local refinement windows around the three known resonances, each far finer
 # than the base 201-point global grid (spacing ~0.025 decades). 20 pts each
 # window at ~0.006 decades spacing (~4x finer).
-windowA = 10.0 .^ range(log10(3.15e-4), log10(4.35e-4); length = 20)
-windowB = 10.0 .^ range(log10(1.55e-3), log10(2.00e-3); length = 20)
-windowC = 10.0 .^ range(log10(1.72e-2), log10(2.10e-2); length = 20)
+windowA = 10.0 .^ range(log10(1.70e-4), log10(2.60e-4); length = 20)
+windowB = 10.0 .^ range(log10(8.00e-4), log10(1.10e-3); length = 20)
+windowC = 10.0 .^ range(log10(6.80e-3), log10(9.60e-3); length = 20)
 
 desired_x = sort(vcat(existing_x, windowA, windowB, windowC))
 

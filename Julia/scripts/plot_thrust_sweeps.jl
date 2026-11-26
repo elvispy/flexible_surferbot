@@ -61,7 +61,7 @@ const FIG3_GRID_COLOR = RGBAf(0.15, 0.15, 0.15, 0.15)
 const NEWCM_DIR = "/usr/local/texlive/2025/texmf-dist/fonts/opentype/public/newcomputermodern"
 const LM_FONT = joinpath(NEWCM_DIR, "NewCM10-Regular.otf")
 const NEWCM_MATH = joinpath(NEWCM_DIR, "NewCMMath-Regular.otf")
-const XM_HIGHLIGHTS = [-0.12, -0.1885, -0.272]
+const XM_HIGHLIGHTS = PaperPlotTheme.XM_HIGHLIGHTS
 
 function setup_lm_mathfonts()
     PaperPlotTheme.setup_mathfonts!()
@@ -129,7 +129,7 @@ function compute_F_T_star(bp)
 end
 
 # ─── Three sweeps ─────────────────────────────────────────────────────────────
-const XM_SWEEP_KAPPA = 6.8665e-3   # κ value for the motor-position sweep (Fig 5b snapshot)
+const XM_SWEEP_KAPPA = PaperPlotTheme.KAPPA_HIGHLIGHTS[2]   # κ of the motor-position sweep (middle highlight, alpha minimum)
 
 # Lazy/incremental helper shared by the xM and kappa sweeps: any point in
 # `existing_x` that already matches a `desired_x` value (to within `rtol`) is
@@ -352,13 +352,23 @@ function save_cache(sw1, sw2, sw3, sw4, sp, F_T_star, sp_re)
         "xM_rig_alpha", sw4.alpha,
         "sp_xM", sp.xM_norm, "sp_kap", sp.kappa, "sp_Re", sp.Re,
         "sp_T",  sp.thrust,  "sp_Sxx", sp.Sxx,
-        "F_T_star", F_T_star,
+        "F_T_star", F_T_star, "xM_kappa", XM_SWEEP_KAPPA,
         "sp_re_T", sp_re.thrust, "sp_re_Sxx", sp_re.Sxx)
 end
 
 function load_or_compute(bp)
     d = isfile(CACHE_PATH) ? (println("Loading cache from $CACHE_PATH …"); JLD2.load(CACHE_PATH)) : Dict{String,Any}()
     changed = false
+
+    # The motor-position sweep is tied to one kappa; a cache made at another kappa is stale.
+    if haskey(d, "xM_x") && get(d, "xM_kappa", NaN) != XM_SWEEP_KAPPA
+        println("Cached motor-position sweep was made at kappa = ", get(d, "xM_kappa", "unknown"),
+                ", discarding (now ", XM_SWEEP_KAPPA, ")")
+        for k in ("xM_x", "xM_T", "xM_Sxx"); delete!(d, k); end
+        d["xM_kappa"] = XM_SWEEP_KAPPA
+        JLD2.save(CACHE_PATH, d)
+    end
+    d["xM_kappa"] = XM_SWEEP_KAPPA
 
     existing1 = all(k -> haskey(d, k), ["xM_x", "xM_T", "xM_Sxx"]) ?
         (Float64.(d["xM_x"]), Float64.(d["xM_T"]), Float64.(d["xM_Sxx"])) : (Float64[], Float64[], Float64[])
@@ -645,7 +655,7 @@ function main()
     yt3  = sw3.thrust .* d ./ abs(F_T_star)
     pad3 = 0.08 * (maximum(yt3) - minimum(yt3))
     make_single_axis_panel(sw3, d, F_T_star;
-        xlabel = L"Re",
+        xlabel = L"\mathrm{Re}",
         outfile = joinpath(FIG_DIR, "plot_thrust_sweeps_Re"),
         xscale = log10,
         xticks = (10.0 .^ collect(4:8),

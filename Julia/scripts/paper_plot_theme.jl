@@ -13,7 +13,11 @@ const MATH = joinpath(NEWCM_DIR, "NewCMMath-Regular.otf")
 # at the SurferBot forcing position, taken from the refined 201-point sweep. The
 # snapshot grids, the one-dimensional sweeps and the two-dimensional thrust map
 # all mark these same points, so they are defined once here.
-const KAPPA_HIGHLIGHTS = [1.9952623149688789e-3, 6.8665e-3, 1.7575106248547922e-2]
+# kappa1, kappa3: the negative-thrust peak of the two largest flexible resonances at x_M/L = -0.12
+# (a single flexible mode dominates, low alpha); kappa2: the minimum of alpha between them.
+const KAPPA_HIGHLIGHTS = [9.9476e-4, 2.99e-3, 7.4459e-3]
+# Motor positions at kappa2: reference SurferBot (alpha ~ -1), alpha = 0, alpha ~ +1
+const XM_HIGHLIGHTS = [-0.12, -0.199, -0.292]
 
 function setup_mathfonts!()
     mte_id = Base.PkgId(Base.UUID("0a4f8689-d25c-4efe-a92b-7142dfc1aa53"), "MathTeXEngine")

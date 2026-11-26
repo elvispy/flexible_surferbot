@@ -17,9 +17,9 @@ Two modes:
    One-row figure with panels (a)–(e) covering three κ values and five
    distinct (κ, xM/L) operating points for comparison:
      (a) κ = 1.82e-3,  xM = Surferbot
-     (b) κ = 6.8665e-3,  xM = Surferbot
-     (c) κ = 6.8665e-3,  xM/L = -0.1885  (α ≈ 0)
-     (d) κ = 6.8665e-3,  xM/L = -0.272  (|α| ≈ 1)
+     (b) κ = KAPPA_HIGHLIGHTS[2],  xM = Surferbot
+     (c) κ = 3.1623e-3,  xM/L = -0.200  (α ≈ 0)
+     (d) κ = 3.1623e-3,  xM/L = -0.272  (|α| ≈ 1)
      (e) κ = 1.94e-2,  xM = Surferbot
 
 Usage:
@@ -106,7 +106,7 @@ const GRID_ALPHA_CSV = joinpath(@__DIR__, "..", "output", "csv", "sweeper_couple
 # dip than the true minimum. These values are sample points of the refined
 # 201-point sweep. The middle one is not an extremum, it is the alpha ~ -1 case.
 const KAPPA_HIGHLIGHTS = PaperPlotTheme.KAPPA_HIGHLIGHTS
-const XM_HIGHLIGHTS = [-0.12, -0.1885, -0.272]
+const XM_HIGHLIGHTS = PaperPlotTheme.XM_HIGHLIGHTS
 const SNAPSHOT_CACHE_PATH = joinpath(@__DIR__, "..", "output", "jld2", "kappa_snapshots_cache.jld2")
 
 const STYLE = (
@@ -124,8 +124,8 @@ function paper_snapshot_ops()
     ops = [
         (kappa=KAPPA_HIGHLIGHTS[1], xM=xM_sb,  file_xM=nothing, label="(a)"),
         (kappa=KAPPA_HIGHLIGHTS[2], xM=xM_sb,  file_xM=nothing, label="(b)"),
-        (kappa=KAPPA_HIGHLIGHTS[2], xM=-0.1885,  file_xM=-0.1885,   label="(c)"),
-        (kappa=KAPPA_HIGHLIGHTS[2], xM=-0.272,  file_xM=-0.272,   label="(d)"),
+        (kappa=KAPPA_HIGHLIGHTS[2], xM=XM_HIGHLIGHTS[2],  file_xM=XM_HIGHLIGHTS[2],   label="(c)"),
+        (kappa=KAPPA_HIGHLIGHTS[2], xM=XM_HIGHLIGHTS[3],  file_xM=XM_HIGHLIGHTS[3],   label="(d)"),
         (kappa=KAPPA_HIGHLIGHTS[3], xM=xM_sb,  file_xM=nothing, label="(e)"),
     ]
     return bp, EI_scale, xM_sb, ops
@@ -372,7 +372,7 @@ function load_sweep_cache_for_grid(kind::Symbol)
                           [L"10^{-4}", L"10^{-3}", L"10^{-2}", L"10^{-1}", L"10^{0}", L"10^{1}"]),
                 highlights = KAPPA_HIGHLIGHTS, F_T_star = scale)
     elseif kind == :xM
-        alpha_xM = load_motor_alpha_from_csv(bp; target_kappa = 6.8665e-3)
+        alpha_xM = load_motor_alpha_from_csv(bp; target_kappa = KAPPA_HIGHLIGHTS[2])
         return (; x = d["xM_x"], y = d["xM_T"] .* depth ./ scale,
                 ylh = d["xM_Sxx"] .* depth ./ scale,
                 alpha_x = alpha_xM.x, alpha = alpha_xM.alpha,
@@ -539,11 +539,21 @@ function draw_modal_axis!(ax, modal, L_raft; ylims, show_ylabel, result = nothin
     CM.barplot!(ax, modal.n, mode_energy;
         color = MAKIE_BLUE, strokecolor = MAKIE_BLUE, fillto = ylims_scaled[1])
     ax.xlabel = L"n"
+    e = floor(Int, log10(ylims_scaled[2]))
     ax.ylabel = show_ylabel ? L"|\bar{q}_n|" : ""
+    ax.title = latexstring("\\times10^{", e, "}")
+    ax.titlealign = :left
+    ax.titlesize = 18
+    ax.titlegap = 3
     ax.xticks = modal.n
     CM.ylims!(ax, ylims_scaled...)
     ax.yticks = [0.0, ylims_scaled[2]/2, ylims_scaled[2]]
+    ax.ytickformat = vs -> [v == 0 ? "0" : @sprintf("%.2g", v / 10.0^e) for v in vs]
 end
+
+# Smallest multiple of 2*10^(e-1) above v (two significant digits, even last digit), so the
+# half-height tick is also a two-digit number.
+nice_ceiling(v) = (e = floor(log10(v)); step = 2 * 10.0^(e - 1); ceil(v / step) * step)
 
 function solve_snapshot_ops(ops)
     _, EI_scale, _, _ = paper_snapshot_ops()
@@ -569,13 +579,17 @@ function wave_ylim(results)
 end
 
 function make_snapshot_grid(fig_dir; kind::Symbol, op_indices, filename, column_titles,
-                            modal_energy_ylims = (0.0, 2e-5), global_ylim = nothing,
+                            modal_energy_ylims = nothing, global_ylim = nothing,
                             sweep_ylim = nothing, sweep_xlim = nothing)
     setup_lm_mathfonts()
     makie_snapshot_theme!()
     _, _, _, all_ops = paper_snapshot_ops()
     ops = all_ops[op_indices]
     results, modals = solve_snapshot_ops(ops)
+    # Bar-panel ceiling from the data of this grid, so no bar can saturate.
+    modal_energy_ylims = isnothing(modal_energy_ylims) ?
+        (0.0, nice_ceiling(1.1 * maximum(maximum(abs.(m.q)) for m in modals) / results[1].metadata.args.L_raft) *
+              results[1].metadata.args.L_raft) : modal_energy_ylims
     ylim = isnothing(global_ylim) ? wave_ylim(results) : global_ylim
     sweep = load_sweep_cache_for_grid(kind)
 
@@ -622,6 +636,9 @@ function make_snapshot_grid(fig_dir; kind::Symbol, op_indices, filename, column_
     println("Saved $fname.{pdf,png}")
 end
 
+kappa_title(k) = (e = floor(Int, log10(k)); latexstring("\\kappa=", @sprintf("%.2f", k / 10.0^e), "\\times10^{", e, "}"))
+xM_title(x) = latexstring("x_M/L=", @sprintf("%g", x))
+
 function main_snapshot_grids(fig_dir)
     _, _, _, all_ops = paper_snapshot_ops()
     results_kappa, _ = solve_snapshot_ops(all_ops[[1, 2, 5]])
@@ -636,15 +653,10 @@ function main_snapshot_grids(fig_dir)
         # drawn against. Restricting the horizontal range excludes it instead of
         # clipping it, and the autoscale then returns to 30.5, matching the
         # earlier figures without hiding any data inside the plotted window.
-        sweep_xlim = (2e-4, 1e0),
-        # The refined first highlight sits in a deeper minimum, so its modal
-        # response is larger: max|q| = 2.87e-5 against the old 2e-5 ceiling,
-        # which clipped the mode-3 bar. Raised with ~15% headroom.
-        modal_energy_ylims = (0.0, 3.3e-5),
+        sweep_xlim = (1e-4, 1e0),
         filename = "plot_kappa_snapshot_grid_flexibility",
-        column_titles = [L"\kappa=2.00\times10^{-3}",
-                         L"\kappa=6.87\times10^{-3}",
-                         L"\kappa=1.76\times10^{-2}"],
+        column_titles = [kappa_title(KAPPA_HIGHLIGHTS[1]), kappa_title(KAPPA_HIGHLIGHTS[2]),
+                         kappa_title(KAPPA_HIGHLIGHTS[3])],
         global_ylim = global_ylim)
     make_snapshot_grid(fig_dir;
         kind = :xM,
@@ -652,10 +664,8 @@ function main_snapshot_grids(fig_dir)
         # This swaps the former (b,e) and (d,g) snapshot columns.
         op_indices = [4, 3, 2],
         filename = "plot_kappa_snapshot_grid_motor_position",
-        column_titles = [L"x_M/L=-0.272",
-                         L"x_M/L=-0.1885",
-                         L"x_M/L=-0.12"],
-        modal_energy_ylims = (0.0, 3e-6),
+        column_titles = [xM_title(XM_HIGHLIGHTS[3]), xM_title(XM_HIGHLIGHTS[2]),
+                         xM_title(XM_HIGHLIGHTS[1])],
         global_ylim = global_ylim)
 end
 

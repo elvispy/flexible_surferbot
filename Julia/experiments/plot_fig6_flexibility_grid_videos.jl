@@ -5,9 +5,9 @@ Supplementary-material animations for the three columns of the paper's
 figure 6 (fig:flexibility_grid, plot_kappa_snapshot_grid_flexibility.pdf):
 the flexibility sweep at the fixed SurferBot forcing position xM/L=-0.12,
 at the three highlighted stiffnesses (KAPPA_HIGHLIGHTS, paper_theme.jl):
-  (a) kappa = 1.9953e-3  (mode 3 dominant, large peak thrust)
-  (b) kappa = 6.8665e-3  (intermediate, mixed modes, alpha ~ -1)
-  (e) kappa = 1.7575e-2  (mode 2 dominant, large peak thrust)
+  (a) kappa = 9.9476e-4  (mode 3 dominant, large peak thrust)
+  (b) kappa = 2.99e-3  (intermediate, mixed modes, alpha ~ -1)
+  (e) kappa = 7.4459e-3  (mode 2 dominant, large peak thrust)
 Same convention as the existing fig3b_rigid_validation.mp4 and
 non_uniform_surferbot.mp4: Surferbot.flexible_solver + render_surferbot_run,
 fps=60, seconds=20, nondim=true.
@@ -16,7 +16,8 @@ fps=60, seconds=20, nondim=true.
 using Surferbot
 using Printf
 
-const KAPPA_HIGHLIGHTS = [1.9952623149688789e-3, 6.8665e-3, 1.7575106248547922e-2]
+include(joinpath(@__DIR__, "..", "scripts", "paper_plot_theme.jl"))
+using .PaperPlotTheme: KAPPA_HIGHLIGHTS
 const LABELS = ["a", "b", "e"]
 
 function main()

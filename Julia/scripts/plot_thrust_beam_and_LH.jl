@@ -147,7 +147,7 @@ end
 # GP is fitted on asinh-transformed values, predictions are back-transformed
 # to raw Δ|η|²/L² for display with a linear colorbar.
 function gp_surrogate_lh(log10_kappa_full, xM_full, delta_grid;
-                          xlims=(-4.0, maximum(log10_kappa_full)),
+                          xlims=(-4.0, 0.0),
                           out_n=200)
     # Filter EI to visible range
     ki      = findall(xlims[1] .<= log10_kappa_full .<= xlims[2])
@@ -203,7 +203,7 @@ function render_panel(log10_kappa, xM_axis, delta_grid, fig_title, out_base, bp,
                       snapshot_logK=Float64[], snapshot_xMs=Float64[], snapshot_labels=String[],
                       modal_logK=Float64[])
     max_logK = maximum(log10_kappa)
-    XLIMS    = (-4.0, max_logK)
+    XLIMS    = (-4.0, 0.0)
     YLIMS    = (-0.5, 0.0)
 
     # Clim from raw data in visible κ range — done before transform so ticks are in real units.
@@ -313,7 +313,7 @@ function main()
     @printf "F_T^* = %.4e N  →  domain_grid scale factor = %.4e\n" F_T_star ft_scale
     domain_grid_norm = -grids.domain_grid .* ft_scale
 
-    modal_logK = [log10(6.8665e-3)]
+    modal_logK = [log10(PaperPlotTheme.KAPPA_HIGHLIGHTS[2])]
 
     # Beam — signed-log only (unchanged)
     render_panel(log10_kappa, grids.xM, grids.beam_grid,
@@ -333,7 +333,7 @@ function main()
     kh = PaperPlotTheme.KAPPA_HIGHLIGHTS
     snap_kappas = [kh[2], kh[2], kh[2], kh[1], kh[3]]
     snap_logK   = log10.(snap_kappas)
-    snap_xMs    = [-0.272,  -0.1885,  xM_sb,  xM_sb,  xM_sb]
+    snap_xMs    = [PaperPlotTheme.XM_HIGHLIGHTS[3], PaperPlotTheme.XM_HIGHLIGHTS[2], xM_sb, xM_sb, xM_sb]
     snap_labels = [L"Fig.~5\,(b)", L"Fig.~5\,(c)", L"Figs.~5\,(d),\,6\,(c)",
                    L"Fig.~6\,(b)", L"Fig.~6\,(d)"]
     println("Rendering LH signed-log...")

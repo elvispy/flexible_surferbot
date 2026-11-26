@@ -30,7 +30,7 @@ Then:  ffmpeg -framerate 12 -i frame_%03d.png -vf "pad=ceil(iw/2)*2:ceil(ih/2)*2
 
 using CairoMakie, LaTeXStrings, LinearAlgebra, Printf
 
-const WC = joinpath(homedir(), "Documents", "Github", "waves_code", "Julia")
+const WC = normpath(joinpath(@__DIR__, ".."))
 include(joinpath(WC, "scripts", "plot_dimensionless_diagnostics_LH.jl"))
 using .PaperPlotTheme
 
@@ -52,12 +52,7 @@ const N_INTERP = 0               # interpolating q(kappa) linearly between keyfr
 # linear blend, adding dynamics that were never there). Real keyframes only; no shortcuts.
 const D_KEYFRAMES = vcat([0.0], 10 .^ range(log10(D_MIN_LOG), log10(D_MAX); length=N_KEYFRAMES - 1))
 
-function with_d(p0, dnew)
-    return Surferbot.FlexibleParams(; sigma=p0.sigma, rho=p0.rho, omega=p0.omega, nu=p0.nu, g=p0.g,
-        L_raft=p0.L_raft, motor_position=p0.motor_position, d=dnew, EI=p0.EI, rho_raft=p0.rho_raft,
-        L_domain=p0.L_domain, domain_depth=p0.domain_depth, n=p0.n, Nz=p0.M, ooa=p0.ooa,
-        motor_inertia=p0.motor_inertia, motor_force=p0.motor_force, forcing_width=p0.forcing_width, bc=p0.bc)
-end
+with_d(p0, dnew) = Surferbot.Sweep.apply_parameter_overrides(p0, (; d = dnew))
 
 function solve_uncoupled(EI, xM_norm, c)
     p = c.params; F_c = c.derived.F_c; L_c = c.derived.L_c

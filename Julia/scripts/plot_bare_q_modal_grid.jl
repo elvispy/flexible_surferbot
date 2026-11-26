@@ -19,7 +19,7 @@ condition degenerates to the dry poles kappa=(beta_n*L)^-4.
 
 using CairoMakie, LaTeXStrings, LinearAlgebra, JLD2
 
-const WC = joinpath(homedir(), "Documents", "Github", "waves_code", "Julia")
+const WC = normpath(joinpath(@__DIR__, ".."))
 include(joinpath(WC, "scripts", "plot_dimensionless_diagnostics_LH.jl"))
 using .PaperPlotTheme
 

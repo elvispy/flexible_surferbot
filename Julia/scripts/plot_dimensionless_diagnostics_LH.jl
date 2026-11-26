@@ -496,7 +496,7 @@ function compute_LH_plot_data(artifact, csv_path, output_dir; xlim_min::Float64,
         alpha_LH = vcat(alpha_LH[1:1, :], alpha_LH)
     end
 
-    XLIMS = (xlim_min, max_logK_data)
+    XLIMS = (xlim_min, 0.0)
     YLIMS = (-0.5, 0.0)
 
     # 181 (not 57): the coarse grid missed narrow resonances entirely (no
@@ -838,7 +838,7 @@ function build_beam_end_plot(artifact, csv_path, output_dir; xlim_min::Float64)
         alpha_beam = vcat(alpha_beam[1:1, :], alpha_beam)
     end
 
-    XLIMS = (xlim_min, max_logK_data)
+    XLIMS = (xlim_min, 0.0)
     YLIMS = (-0.5, 0.0)
 
     # 181 (not 57): see build_LH_plot for why.
